@@ -15,8 +15,8 @@ refresh it with `just vendor-sync <commit>`.
 ## Status
 
 Conformance: stages C1 (data model, paths, expression parsing) and C2 (catalogs, common types,
-agent-to-renderer schema) pass, except the `validationSchema` golden comparison (Plan 2b);
-later stages are listed in crates/a2ui-conformance/skips.toml.
+agent-to-renderer schema) pass; later stages are listed in
+crates/a2ui-conformance/skips.toml.
 
 Licensed under MIT or Apache-2.0, at your option, except `a2ui-catalog-basic`, which is
 Apache-2.0 only, as the upstream catalog it embeds.

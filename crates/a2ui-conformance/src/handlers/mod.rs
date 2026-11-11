@@ -11,6 +11,7 @@ mod resolve_path;
 mod round_trip;
 mod schema_doc;
 mod to_json;
+mod validation_schema;
 
 use crate::case::Case;
 
@@ -30,6 +31,7 @@ pub fn handler(action: &str) -> Option<Handler> {
         "from_json" => Some(from_json::run),
         "to_json" => Some(to_json::run),
         "derive" => Some(derive::run),
+        "validation_schema" => Some(validation_schema::run),
         _ => None,
     }
 }

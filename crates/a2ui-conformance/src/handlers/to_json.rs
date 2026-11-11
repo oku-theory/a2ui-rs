@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::case::Case;
 use crate::compare::json_eq;
 use crate::keys::assert_case_keys;
-use crate::paths::{read_json, upstream_root};
+use crate::paths::expect_file;
 
 /// Compares `a2ui_catalog_basic::catalog().to_json()` with `expectFile`.
 pub fn run(case: &Case) -> Result<(), String> {
@@ -14,11 +14,7 @@ pub fn run(case: &Case) -> Result<(), String> {
     if case.get("builtinCatalog").and_then(Value::as_str) != Some("basic") {
         return Err(format!("{at}: only `builtinCatalog: basic` exists"));
     }
-    let path = case
-        .get("expectFile")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("{at}: `expectFile` must be a string"))?;
-    let expected = read_json(&upstream_root()?.join(path))?;
+    let (path, expected) = expect_file(case)?;
     let catalog = a2ui_catalog_basic::catalog().map_err(|err| format!("{at}: {err}"))?;
     if json_eq(&catalog.to_json(), &expected) {
         Ok(())

@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::case::Case;
 use crate::compare::json_eq;
 use crate::keys::assert_case_keys;
-use crate::paths::{read_json, upstream_root};
+use crate::paths::expect_file;
 
 /// Compares the runtime's common types schema with `expectFile`.
 pub fn run_common_types(case: &Case) -> Result<(), String> {
@@ -25,11 +25,7 @@ fn compare(case: &Case, generated: Result<&Value, a2ui_runtime::Error>) -> Resul
     assert_case_keys(case, &["protocolVersion", "expectFile"])?;
     let at = case.at();
     let generated = generated.map_err(|err| format!("{at}: {err}"))?;
-    let path = case
-        .get("expectFile")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("{at}: `expectFile` must be a string"))?;
-    let expected = read_json(&upstream_root()?.join(path))?;
+    let (path, expected) = expect_file(case)?;
     if json_eq(generated, &expected) {
         Ok(())
     } else {
