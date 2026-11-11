@@ -2,18 +2,11 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::super::test_support::{catalog_error, fan_out, load, mixin_copies, v10};
-use crate::bundle::resolve;
+use crate::bundle::{for_each_ref, resolve};
 use crate::limits::MAX_SCHEMA_DEPTH;
 
 fn refs(node: &Value, out: &mut Vec<String>) {
-    match node {
-        Value::Object(map) => map.iter().for_each(|(key, value)| match value {
-            Value::String(target) if key == "$ref" => out.push(target.clone()),
-            _ => refs(value, out),
-        }),
-        Value::Array(items) => items.iter().for_each(|item| refs(item, out)),
-        _ => {}
-    }
+    for_each_ref(node, &mut |target| out.push(target.to_owned()));
 }
 
 /// A catalog whose `section` holds `entry`, with the `$defs` of a fan-out `levels` deep.

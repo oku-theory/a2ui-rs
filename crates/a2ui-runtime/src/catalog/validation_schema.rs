@@ -13,7 +13,7 @@ use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
     add_common_types, def_names, first_unresolved, local_ref, localize_refs, pointer_of,
-    whole_def_name,
+    rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::validator::DRAFT_2020_12;
@@ -163,26 +163,15 @@ fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
 /// `$defs` (the theme itself, definitions no entry reaches) can hold one. Like
 /// [`localize_refs`], it rewrites every `$ref` string, data included.
 fn retarget_theme(node: &mut Value) {
-    match node {
-        Value::Object(map) => {
-            for (key, value) in map.iter_mut() {
-                match value {
-                    Value::String(reference) if key == "$ref" => {
-                        if let Some(rest) = pointer_of(reference)
-                            .as_deref()
-                            .and_then(|pointer| pointer.strip_prefix("/theme"))
-                            .filter(|rest| rest.is_empty() || rest.starts_with('/'))
-                        {
-                            *reference = local_ref(&format!("/$defs/theme{rest}"));
-                        }
-                    }
-                    _ => retarget_theme(value),
-                }
-            }
+    rewrite_refs(node, &mut |reference| {
+        if let Some(rest) = pointer_of(reference)
+            .as_deref()
+            .and_then(|pointer| pointer.strip_prefix("/theme"))
+            .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+        {
+            *reference = local_ref(&format!("/$defs/theme{rest}"));
         }
-        Value::Array(items) => items.iter_mut().for_each(retarget_theme),
-        _ => {}
-    }
+    });
 }
 
 /// Gives each whole-entry `$ref` to a common type that type's description, unless it has one.

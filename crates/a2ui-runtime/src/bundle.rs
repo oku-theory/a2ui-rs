@@ -52,18 +52,73 @@ pub(crate) fn local_ref(pointer: &str) -> String {
 
 /// Rewrites every `$ref` string under `node` with [`localize_ref`].
 pub(crate) fn localize_refs(node: &mut Value) {
+    rewrite_refs(node, &mut |reference| *reference = localize_ref(reference));
+}
+
+/// Calls `visit` on each `$ref` string and its path, until one returns `Some`.
+///
+/// A key holding an object or array is walked whatever its name, so a property named `$ref`
+/// holding a schema is a property; every `$ref` string is visited, data included, since the
+/// walk does not tell schemas from data. Keys are visited in map order, and `pointer(path)`
+/// spells a path within this module. It recurses: callers pass a document that load rule 1
+/// bounded to `MAX_JSON_DEPTH` levels, or one built from it.
+/// [`check_references`] has its own walk, as it reads every reference keyword, not only `$ref`.
+pub(crate) fn find_ref<'a, T>(
+    node: &'a Value,
+    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
+) -> Option<T> {
+    find_ref_under(node, &mut Vec::new(), visit)
+}
+
+fn find_ref_under<'a, T>(
+    node: &'a Value,
+    path: &mut Vec<Segment<'a>>,
+    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
+) -> Option<T> {
+    match node {
+        Value::Object(map) => map.iter().find_map(|(key, value)| {
+            path.push(Segment::Key(key));
+            let found = match value {
+                Value::String(reference) if key == "$ref" => visit(reference, path),
+                _ => find_ref_under(value, path, visit),
+            };
+            path.pop();
+            found
+        }),
+        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
+            path.push(Segment::Index(index));
+            let found = find_ref_under(item, path, visit);
+            path.pop();
+            found
+        }),
+        _ => None,
+    }
+}
+
+/// Calls `visit` on every `$ref` string under `node`, as [`find_ref`] visits them.
+pub(crate) fn for_each_ref<'a>(node: &'a Value, visit: &mut impl FnMut(&'a str)) {
+    find_ref(node, &mut |reference, _| {
+        visit(reference);
+        None::<()>
+    });
+}
+
+/// Calls `rewrite` on each `$ref` string under `node`, as [`find_ref`] visits them.
+///
+/// It recurses under the same depth bound as [`find_ref`].
+pub(crate) fn rewrite_refs(node: &mut Value, rewrite: &mut impl FnMut(&mut String)) {
     match node {
         Value::Object(map) => {
             for (key, value) in map.iter_mut() {
                 match value {
-                    Value::String(reference) if key == "$ref" => {
-                        *reference = localize_ref(reference);
-                    }
-                    _ => localize_refs(value),
+                    Value::String(reference) if key == "$ref" => rewrite(reference),
+                    _ => rewrite_refs(value, rewrite),
                 }
             }
         }
-        Value::Array(items) => items.iter_mut().for_each(localize_refs),
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|item| rewrite_refs(item, rewrite)),
         _ => {}
     }
 }
@@ -119,41 +174,16 @@ pub(crate) fn resolve<'a>(root: &'a Value, reference: &str) -> Option<&'a Value>
     root.pointer(&pointer_of(reference)?)
 }
 
-/// The first `$ref` string under `root` that names no node of `root`, and its JSON Pointer.
+/// The first unresolvable `$ref` string under `root`, with its JSON Pointer.
 ///
 /// It only looks pointers up, never follows one, so its cost is linear in `root` whatever the
-/// `$ref`s chain. Like [`localize_refs`], it reads every `$ref` string, data included. The
-/// pointer is built only for the `$ref` found. It recurses: callers pass a document that load
-/// rule 1 bounded to `MAX_JSON_DEPTH` levels, plus the few its validation schema wraps around.
+/// `$ref`s chain. The pointer is built only for the `$ref` found. It walks with [`find_ref`].
 pub(crate) fn first_unresolved(root: &Value) -> Option<(&str, String)> {
-    unresolved_under(root, root, &mut Vec::new())
-}
-
-fn unresolved_under<'a>(
-    root: &Value,
-    node: &'a Value,
-    path: &mut Vec<Segment<'a>>,
-) -> Option<(&'a str, String)> {
-    match node {
-        Value::Object(map) => map.iter().find_map(|(key, value)| {
-            path.push(Segment::Key(key));
-            let found = match value {
-                Value::String(reference) if key == "$ref" => resolve(root, reference)
-                    .is_none()
-                    .then(|| (reference.as_str(), pointer(path))),
-                _ => unresolved_under(root, value, path),
-            };
-            path.pop();
-            found
-        }),
-        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
-            path.push(Segment::Index(index));
-            let found = unresolved_under(root, item, path);
-            path.pop();
-            found
-        }),
-        _ => None,
-    }
+    find_ref(root, &mut |reference, path| {
+        resolve(root, reference)
+            .is_none()
+            .then(|| (reference, pointer(path)))
+    })
 }
 
 /// The section and decoded name of the entry a JSON Pointer falls in.
@@ -192,9 +222,11 @@ pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Erro
     check_map(document, &mut Vec::new())
 }
 
-/// One step of the path from the document root to the node being checked.
-enum Segment<'a> {
+/// One step of the path from a document root to a node.
+pub(crate) enum Segment<'a> {
+    /// An object member, by its unescaped key.
     Key(&'a str),
+    /// An array item, by its index.
     Index(usize),
 }
 
@@ -381,19 +413,9 @@ pub(crate) fn add_common_types(
     }
 }
 
+/// Appends to `out` the `$defs` entry each `$ref` under `node` names, data included.
 pub(crate) fn def_names(node: &Value, out: &mut Vec<String>) {
-    match node {
-        Value::Object(map) => {
-            for (key, value) in map {
-                match value {
-                    Value::String(reference) if key == "$ref" => out.extend(def_name(reference)),
-                    _ => def_names(value, out),
-                }
-            }
-        }
-        Value::Array(items) => items.iter().for_each(|item| def_names(item, out)),
-        _ => {}
-    }
+    for_each_ref(node, &mut |reference| out.extend(def_name(reference)));
 }
 
 /// The `$defs` entry a local `$ref` names, decoded and unescaped.

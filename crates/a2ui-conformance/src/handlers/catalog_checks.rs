@@ -105,6 +105,10 @@ pub fn self_contained(schema: &Value) -> Result<(), String> {
     }
 }
 
+/// Every `$ref` string under `node`, data included.
+///
+/// It does not reuse the runtime's `$ref` walk on purpose: the harness checks the runtime's
+/// output, so it keeps its own oracle.
 fn collect_refs<'a>(node: &'a Value, out: &mut Vec<&'a str>) {
     match node {
         Value::Object(map) => {

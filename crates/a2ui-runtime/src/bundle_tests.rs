@@ -359,3 +359,100 @@ fn function_call_envelope_closes_the_call_over_function_common() {
 fn whole_def_name_names_only_a_whole_entry(#[case] reference: &str, #[case] name: Option<&str>) {
     assert_that!(whole_def_name(reference)).is_equal_to(name.map(str::to_owned));
 }
+
+/// The `$ref` strings `find_ref` visits under `node`, each with its JSON Pointer.
+fn visited(node: &Value) -> Vec<(String, String)> {
+    let mut seen = Vec::new();
+    find_ref(node, &mut |reference, path| {
+        seen.push((reference.to_owned(), pointer(path)));
+        None::<()>
+    });
+    seen
+}
+
+#[test]
+fn find_ref_visits_refs_in_objects_arrays_and_data() {
+    let node = json!({
+        "a": {"$ref": "#/x"},
+        "b": [{}, {"$ref": "#/y"}],
+        "default": {"$ref": "#/z"}
+    });
+    assert_that!(visited(&node)).is_equal_to(vec![
+        ("#/x".to_owned(), "/a/$ref".to_owned()),
+        ("#/y".to_owned(), "/b/1/$ref".to_owned()),
+        ("#/z".to_owned(), "/default/$ref".to_owned()),
+    ]);
+}
+
+#[test]
+fn find_ref_object_under_ref_key_is_walked_as_a_property() {
+    let node = json!({"properties": {"$ref": {"$ref": "#/x"}}});
+    assert_that!(visited(&node))
+        .is_equal_to(vec![("#/x".to_owned(), "/properties/$ref/$ref".to_owned())]);
+}
+
+#[test]
+fn find_ref_stops_at_the_first_some() {
+    let node = json!({"a": {"$ref": "#/x"}, "b": {"$ref": "#/y"}});
+    let mut calls = 0;
+    let found = find_ref(&node, &mut |reference, _| {
+        calls += 1;
+        Some(reference.to_owned())
+    });
+    assert_that!((found, calls)).is_equal_to((Some("#/x".to_owned()), 1));
+}
+
+#[test]
+fn rewrite_refs_rewrites_every_ref_string() {
+    let mut node = json!({"a": {"$ref": "#/x"}, "b": [{"$ref": "#/y"}], "c": "#/z"});
+    rewrite_refs(&mut node, &mut |reference| reference.push('!'));
+    assert_that!(node).is_equal_to(json!({
+        "a": {"$ref": "#/x!"},
+        "b": [{"$ref": "#/y!"}],
+        "c": "#/z"
+    }));
+}
+
+#[test]
+fn rewrite_refs_visits_what_for_each_ref_visits() {
+    let mut node = json!({
+        "properties": {"$ref": {"$ref": "#/a"}},
+        "b": [[{"$ref": "#/b"}], {"default": {"$ref": "#/c"}}],
+        "n": {"$ref": 5},
+        "s": {"$ref": [{"$ref": "#/e"}]},
+        "$ref": "#/d"
+    });
+    let mut expected = Vec::new();
+    for_each_ref(&node, &mut |reference| expected.push(reference.to_owned()));
+    let mut rewritten = Vec::new();
+    rewrite_refs(&mut node, &mut |reference| {
+        rewritten.push(reference.clone())
+    });
+    assert_that!(rewritten).is_equal_to(expected);
+}
+
+#[test]
+fn find_ref_nested_arrays_spell_each_index() {
+    assert_that!(visited(&json!([[{"$ref": "#/x"}]])))
+        .is_equal_to(vec![("#/x".to_owned(), "/0/0/$ref".to_owned())]);
+}
+
+#[rstest]
+#[case::number(json!({"$ref": 1}))]
+#[case::null(json!({"$ref": null}))]
+fn find_ref_non_string_ref_is_not_visited(#[case] node: Value) {
+    assert_that!(visited(&node)).is_empty();
+}
+
+#[test]
+fn def_names_lists_only_defs_entries() {
+    let node = json!({
+        "a": {"$ref": "#/$defs/A"},
+        "b": {"$ref": "#/components/B"},
+        "c": {"$ref": "#/theme"},
+        "d": {"$ref": "#/$defs/D/properties/x"}
+    });
+    let mut names = Vec::new();
+    def_names(&node, &mut names);
+    assert_that!(names).is_equal_to(vec!["A".to_owned(), "D".to_owned()]);
+}

@@ -38,7 +38,7 @@ It builds for `wasm32-unknown-unknown`.
   theme, `$defs`; duplicate names rejected, changed unions regenerated). Submodules `load`,
   `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
 - `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`; no anchors, dynamic
-  refs, nested `$id`, component/function interiors), encoded `local_ref`s, common-type closure.
+  refs, nested `$id`, component/function interiors), `local_ref`s, common types, `$ref` walks.
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
   4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
   reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound
