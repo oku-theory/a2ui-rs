@@ -1,0 +1,29 @@
+# Actions not implemented yet, each with the plan that implements it.
+[actions]
+from_json = "Plan 2: catalogs and schemas"
+to_json = "Plan 2: catalogs and schemas"
+round_trip = "Plan 2: catalogs and schemas"
+validation_schema = "Plan 2: catalogs and schemas"
+derive = "Plan 2: catalogs and schemas"
+common_types_schema = "Plan 2: catalogs and schemas"
+validate_common_type = "Plan 2: catalogs and schemas"
+agent_to_renderer_schema = "Plan 2: catalogs and schemas"
+validate = "Plan 3: validation and message processing"
+process_messages = "Plan 3: validation and message processing"
+get_renderer_capabilities = "Plan 3: validation and message processing"
+get_renderer_data_model = "Plan 3: validation and message processing"
+evaluate_function = "Plan 4: functions, actions and RPC"
+select_catalog = "Plan 4: functions, actions and RPC"
+dispatch_action = "Plan 4: functions, actions and RPC"
+handle_rpc = "Plan 4: functions, actions and RPC"
+route_agent_function = "Plan 4: functions, actions and RPC"
+resolve_nodes = "Plan 5: node resolution and timing"
+measure_growth = "Plan 5: node resolution and timing"
+render_surface = "framework adapter suite: run by a2ui-leptos in the browser (Plan 6)"
+accessibility_check = "framework adapter suite: run by a2ui-leptos in the browser (Plan 6)"
+data_model = "Task 4 of Plan 1"
+resolve_path = "Task 6 of Plan 1"
+parse_expression_template = "Task 7 of Plan 1"
+
+# Individual cases skipped on purpose.
+[cases]
