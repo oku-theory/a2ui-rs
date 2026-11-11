@@ -178,6 +178,20 @@ fn derive_given_list_regenerates_the_source_union() {
 }
 
 #[test]
+fn derive_function_restriction_regenerates_any_function_with_the_picked_names() {
+    let mut document = source().to_json();
+    document["$defs"]["anyFunction"] = json!({
+        "oneOf": [{"$ref": "#/functions/lower"}, {"$ref": "#/functions/upper"}]
+    });
+    let source = Catalog::from_json(&document, None, None).unwrap();
+    let derived = source
+        .derive(&Derivation::new("derived").functions(vec![keep("upper")]))
+        .unwrap();
+    assert_that!(derived.to_json()["$defs"]["anyFunction"].clone())
+        .is_equal_to(json!({"oneOf": [{"$ref": "#/functions/upper"}]}));
+}
+
+#[test]
 fn derive_unknown_component_is_catalog_error_naming_it() {
     let err = source()
         .derive(&Derivation::new("derived").components(vec![keep("Text"), keep("Slider")]))

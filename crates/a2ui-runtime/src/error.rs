@@ -38,6 +38,12 @@ pub struct Error(Inner);
 // `Result<_, Error>` stays under clippy's `result_large_err` threshold of 128 bytes.
 const _: () = assert!(size_of::<Error>() <= 128);
 
+// A loaded catalog is shared across threads and reactive scopes.
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<crate::Catalog>();
+};
+
 impl Error {
     /// The conformance category this error belongs to.
     pub fn category(&self) -> Category {

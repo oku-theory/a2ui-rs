@@ -3,7 +3,7 @@
 use serde_json::Value;
 
 use crate::case::Case;
-use crate::compare::schema_eq;
+use crate::compare::json_eq;
 use crate::keys::assert_case_keys;
 use crate::paths::{read_json, upstream_root};
 
@@ -20,7 +20,7 @@ pub fn run(case: &Case) -> Result<(), String> {
         .ok_or_else(|| format!("{at}: `expectFile` must be a string"))?;
     let expected = read_json(&upstream_root()?.join(path))?;
     let catalog = a2ui_catalog_basic::catalog().map_err(|err| format!("{at}: {err}"))?;
-    if schema_eq(&catalog.to_json(), &expected) {
+    if json_eq(&catalog.to_json(), &expected) {
         Ok(())
     } else {
         Err(format!(

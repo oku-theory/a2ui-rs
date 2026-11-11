@@ -48,6 +48,12 @@ fn deeper_than_hundred_thousand_levels_in_a_small_stack_is_rejected() {
     assert_that!(rejected).is_true();
 }
 
+#[test]
+fn oversize_huge_array_is_rejected_by_the_node_cap() {
+    let value = json!(vec![0; 300_000]);
+    assert_that!(oversize(&value, MAX_CATALOG_NODES)).is_equal_to(Some(Oversize::Nodes));
+}
+
 #[rstest]
 #[case(json!(1), 0, true)]
 #[case(json!(1), 1, false)]

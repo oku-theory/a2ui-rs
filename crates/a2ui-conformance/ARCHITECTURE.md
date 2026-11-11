@@ -14,8 +14,8 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 - `keys`: strict key checks; an unread key fails the case.
 - `compare`: `json_eq`, `schema_eq` (`enum`/`required` as multisets), `expect_error` (category,
   then message as a case-insensitive substring or regex).
-- `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR` is set
-  (`just conformance-manifest` sets it).
+- `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR`
+  is set (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`.
 - `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two
   schema-equality actions; common_type; round_trip; from_json; to_json; derive; catalog_checks:

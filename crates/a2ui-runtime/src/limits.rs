@@ -96,10 +96,16 @@ pub(crate) fn oversize(value: &Value, max_nodes: usize) -> Option<Oversize> {
         match node {
             Value::Array(items) => {
                 count += items.len();
+                if count > max_nodes {
+                    return Some(Oversize::Nodes);
+                }
                 stack.extend(items);
             }
             Value::Object(map) => {
                 count += map.len();
+                if count > max_nodes {
+                    return Some(Oversize::Nodes);
+                }
                 for (key, child) in map {
                     if key.len() > MAX_KEY_BYTES {
                         return Some(Oversize::Key);
