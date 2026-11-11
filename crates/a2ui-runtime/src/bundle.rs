@@ -119,6 +119,43 @@ pub(crate) fn resolve<'a>(root: &'a Value, reference: &str) -> Option<&'a Value>
     root.pointer(&pointer_of(reference)?)
 }
 
+/// The first `$ref` string under `root` that names no node of `root`, and its JSON Pointer.
+///
+/// It only looks pointers up, never follows one, so its cost is linear in `root` whatever the
+/// `$ref`s chain. Like [`localize_refs`], it reads every `$ref` string, data included. The
+/// pointer is built only for the `$ref` found. It recurses: callers pass a document that load
+/// rule 1 bounded to `MAX_JSON_DEPTH` levels, plus the few its validation schema wraps around.
+pub(crate) fn first_unresolved(root: &Value) -> Option<(&str, String)> {
+    unresolved_under(root, root, &mut Vec::new())
+}
+
+fn unresolved_under<'a>(
+    root: &Value,
+    node: &'a Value,
+    path: &mut Vec<Segment<'a>>,
+) -> Option<(&'a str, String)> {
+    match node {
+        Value::Object(map) => map.iter().find_map(|(key, value)| {
+            path.push(Segment::Key(key));
+            let found = match value {
+                Value::String(reference) if key == "$ref" => resolve(root, reference)
+                    .is_none()
+                    .then(|| (reference.as_str(), pointer(path))),
+                _ => unresolved_under(root, value, path),
+            };
+            path.pop();
+            found
+        }),
+        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
+            path.push(Segment::Index(index));
+            let found = unresolved_under(root, item, path);
+            path.pop();
+            found
+        }),
+        _ => None,
+    }
+}
+
 /// The section and decoded name of the entry a JSON Pointer falls in.
 ///
 /// `/components/Card/properties/child` falls in `("components", "Card")`. `None` when the
@@ -319,8 +356,8 @@ fn pointer(path: &[Segment<'_>]) -> String {
 /// Copies into `defs` each common type that `roots`, or a copied type, names as `#/$defs/<name>`.
 ///
 /// `roots` must already be local. A name `defs` already holds is left alone, so a cycle
-/// between common types ends; a name found in neither stays unresolved, and load rule 11
-/// then reports the dangling `$ref`.
+/// between common types ends; a name found in neither stays unresolved, and load reports the
+/// dangling `$ref`: rule 11 for kept entries, the validation schema's check for the rest.
 pub(crate) fn add_common_types(
     defs: &mut Map<String, Value>,
     roots: &[&Value],

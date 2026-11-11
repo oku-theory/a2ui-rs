@@ -215,9 +215,10 @@ impl Catalog {
     /// It may hold definitions no load cap budgeted: compile it only under your own limits. Load
     /// refuses a `$ref` inside a component or function, which flattening rewrites, and one that
     /// names neither the theme nor a `$defs`, component or function entry (`#`, `#/title`); a
-    /// `$ref` into `#/theme` is pointed at the same node under `#/$defs/theme`. Load checks the
-    /// shape of the theme's `$ref`s and those of unreached definitions, not that they resolve,
-    /// so one naming a missing definition can still dangle (t-1582).
+    /// `$ref` into `#/theme` is pointed at the same node under `#/$defs/theme`. Every `$ref` it
+    /// holds names a node of it: load refuses one, from the theme or an unreached definition
+    /// too, naming a missing definition, an absent theme or a dropped component. That node may
+    /// be data (`#/$defs/X/title`), so a `$ref` resolving is no promise the schema compiles.
     pub fn validation_schema(&self) -> &Value {
         &self.validation_schema
     }

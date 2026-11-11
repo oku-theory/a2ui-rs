@@ -247,3 +247,18 @@ fn derive_new_entry_with_an_external_ref_is_catalog_error() {
     assert_that!(err.category()).is_equal_to(Category::Catalog);
     assert_that!(err.to_string()).contains("Unsupported external $ref");
 }
+
+#[test]
+fn derive_dropping_a_component_the_theme_names_is_catalog_error() {
+    let document = json!({
+        "catalogId": "source",
+        "protocolVersion": "1.0",
+        "components": {"Text": {}, "Image": {}},
+        "theme": {"properties": {"hero": {"$ref": "#/components/Image"}}}
+    });
+    let source = Catalog::from_json(&document, None, None).unwrap();
+    let err = source
+        .derive(&Derivation::new("derived").components(vec![keep("Text")]))
+        .unwrap_err();
+    assert_that!(err.category()).is_equal_to(Category::Catalog);
+}

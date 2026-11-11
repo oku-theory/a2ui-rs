@@ -94,7 +94,7 @@ impl Catalog {
             instructions,
             theme,
         };
-        let schema = validation_schema::build(checked, header, common_type_defs()?);
+        let schema = validation_schema::build(checked, header, common_type_defs()?)?;
         Ok(Self {
             id: id.to_owned(),
             protocol_version: version.to_owned(),

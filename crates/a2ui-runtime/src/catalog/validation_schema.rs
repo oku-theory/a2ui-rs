@@ -2,7 +2,8 @@
 //!
 //! [`build`] takes a [`Checked`] bundle, so it only runs after `compile_entries` enforced the
 //! expansion caps on every `$ref` it follows (see `flatten`). The result keeps `$defs` no entry
-//! reaches, which those caps never budgeted, so it is output only: nothing compiles it.
+//! reaches, which those caps never budgeted, so it is output only: nothing compiles it. It
+//! refuses a result holding a `$ref` that does not resolve in it.
 
 use std::collections::BTreeSet;
 
@@ -11,8 +12,10 @@ use serde_json::{Map, Value};
 use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
-    add_common_types, def_names, local_ref, localize_refs, pointer_of, whole_def_name,
+    add_common_types, def_names, first_unresolved, local_ref, localize_refs, pointer_of,
+    whole_def_name,
 };
+use crate::error::{Error, MalformedCatalogSnafu};
 use crate::validator::DRAFT_2020_12;
 
 /// Keywords whose value maps names to subschemas.
@@ -53,11 +56,16 @@ pub(super) struct Header<'a> {
 }
 
 /// Builds the validation schema of a checked bundle under the catalog's `header`.
+///
+/// A `MalformedCatalog` error reports the first `$ref` of the result that names no node of it
+/// (`#/$defs/Missing`, `#/theme` with no theme, a dropped component). Load rule 11 already
+/// resolved those the kept entries reach, so one under `/components` or `/functions` would be
+/// a runtime bug; this completes rule 11 for the theme and unreached definitions.
 pub(super) fn build(
     checked: Checked<'_>,
     header: Header<'_>,
     common: &Map<String, Value>,
-) -> Value {
+) -> Result<Value, Error> {
     let bundle = checked.bundle();
     let mut merged = BTreeSet::new();
     let mut components = Map::new();
@@ -111,7 +119,24 @@ pub(super) fn build(
         out.insert("functions".to_owned(), Value::Object(functions));
     }
     out.insert("$defs".to_owned(), Value::Object(defs));
-    Value::Object(out)
+    let out = Value::Object(out);
+    check_resolved(&out)?;
+    Ok(out)
+}
+
+/// Fails on the first `$ref` string of `schema` that names no node of `schema`.
+///
+/// The `$ref` and its place are those of the validation schema: a theme node is under
+/// `/$defs/theme`, and a common types `$ref` is local.
+fn check_resolved(schema: &Value) -> Result<(), Error> {
+    match first_unresolved(schema) {
+        None => Ok(()),
+        Some((reference, at)) => Err(MalformedCatalogSnafu {
+            reason: format!("$ref '{reference}' at {at} of the validation schema does not resolve"),
+        }
+        .build()
+        .into()),
+    }
 }
 
 /// The theme as upstream writes it in `$defs`: localized, described, open unless it says.

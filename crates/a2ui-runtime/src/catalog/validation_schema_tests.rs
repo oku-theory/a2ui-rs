@@ -2,9 +2,9 @@ use rstest::rstest;
 use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
-use super::super::test_support::{load, mixin_copies, v10};
+use super::super::test_support::{catalog_error, load, mixin_copies, v10};
 use crate::Catalog;
-use crate::bundle::{localize_refs, resolve};
+use crate::bundle::localize_refs;
 use crate::limits::{MAX_CATALOG_EXPANSION, oversize};
 use crate::schema::common_type_defs;
 
@@ -387,7 +387,10 @@ fn validation_schema_theme_self_ref_points_at_theme_def(
     #[case] reference: &str,
     #[case] expected: &str,
 ) {
-    let result = with_theme(json!({"properties": {"brand": {"$ref": reference}}}));
+    let result = with_theme(json!({
+        "$defs": {"Brand": {}, "Brand_ℓ": {}},
+        "properties": {"brand": {"$ref": reference}}
+    }));
     assert_that!(result["$defs"]["theme"]["properties"]["brand"]["$ref"].clone())
         .is_equal_to(json!(expected));
 }
@@ -415,34 +418,15 @@ fn validation_schema_def_ref_into_theme_points_at_theme_def() {
 }
 
 #[test]
-fn validation_schema_recursive_theme_has_no_dangling_ref() {
-    let result = with_theme(json!({
-        "$defs": {"Brand": {"properties": {"inner": {"$ref": "#/theme/$defs/Brand"}}}},
-        "properties": {"brand": {"$ref": "#/theme/$defs/Brand"}}
+fn from_json_recursive_theme_ref_loads() {
+    let document = v10(json!({
+        "theme": {
+            "$defs": {"Brand": {"properties": {"inner": {"$ref": "#/theme/$defs/Brand"}}}},
+            "properties": {"brand": {"$ref": "#/theme/$defs/Brand"}}
+        },
+        "components": {"A": {}}
     }));
-    let mut references = Vec::new();
-    collect_refs(&result, &mut references);
-    let dangling: Vec<&String> = references
-        .iter()
-        .filter(|reference| resolve(&result, reference).is_none())
-        .collect();
-    assert_that!(dangling).is_empty();
-}
-
-/// Every `$ref` string under `node`.
-fn collect_refs(node: &Value, out: &mut Vec<String>) {
-    match node {
-        Value::Object(map) => {
-            for (key, value) in map {
-                match value {
-                    Value::String(reference) if key == "$ref" => out.push(reference.clone()),
-                    _ => collect_refs(value, out),
-                }
-            }
-        }
-        Value::Array(items) => items.iter().for_each(|item| collect_refs(item, out)),
-        _ => {}
-    }
+    assert_that!(load(document)).is_ok();
 }
 
 #[test]
@@ -453,4 +437,92 @@ fn validation_schema_mixin_named_by_theme_is_kept() {
         "components": {"A": {"allOf": [{"$ref": "#/$defs/M"}]}}
     }));
     assert_that!(result["$defs"].get("M")).is_some();
+}
+
+#[rstest]
+#[case::theme_to_missing_def(
+    json!({"theme": {"properties": {"brand": {"$ref": "#/$defs/Missing"}}}}),
+    "#/$defs/Missing",
+    "/$defs/theme/properties/brand/$ref"
+)]
+#[case::theme_to_missing_theme_node(
+    json!({"theme": {"properties": {"brand": {"$ref": "#/theme/$defs/Missing"}}}}),
+    "#/$defs/theme/$defs/Missing",
+    "/$defs/theme/properties/brand/$ref"
+)]
+#[case::theme_to_missing_common_type(
+    json!({"theme": {"properties": {"brand": {"$ref": "common_types.json#/$defs/Missing"}}}}),
+    "#/$defs/Missing",
+    "/$defs/theme/properties/brand/$ref"
+)]
+#[case::unreached_def_to_missing_def(
+    json!({"$defs": {"Unreached": {"$ref": "#/$defs/Missing"}}}),
+    "#/$defs/Missing",
+    "/$defs/Unreached/$ref"
+)]
+#[case::unreached_def_to_absent_theme(
+    json!({"$defs": {"Unreached": {"$ref": "#/theme"}}}),
+    "#/theme",
+    "/$defs/Unreached/$ref"
+)]
+#[case::unreached_def_to_dropped_component(
+    json!({
+        "$defs": {
+            "anyComponent": {"oneOf": [{"$ref": "#/components/A"}]},
+            "Unreached": {"$ref": "#/components/B"}
+        },
+        "components": {"A": {}, "B": {}}
+    }),
+    "#/components/B",
+    "/$defs/Unreached/$ref"
+)]
+#[case::unreached_def_to_dropped_function(
+    json!({
+        "$defs": {
+            "anyFunction": {"oneOf": [{"$ref": "#/functions/g"}]},
+            "Unreached": {"$ref": "#/functions/f"}
+        },
+        "functions": {"f": {}, "g": {}}
+    }),
+    "#/functions/f",
+    "/$defs/Unreached/$ref"
+)]
+#[case::inside_an_array(
+    json!({"$defs": {"Unreached": {"anyOf": [{}, {"$ref": "#/$defs/Missing"}]}}}),
+    "#/$defs/Missing",
+    "/$defs/Unreached/anyOf/1/$ref"
+)]
+#[case::in_data_like_rule_4(
+    json!({"$defs": {"Unreached": {"default": {"$ref": "#/$defs/Missing"}}}}),
+    "#/$defs/Missing",
+    "/$defs/Unreached/default/$ref"
+)]
+#[case::under_an_escaped_name(
+    json!({"$defs": {"a/b~c": {"$ref": "#/$defs/Missing"}}}),
+    "#/$defs/Missing",
+    "/$defs/a~1b~0c/$ref"
+)]
+fn from_json_dangling_ref_outside_kept_entries_is_catalog_error_naming_it(
+    #[case] extra: Value,
+    #[case] reference: &str,
+    #[case] at: &str,
+) {
+    let mut extra = extra;
+    if let Some(map) = extra.as_object_mut() {
+        map.entry("components").or_insert(json!({"A": {}}));
+    }
+    let expected = format!(
+        "Malformed catalog: $ref '{reference}' at {at} of the validation schema does not resolve"
+    );
+    assert_that!(catalog_error(load(v10(extra)))).is_equal_to(expected);
+}
+
+#[test]
+fn from_json_theme_ref_to_own_def_loads() {
+    let document = v10(json!({
+        "$defs": {"Brand": {"type": "string"}},
+        "theme": {"properties": {"brand": {"$ref": "#/$defs/Brand"}}},
+        "components": {"A": {}}
+    }));
+    assert_that!(load(document)).is_ok();
 }

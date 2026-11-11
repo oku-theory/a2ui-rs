@@ -29,14 +29,14 @@ It builds for `wasm32-unknown-unknown`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, string
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries
   its unions list and the authored document (`to_json`), compiles each entry against a bundle
-  pruned to what it reaches (the validator lives in its `ComponentDef`/`FunctionDef`), then
-  builds `validation_schema` in upstream's flattened shape, output only. `validate_component`
-  checks an instance: depth, reserved `@` keys, undeclared envelope keys removed, its validator,
-  then each nested call in its catalog (via `CatalogLookup`): exists, not `agentOnly`, matches
-  the function's validator; `@index` as `IndexSystemFunction`; unknown catalogs only for
-  identifiers. `derive`: a new-id catalog from a `Derivation` (source's version, theme, `$defs`;
-  duplicate names rejected, changed unions regenerated). Submodules `load`, `entries`,
-  `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
+  pruned to what it reaches (the validator lives in its `ComponentDef`/`FunctionDef`), then builds
+  `validation_schema` in upstream's flattened shape, output only, each `$ref` resolving in it.
+  `validate_component` checks an instance: depth, reserved `@` keys, undeclared envelope keys
+  removed, its validator, then each nested call in its catalog (via `CatalogLookup`): exists, not
+  `agentOnly`, matches the function's validator; `@index` as `IndexSystemFunction`; unknown
+  catalogs only for identifiers. `derive`: a new-id catalog from a `Derivation` (source's version,
+  theme, `$defs`; duplicate names rejected, changed unions regenerated). Submodules `load`,
+  `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
 - `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`; no anchors, dynamic
   refs, nested `$id`, component/function interiors), encoded `local_ref`s, common-type closure.
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,

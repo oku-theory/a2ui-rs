@@ -110,9 +110,9 @@ upstream's reading would be unsafe:
    not a merged mixin. Reachability reads every `$ref` string, data included (as
    `add_common_types` does): it may keep more, never less. Pruning leaves no dangling `$ref` into
    `$defs`. A `$ref` into a component's or function's *interior* (`#/components/A/allOf/1/…`)
-   would dangle after flattening, as upstream's can; t-1580 refuses it at load. A `$ref` to a
-   top-level key the schema does not copy, from the theme or an unreached definition, can still
-   dangle: said on the accessor, tracked as t-1581.
+   would dangle after flattening, as upstream's can; t-1580 refuses it at load. t-1581 refuses
+   a `$ref` to a top-level key the schema does not copy, and t-1582 any `$ref` that does not
+   resolve in the validation schema (from the theme or an unreached definition too).
 8. **Theme:** not written into the validation schema by this plan (no v1.0 golden has one; the
    v0.9 golden writes `$defs.theme`). t-1579 then wrote it as `$defs.theme`, and t-1580 points
    `$ref`s into `#/theme` there.

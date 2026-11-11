@@ -87,7 +87,8 @@ impl Catalog {
     /// It keeps this catalog's protocol version, theme and `$defs`, and drops `$id`, `title`,
     /// `description` and `instructions`, which describe this catalog. A name listed twice in
     /// one list is an error. The result is loaded with [`Catalog::from_json`], so new entries
-    /// meet every catalog rule and every entry gets its own compiled validator.
+    /// meet every catalog rule and every entry gets its own compiled validator. Dropping an entry
+    /// the kept theme or `$defs` still name is refused, as that `$ref` would dangle.
     pub fn derive(&self, derivation: &Derivation) -> Result<Catalog, Error> {
         let mut document = self.kept_document();
         for key in SOURCE_ONLY {
