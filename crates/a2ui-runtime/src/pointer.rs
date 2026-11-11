@@ -16,10 +16,6 @@ pub struct Pointer {
 }
 
 /// How a segment reads as a list index.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the data model in the next task")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ListIndex {
     /// A canonical index no larger than [`MAX_LIST_INDEX`].
@@ -92,10 +88,6 @@ impl fmt::Display for Pointer {
 }
 
 /// Reads `segment` as a list index under A2UI's canonical-digits rule.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the data model in the next task")
-)]
 pub(crate) fn list_index(segment: &str) -> ListIndex {
     let digits = !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_digit());
     if !digits || (segment.len() > 1 && segment.starts_with('0')) {

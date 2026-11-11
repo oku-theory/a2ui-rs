@@ -1978,6 +1978,8 @@ fn check_step(fired: &[String], model: &DataModel, step: &Map<String, Value>, at
 }
 ```
 
+**Executed deviation:** the committed handler is stricter than the code above. `path` is required on every op but `dispose`; `set` and `mutate_input` require `value`; `mutate_input` errs when it has nothing to mutate (no prior `set`, or a pointer missing from that value); `expect_absent` must be a boolean (`false` asserts presence); and per-op allowed keys (`op_keys`) replace the global `STEP_KEYS`. Two nested `if let` blocks became let-chains to satisfy clippy `collapsible_if`.
+
 `expect_notified` lists one entry per observer in `watch` order, which is the order `watched` keeps. The `mutate_input` op's `path` points inside the last `set` value (`/name` of the written object), hence `pointer_mut` on that input, not on the model.
 
 Remove the `data_model = "Task 4 of Plan 1"` line from `skips.toml`.

@@ -46,12 +46,37 @@ pub(crate) enum Inner {
         reason: &'static str,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("Cannot set path '{path}': segment '{segment}' holds a primitive value"))]
+    TraversePrimitive {
+        path: String,
+        segment: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Cannot set path '{path}': non-numeric segment '{segment}' in a list"))]
+    NonNumericSegment {
+        path: String,
+        segment: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Cannot set path '{path}': list index '{segment}' exceeds the limit"))]
+    IndexOutOfRange {
+        path: String,
+        segment: String,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
     fn category(&self) -> Category {
         match self {
-            Self::ForbiddenSegment { .. } | Self::InvalidPointer { .. } => Category::Data,
+            Self::ForbiddenSegment { .. }
+            | Self::InvalidPointer { .. }
+            | Self::TraversePrimitive { .. }
+            | Self::NonNumericSegment { .. }
+            | Self::IndexOutOfRange { .. } => Category::Data,
         }
     }
 }

@@ -22,6 +22,7 @@ name = "a2ui-runtime"
 version = "0.1.0"
 dependencies = [
  "rstest",
+ "serde_json",
  "snafu",
  "speculoos",
 ]
