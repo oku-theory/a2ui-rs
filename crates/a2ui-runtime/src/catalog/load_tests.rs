@@ -229,3 +229,24 @@ fn from_json_non_string_instructions_is_catalog_error() {
     assert_that!(catalog_error(load(v10(json!({"instructions": 3})))))
         .contains("`instructions` must be a string");
 }
+
+#[test]
+fn from_json_theme_beside_defs_named_theme_is_catalog_error() {
+    let document = v10(json!({"theme": {}, "$defs": {"theme": {"type": "string"}}}));
+    assert_that!(catalog_error(load(document))).contains("`$defs.theme`");
+}
+
+#[rstest]
+#[case::null(json!(null))]
+#[case::number(json!(3))]
+#[case::string(json!("dark"))]
+#[case::array(json!([]))]
+fn from_json_theme_not_a_schema_is_catalog_error(#[case] theme: Value) {
+    assert_that!(catalog_error(load(v10(json!({"theme": theme})))))
+        .contains("`theme` must be a schema");
+}
+
+#[test]
+fn from_json_defs_named_theme_without_theme_loads() {
+    assert_that!(load(v10(json!({"$defs": {"theme": {"type": "string"}}})))).is_ok();
+}

@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 
 use super::compile::Checked;
 use super::flatten::flattened;
-use crate::bundle::{add_common_types, def_names, whole_def_name};
+use crate::bundle::{add_common_types, def_names, localize_refs, whole_def_name};
 use crate::validator::DRAFT_2020_12;
 
 /// Keywords whose value maps names to subschemas.
@@ -38,12 +38,22 @@ const SCHEMA_ONE: [&str; 10] = [
     "propertyNames",
 ];
 
-/// Builds the validation schema of a checked bundle with the catalog's effective id and version.
+/// What the catalog document adds to the checked bundle's validation schema.
+pub(super) struct Header<'a> {
+    /// The effective catalog id.
+    pub(super) id: &'a str,
+    /// The effective protocol version.
+    pub(super) version: &'a str,
+    /// The catalog's `instructions`, if any.
+    pub(super) instructions: Option<&'a str>,
+    /// The catalog's `theme` schema, if any.
+    pub(super) theme: Option<&'a Value>,
+}
+
+/// Builds the validation schema of a checked bundle under the catalog's `header`.
 pub(super) fn build(
     checked: Checked<'_>,
-    id: &str,
-    version: &str,
-    instructions: Option<&str>,
+    header: Header<'_>,
     common: &Map<String, Value>,
 ) -> Value {
     let bundle = checked.bundle();
@@ -73,6 +83,9 @@ pub(super) fn build(
             (name.clone(), definition)
         })
         .collect();
+    if let Some(theme) = header.theme {
+        defs.insert("theme".to_owned(), theme_def(theme, common));
+    }
     prune(&mut defs, &merged, &components, &functions);
     let mut reached = Map::new();
     let roots: Vec<&Value> = components
@@ -84,10 +97,10 @@ pub(super) fn build(
     defs.extend(reached);
     let mut out = Map::from_iter([
         ("$schema".to_owned(), Value::from(DRAFT_2020_12)),
-        ("catalogId".to_owned(), Value::from(id)),
-        ("protocolVersion".to_owned(), Value::from(version)),
+        ("catalogId".to_owned(), Value::from(header.id)),
+        ("protocolVersion".to_owned(), Value::from(header.version)),
     ]);
-    if let Some(text) = instructions.filter(|text| !text.is_empty()) {
+    if let Some(text) = header.instructions.filter(|text| !text.is_empty()) {
         out.insert("instructions".to_owned(), Value::from(text));
     }
     out.insert("components".to_owned(), Value::Object(components));
@@ -96,6 +109,23 @@ pub(super) fn build(
     }
     out.insert("$defs".to_owned(), Value::Object(defs));
     Value::Object(out)
+}
+
+/// The theme as upstream writes it in `$defs`: localized, described, open unless it says.
+///
+/// An object schema with neither `additionalProperties` nor `unevaluatedProperties` gets
+/// `additionalProperties: true`; any other theme is copied as it is.
+fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
+    let mut theme = theme.clone();
+    localize_refs(&mut theme);
+    describe(&mut theme, common);
+    if let Value::Object(map) = &mut theme
+        && !map.contains_key("additionalProperties")
+        && !map.contains_key("unevaluatedProperties")
+    {
+        map.insert("additionalProperties".to_owned(), Value::Bool(true));
+    }
+    theme
 }
 
 /// Gives each whole-entry `$ref` to a common type that type's description, unless it has one.

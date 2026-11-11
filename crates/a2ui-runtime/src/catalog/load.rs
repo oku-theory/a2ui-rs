@@ -9,7 +9,7 @@ use super::Catalog;
 use super::compile::{bundle, compile_entries};
 use super::document::union_members;
 use super::entries::{ComponentAttrs, FunctionAttrs};
-use super::validation_schema;
+use super::validation_schema::{self, Header};
 use crate::bundle::check_references;
 use crate::error::{
     CatalogJsonSnafu, CatalogLimitSnafu, DefsShadowCommonTypeSnafu, Error, MalformedCatalogSnafu,
@@ -72,11 +72,29 @@ impl Catalog {
         let instructions = text(document, "instructions")?;
         let defs = section(document, "$defs")?;
         check_defs(defs)?;
+        let theme = document.get("theme");
+        ensure!(
+            theme.is_none_or(|theme| theme.is_object() || theme.is_boolean()),
+            MalformedCatalogSnafu {
+                reason: "`theme` must be a schema (an object or a boolean)",
+            }
+        );
+        ensure!(
+            theme.is_none() || !defs.is_some_and(|defs| defs.contains_key("theme")),
+            MalformedCatalogSnafu {
+                reason: "`theme` and `$defs.theme` both name the validation schema's theme",
+            }
+        );
         let (components, functions) = kept_entries(document, defs)?;
         let bundle = bundle(&components, &functions, defs)?;
         let ((components, functions), checked) = compile_entries(&bundle, components, functions)?;
-        let schema =
-            validation_schema::build(checked, id, version, instructions, common_type_defs()?);
+        let header = Header {
+            id,
+            version,
+            instructions,
+            theme,
+        };
+        let schema = validation_schema::build(checked, header, common_type_defs()?);
         Ok(Self {
             id: id.to_owned(),
             protocol_version: version.to_owned(),

@@ -321,3 +321,70 @@ fn from_json_long_sub_pointer_chain_loads_on_a_small_stack() {
         .unwrap();
     assert_that!(loaded).is_ok();
 }
+
+/// The validation schema of a catalog with component `A` and `theme`.
+fn with_theme(theme: Value) -> Value {
+    schema(json!({"theme": theme, "components": {"A": {}}}))
+}
+
+#[rstest]
+#[case::open(
+    json!({"type": "object", "properties": {"primaryColor": {"type": "string"}}}),
+    json!({
+        "type": "object",
+        "properties": {"primaryColor": {"type": "string"}},
+        "additionalProperties": true
+    })
+)]
+#[case::closed(
+    json!({"type": "object", "additionalProperties": false}),
+    json!({"type": "object", "additionalProperties": false})
+)]
+#[case::unevaluated(
+    json!({"type": "object", "unevaluatedProperties": false}),
+    json!({"type": "object", "unevaluatedProperties": false})
+)]
+#[case::boolean(json!(true), json!(true))]
+fn validation_schema_theme_is_written_under_defs(#[case] theme: Value, #[case] expected: Value) {
+    assert_that!(with_theme(theme)["$defs"]["theme"].clone()).is_equal_to(expected);
+}
+
+#[test]
+fn validation_schema_header_has_no_theme_key() {
+    assert_that!(with_theme(json!({"type": "object"})).get("theme")).is_none();
+}
+
+#[test]
+fn validation_schema_without_theme_has_no_theme_def() {
+    assert_that!(schema(json!({"components": {"A": {}}}))["$defs"].get("theme")).is_none();
+}
+
+#[test]
+fn validation_schema_theme_common_ref_is_localized() {
+    let result = with_theme(json!({"properties": {"name": {"$ref": DYNAMIC_STRING}}}));
+    assert_that!(result["$defs"]["theme"]["properties"]["name"]["$ref"].clone())
+        .is_equal_to(json!("#/$defs/DynamicString"));
+}
+
+#[test]
+fn validation_schema_theme_common_ref_is_described() {
+    let result = with_theme(json!({"properties": {"name": {"$ref": DYNAMIC_STRING}}}));
+    assert_that!(result["$defs"]["theme"]["properties"]["name"]["description"].clone())
+        .is_equal_to(json!("Represents a string"));
+}
+
+#[test]
+fn validation_schema_theme_common_ref_is_bundled() {
+    let result = with_theme(json!({"properties": {"name": {"$ref": DYNAMIC_STRING}}}));
+    assert_that!(result["$defs"].get("DynamicString")).is_some();
+}
+
+#[test]
+fn validation_schema_mixin_named_by_theme_is_kept() {
+    let result = schema(json!({
+        "$defs": {"M": {"properties": {"m": {}}}},
+        "theme": {"properties": {"brand": {"$ref": "#/$defs/M"}}},
+        "components": {"A": {"allOf": [{"$ref": "#/$defs/M"}]}}
+    }));
+    assert_that!(result["$defs"].get("M")).is_some();
+}

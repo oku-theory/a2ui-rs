@@ -209,11 +209,11 @@ impl Catalog {
     ///
     /// Components are flattened (mixins merged, `id`/`component` envelope, no `catalogId`),
     /// function `args` closed, common-type descriptions copied onto their `$ref`s, and `$defs`
-    /// holds the catalog's definitions plus the common types they reach. It can accept
-    /// instances the per-entry validators reject (flattening replaces where `allOf` combines);
-    /// the runtime's verdict is the validators'. It may hold definitions no load cap budgeted:
-    /// compile it only under your own limits. The catalog theme is not written yet (t-1579),
-    /// and a `$ref` into a flattened entry's interior can dangle (t-1580).
+    /// holds the catalog's definitions, its `theme` (open unless it says otherwise) and the
+    /// common types they reach. It can accept instances the per-entry validators reject
+    /// (flattening replaces where `allOf` combines); the runtime's verdict is the validators'.
+    /// It may hold definitions no load cap budgeted: compile it only under your own limits. A
+    /// `$ref` into a flattened entry's interior or into `#/theme` can dangle (t-1580).
     pub fn validation_schema(&self) -> &Value {
         &self.validation_schema
     }
