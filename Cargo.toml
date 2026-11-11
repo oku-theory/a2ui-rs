@@ -1,0 +1,31 @@
+[workspace]
+resolver = "3"
+members = ["crates/a2ui-runtime"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
+libtest-mimic = "0.8"
+regex = "1"
+rstest = "0.26"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = "0.10"
+snafu = "0.8"
+speculoos = "0.13"
+toml = "0.9"
+unicode-ident = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+allow_attributes = "deny"
