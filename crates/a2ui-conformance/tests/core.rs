@@ -66,7 +66,10 @@ fn trial(case: Case, skips: &Skips, manifest: Option<Arc<Manifest>>) -> Result<T
         if let Some(manifest) = &manifest {
             manifest.record(&case.suite, &case.name, Status::Skipped, Some(&reason))?;
         }
-        return Ok(Trial::test(name, || Ok(())).with_ignored_flag(true));
+        return Ok(Trial::test(name, move || {
+            Err(Failed::from(format!("skipped: {reason}")))
+        })
+        .with_ignored_flag(true));
     }
     Ok(Trial::test(name, move || {
         let outcome = match handlers::handler(&case.action) {

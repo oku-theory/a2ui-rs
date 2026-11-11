@@ -46,3 +46,27 @@ fn expect_error_unknown_key_fails() {
     let expected = json!({"category": "DataError", "surprise": 1});
     assert_that!(expect_error(&err, &expected, "here")).is_err();
 }
+
+#[test]
+fn expect_error_non_string_message_fails() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    let expected = json!({"category": "DataError", "message": 5});
+    let result = expect_error(&err, &expected, "here");
+    assert_that!(result).is_err();
+    assert_that!(result.unwrap_err().contains("must be a string")).is_true();
+}
+
+#[test]
+fn expect_error_message_mismatch_fails_naming_the_mismatch() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "^nothing like this$"});
+    let result = expect_error(&err, &expected, "here");
+    assert_that!(result.unwrap_err().contains("does not match")).is_true();
+}
+
+#[test]
+fn expect_error_non_mapping_expected_fails() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    let result = expect_error(&err, &json!("DataError"), "here");
+    assert_that!(result.unwrap_err().contains("must be a mapping")).is_true();
+}

@@ -38,8 +38,10 @@ pub fn expect_error(
             actual.category().as_str()
         ));
     }
-    let Some(pattern) = fields.get("message").and_then(Value::as_str) else {
-        return Ok(());
+    let pattern = match fields.get("message") {
+        None => return Ok(()),
+        Some(Value::String(pattern)) => pattern,
+        Some(other) => return Err(format!("{at}: message must be a string, got {other}")),
     };
     let regex =
         regex::Regex::new(pattern).map_err(|err| format!("{at}: bad message regex: {err}"))?;

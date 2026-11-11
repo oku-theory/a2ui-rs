@@ -176,10 +176,12 @@ fn check_read(value: Option<&Value>, step: &Map<String, Value>, at: &str) -> Res
             ));
         }
     }
-    match (step.get("expect_type").and_then(Value::as_str), value) {
+    match (step.get("expect_type"), value) {
         (None, _) => Ok(()),
-        (Some("list"), Some(Value::Array(_))) | (Some("object"), Some(Value::Object(_))) => Ok(()),
-        (Some(kind), _) => Err(format!("{at}: expected a {kind}, got {value:?}")),
+        (Some(Value::String(kind)), Some(Value::Array(_))) if kind == "list" => Ok(()),
+        (Some(Value::String(kind)), Some(Value::Object(_))) if kind == "object" => Ok(()),
+        (Some(Value::String(kind)), _) => Err(format!("{at}: expected a {kind}, got {value:?}")),
+        (Some(other), _) => Err(format!("{at}: expect_type must be a string, got {other}")),
     }
 }
 
@@ -195,8 +197,14 @@ fn check_step(
             return Err(format!("{at}: notified {fired}, expected {expected}"));
         }
     }
-    let Some(Value::Object(values)) = step.get("expect_values") else {
-        return Ok(());
+    let values = match step.get("expect_values") {
+        None => return Ok(()),
+        Some(Value::Object(values)) => values,
+        Some(other) => {
+            return Err(format!(
+                "{at}: expect_values must be a mapping, got {other}"
+            ));
+        }
     };
     for (raw, expected) in values {
         let pointer = Pointer::parse(raw).map_err(|err| format!("{at}: {err}"))?;
