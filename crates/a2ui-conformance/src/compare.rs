@@ -19,6 +19,37 @@ pub fn json_eq(a: &Value, b: &Value) -> bool {
     }
 }
 
+/// Checks `actual` against an `expectError` / `expect_error` value `{category, message?}`.
+///
+/// `message` is a regular expression matched against the error's message.
+pub fn expect_error(
+    actual: &a2ui_runtime::Error,
+    expected: &Value,
+    at: &str,
+) -> Result<(), String> {
+    let Value::Object(fields) = expected else {
+        return Err(format!("{at}: expect_error must be a mapping"));
+    };
+    crate::keys::assert_known_keys(fields, &["category", "message"], at)?;
+    let category = fields.get("category").and_then(Value::as_str);
+    if category != Some(actual.category().as_str()) {
+        return Err(format!(
+            "{at}: expected {category:?}, got {}: {actual}",
+            actual.category().as_str()
+        ));
+    }
+    let Some(pattern) = fields.get("message").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    let regex =
+        regex::Regex::new(pattern).map_err(|err| format!("{at}: bad message regex: {err}"))?;
+    if regex.is_match(&actual.to_string()) {
+        Ok(())
+    } else {
+        Err(format!("{at}: message {actual} does not match /{pattern}/"))
+    }
+}
+
 #[cfg(test)]
 #[path = "compare_tests.rs"]
 mod tests;

@@ -7,8 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+snafu.workspace = true
 
 [dev-dependencies]
+rstest.workspace = true
+speculoos.workspace = true
 
 [lints]
 workspace = true

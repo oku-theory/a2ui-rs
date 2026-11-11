@@ -11,7 +11,8 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   (only `1.0`, except the version-neutral `data_model`, `resolve_path`, `parse_expression_template`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.
 - `keys`: strict key checks; an unread key fails the case.
-- `compare`: `json_eq` (numbers as `f64`, key order ignored).
+- `compare`: `json_eq` (numbers as `f64`, key order ignored); `expect_error` (category, optional
+  message regex).
 - `manifest`: upstream's executed-case JSONL, written only by `just conformance-manifest`.
 - `handlers`: `handler(action)`, one runner per implemented action.
 

@@ -8,6 +8,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+a2ui-runtime.workspace = true
+regex.workspace = true
 libtest-mimic.workspace = true
 serde.workspace = true
 serde_json.workspace = true

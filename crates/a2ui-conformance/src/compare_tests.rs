@@ -19,3 +19,30 @@ fn json_eq_equivalent_values_are_equal(#[case] a: Value, #[case] b: Value) {
 fn json_eq_different_values_are_not_equal(#[case] a: Value, #[case] b: Value) {
     assert_that!(json_eq(&a, &b)).is_false();
 }
+
+use a2ui_runtime::Pointer;
+
+#[test]
+fn expect_error_matching_category_and_message_passes() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "Forbidden path segment"});
+    assert_that!(expect_error(&err, &expected, "here")).is_ok();
+}
+
+#[test]
+fn expect_error_wrong_category_fails() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    assert_that!(expect_error(
+        &err,
+        &json!({"category": "ParseError"}),
+        "here"
+    ))
+    .is_err();
+}
+
+#[test]
+fn expect_error_unknown_key_fails() {
+    let err = Pointer::parse("/__proto__").unwrap_err();
+    let expected = json!({"category": "DataError", "surprise": 1});
+    assert_that!(expect_error(&err, &expected, "here")).is_err();
+}
