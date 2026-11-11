@@ -70,10 +70,6 @@ struct Collected<'a> {
 }
 
 /// A flattened component and the own `$defs` it merged in as mixins.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "Plan 2b Task 2 builds it from load")
-)]
 pub(super) struct Flattened {
     /// The flattened schema.
     pub(super) schema: Map<String, Value>,
@@ -84,10 +80,6 @@ pub(super) struct Flattened {
 /// Flattens the component `name`; `defs` is the bundle's `$defs`, `common` the common types.
 ///
 /// A loaded entry is always an object; any other value reads as an object with no keys.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "Plan 2b Task 2 calls it from load")
-)]
 pub(super) fn flattened(
     name: &str,
     schema: &Value,

@@ -52,3 +52,22 @@ pub(crate) fn fan_out(levels: usize, unevaluated: bool) -> Map<String, Value> {
     }
     defs
 }
+
+/// A catalog of `count` components that each mix in a 3 000-property `$defs` entry.
+///
+/// Each component's expansion charges about 12 010 nodes: 21 fit `MAX_CATALOG_EXPANSION`
+/// (262 144), 22 do not.
+pub(crate) fn mixin_copies(count: usize) -> Value {
+    let properties: Map<String, Value> = (0..3000)
+        .map(|index| (format!("p{index}"), json!({"type": "string"})))
+        .collect();
+    let components: Map<String, Value> = (0..count)
+        .map(|index| {
+            (
+                format!("C{index}"),
+                json!({"allOf": [{"$ref": "#/$defs/Big"}]}),
+            )
+        })
+        .collect();
+    v10(json!({"$defs": {"Big": {"properties": properties}}, "components": components}))
+}

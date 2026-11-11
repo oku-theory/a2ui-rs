@@ -286,7 +286,7 @@ pub(crate) fn add_common_types(
     }
 }
 
-fn def_names(node: &Value, out: &mut Vec<String>) {
+pub(crate) fn def_names(node: &Value, out: &mut Vec<String>) {
     match node {
         Value::Object(map) => {
             for (key, value) in map {

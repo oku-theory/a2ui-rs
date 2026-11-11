@@ -1,8 +1,8 @@
 //! v1.0 catalogs: the components and functions an agent may use on a surface.
 //!
 //! [`Catalog::from_json`] checks an authored catalog document, keeps it for
-//! [`Catalog::to_json`], bundles the self-contained [`Catalog::validation_schema`] and compiles
-//! one validator per entry, which its [`ComponentDef`] or [`FunctionDef`] holds.
+//! [`Catalog::to_json`], compiles one validator per entry, which its [`ComponentDef`] or
+//! [`FunctionDef`] holds, and builds [`Catalog::validation_schema`].
 
 mod compile;
 mod derive;
@@ -14,6 +14,7 @@ mod shape;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod validate;
+mod validation_schema;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -158,7 +159,7 @@ pub struct Catalog {
     document: Map<String, Value>,
     components: BTreeMap<String, ComponentDef>,
     functions: BTreeMap<String, FunctionDef>,
-    bundle: Value,
+    validation_schema: Value,
 }
 
 impl Catalog {
@@ -198,14 +199,22 @@ impl Catalog {
     }
 
     /// The `instructions` for agents, if any.
+    ///
+    /// A loaded catalog's `instructions` is always a string.
     pub fn instructions(&self) -> Option<&str> {
         self.document.get("instructions").and_then(Value::as_str)
     }
 
-    /// The self-contained schema: kept entries, `$defs` and the common types they reach.
+    /// The schema agents and tools validate against, in upstream's flattened v1.0 shape.
     ///
-    /// Until Plan 2b it is the unflattened bundle, not upstream's `validation_schema` golden.
+    /// Components are flattened (mixins merged, `id`/`component` envelope, no `catalogId`),
+    /// function `args` closed, common-type descriptions copied onto their `$ref`s, and `$defs`
+    /// holds the catalog's definitions plus the common types they reach. It can accept
+    /// instances the per-entry validators reject (flattening replaces where `allOf` combines);
+    /// the runtime's verdict is the validators'. It may hold definitions no load cap budgeted:
+    /// compile it only under your own limits. The catalog theme is not written yet (t-1579),
+    /// and a `$ref` into a flattened entry's interior can dangle (t-1580).
     pub fn validation_schema(&self) -> &Value {
-        &self.bundle
+        &self.validation_schema
     }
 }

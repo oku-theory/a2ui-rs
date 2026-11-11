@@ -223,3 +223,9 @@ fn accessors_instructions_are_read_from_the_document() {
     let catalog = load(v10(json!({"instructions": "Be brief."}))).unwrap();
     assert_that!(catalog.instructions()).is_equal_to(Some("Be brief."));
 }
+
+#[test]
+fn from_json_non_string_instructions_is_catalog_error() {
+    assert_that!(catalog_error(load(v10(json!({"instructions": 3})))))
+        .contains("`instructions` must be a string");
+}

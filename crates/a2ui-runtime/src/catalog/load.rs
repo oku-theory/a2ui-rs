@@ -9,6 +9,7 @@ use super::Catalog;
 use super::compile::{bundle, compile_entries};
 use super::document::union_members;
 use super::entries::{ComponentAttrs, FunctionAttrs};
+use super::validation_schema;
 use crate::bundle::check_references;
 use crate::error::{
     CatalogJsonSnafu, CatalogLimitSnafu, DefsShadowCommonTypeSnafu, Error, MalformedCatalogSnafu,
@@ -68,18 +69,21 @@ impl Catalog {
             UnsupportedVersionSnafu { version }
         );
         check_references(document)?;
+        let instructions = text(document, "instructions")?;
         let defs = section(document, "$defs")?;
         check_defs(defs)?;
         let (components, functions) = kept_entries(document, defs)?;
-        let bundle = Value::Object(bundle(id, version, &components, &functions, defs)?);
-        let (components, functions) = compile_entries(&bundle, components, functions)?;
+        let bundle = bundle(&components, &functions, defs)?;
+        let ((components, functions), checked) = compile_entries(&bundle, components, functions)?;
+        let schema =
+            validation_schema::build(checked, id, version, instructions, common_type_defs()?);
         Ok(Self {
             id: id.to_owned(),
             protocol_version: version.to_owned(),
             document: document.clone(),
             components,
             functions,
-            bundle,
+            validation_schema: schema,
         })
     }
 

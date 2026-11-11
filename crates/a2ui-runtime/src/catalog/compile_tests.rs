@@ -1,7 +1,7 @@
 use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
-use super::super::test_support::{catalog_error, fan_out, load, v10};
+use super::super::test_support::{catalog_error, fan_out, load, mixin_copies, v10};
 use crate::bundle::resolve;
 use crate::limits::MAX_SCHEMA_DEPTH;
 
@@ -272,4 +272,31 @@ fn from_json_shared_large_description_past_the_catalog_expansion_cap_is_catalog_
         "Catalog exceeds 262144 schema nodes in all entries once their $refs are expanded"
             .to_owned(),
     );
+}
+
+#[test]
+fn from_json_21_mixin_copies_fit_catalog_expansion() {
+    assert_that!(load(mixin_copies(21))).is_ok();
+}
+
+#[test]
+fn from_json_22_mixin_copies_past_catalog_expansion_is_catalog_error() {
+    assert_that!(catalog_error(load(mixin_copies(22))))
+        .contains("schema nodes in all entries once their $refs are expanded");
+}
+
+#[test]
+fn from_json_mixin_chain_past_schema_depth_is_catalog_error() {
+    let hops = 50;
+    let mut defs: Map<String, Value> = (0..hops)
+        .map(|index| {
+            let next = format!("#/$defs/M{}", index + 1);
+            (format!("M{index}"), json!({"allOf": [{"$ref": next}]}))
+        })
+        .collect();
+    defs.insert(format!("M{hops}"), json!({"properties": {"p": {}}}));
+    let document = v10(json!({"$defs": defs, "components": {"A": {
+        "allOf": [{"$ref": "#/$defs/M0"}]
+    }}}));
+    assert_that!(catalog_error(load(document))).contains("levels of 'A'");
 }

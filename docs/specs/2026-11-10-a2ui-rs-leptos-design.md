@@ -152,7 +152,8 @@ Dependencies: `leptos` 0.8 (CSR), `web-sys` (Modal focus only).
   browser. Any other remaining skip blocks the release.
 - Delivery: seven plans following the upstream harness stages (C1 data model and expressions; C2
   catalogs and schemas, with `a2ui-catalog-basic` holding the catalog document; C2b the
-  `validationSchema` flattening matching upstream's goldens; C3 validation and processing; C4
+  `validationSchema` flattening matching upstream's goldens (theme left out, t-1579; a
+  non-string `instructions` is refused at load); C3 validation and processing; C4
   functions/actions/RPC, adding the basic functions to `a2ui-catalog-basic`; C5 node resolution
   and timing; then `a2ui-leptos`); each plan is written when the previous lands.
 - Leptos: `wasm-bindgen-test` in headless Chrome — mount `<Surface>` on message streams, check the

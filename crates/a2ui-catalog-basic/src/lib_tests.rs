@@ -53,3 +53,22 @@ fn catalog_text_field_without_value_is_invalid() {
         .unwrap_err();
     assert_that!(err.to_string()).contains("\"value\" is a required property");
 }
+
+#[test]
+fn catalog_validation_schema_properties_are_within_shapes() {
+    let basic = catalog().unwrap();
+    let outside: Vec<String> = basic
+        .components()
+        .flat_map(|def| {
+            let flat = &basic.validation_schema()["components"][def.name()]["properties"];
+            let names: Vec<String> = flat.as_object().unwrap().keys().cloned().collect();
+            names
+                .into_iter()
+                .filter(|name| name != "id" && name != "component")
+                .filter(|name| !def.shape().properties().contains(name))
+                .map(|name| format!("{}.{name}", def.name()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_that!(outside).is_empty();
+}

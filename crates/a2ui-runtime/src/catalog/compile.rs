@@ -17,16 +17,14 @@ use crate::limits::{
     expand,
 };
 use crate::schema::common_type_defs;
-use crate::validator::{DRAFT_2020_12, compile, rooted};
+use crate::validator::{compile, rooted};
 
 /// The self-contained schema of the kept entries, `defs` and the common types they reach.
 pub(super) fn bundle(
-    id: &str,
-    version: &str,
     components: &BTreeMap<String, ComponentAttrs>,
     functions: &BTreeMap<String, FunctionAttrs>,
     defs: Option<&Map<String, Value>>,
-) -> Result<Map<String, Value>, Error> {
+) -> Result<Bundle, Error> {
     let mut defs = defs.cloned().unwrap_or_default();
     if !defs.contains_key("anyComponent") {
         let names: Vec<&str> = components.keys().map(String::as_str).collect();
@@ -57,14 +55,64 @@ pub(super) fn bundle(
         .chain([&own_defs])
         .collect();
     add_common_types(&mut defs, &roots, common_type_defs()?);
-    Ok(Map::from_iter([
-        ("$schema".to_owned(), Value::from(DRAFT_2020_12)),
-        ("catalogId".to_owned(), Value::from(id)),
-        ("protocolVersion".to_owned(), Value::from(version)),
-        ("components".to_owned(), Value::Object(components)),
-        ("functions".to_owned(), Value::Object(functions)),
-        ("$defs".to_owned(), Value::Object(defs)),
-    ]))
+    Ok(Bundle {
+        components,
+        functions,
+        defs,
+    })
+}
+
+/// The bundled catalog: kept entries and `$defs`, every `$ref` local.
+///
+/// `$defs` holds the catalog's own definitions, the unions and the common types they reach.
+pub(super) struct Bundle {
+    components: Map<String, Value>,
+    functions: Map<String, Value>,
+    defs: Map<String, Value>,
+}
+
+impl Bundle {
+    /// The kept components, localized, by name.
+    pub(super) fn components(&self) -> &Map<String, Value> {
+        &self.components
+    }
+
+    /// The kept functions, localized, by name.
+    pub(super) fn functions(&self) -> &Map<String, Value> {
+        &self.functions
+    }
+
+    /// The `$defs`: own definitions, unions and reached common types.
+    pub(super) fn defs(&self) -> &Map<String, Value> {
+        &self.defs
+    }
+
+    /// The bundle as one document, each section under its catalog key.
+    fn document(&self) -> Value {
+        Value::Object(Map::from_iter([
+            (
+                "components".to_owned(),
+                Value::Object(self.components.clone()),
+            ),
+            (
+                "functions".to_owned(),
+                Value::Object(self.functions.clone()),
+            ),
+            ("$defs".to_owned(), Value::Object(self.defs.clone())),
+        ]))
+    }
+}
+
+/// A bundle whose every entry passed the expansion caps and compiled.
+///
+/// Only [`compile_entries`] makes one, so code taking it runs after the caps were enforced.
+pub(super) struct Checked<'a>(&'a Bundle);
+
+impl<'a> Checked<'a> {
+    /// The checked bundle.
+    pub(super) fn bundle(&self) -> &'a Bundle {
+        self.0
+    }
 }
 
 fn localized<'a>(entries: impl Iterator<Item = (&'a str, &'a Value)>) -> Map<String, Value> {
@@ -87,12 +135,13 @@ pub(super) type Definitions = (
 ///
 /// All entries pass before any compiles: compiling an oversized one could take minutes. Each
 /// entry compiles against the targets its check found, so it is expanded once.
-pub(super) fn compile_entries(
-    bundle: &Value,
+pub(super) fn compile_entries<'a>(
+    bundle: &'a Bundle,
     components: BTreeMap<String, ComponentAttrs>,
     functions: BTreeMap<String, FunctionAttrs>,
-) -> Result<Definitions, Error> {
-    let root = validator_top(bundle);
+) -> Result<(Definitions, Checked<'a>), Error> {
+    let document = bundle.document();
+    let root = validator_top(&document);
     let mut totals = Totals::default();
     let component_targets = components
         .values()
@@ -107,7 +156,7 @@ pub(super) fn compile_entries(
         .zip(component_targets)
         .map(|((name, attrs), targets)| {
             let validator = compile_entry(&root, "components", &name, attrs.schema(), targets)?;
-            let shape = ComponentShape::of(bundle, attrs.schema());
+            let shape = ComponentShape::of(&document, attrs.schema());
             Ok((name, attrs.into_def(shape, validator)))
         })
         .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -119,7 +168,7 @@ pub(super) fn compile_entries(
             Ok((name, attrs.into_def(validator)))
         })
         .collect::<Result<BTreeMap<_, _>, Error>>()?;
-    Ok((components, functions))
+    Ok(((components, functions), Checked(bundle)))
 }
 
 /// The expansion of all entries so far, against the catalog-wide caps.
