@@ -5,8 +5,8 @@ It builds for `wasm32-unknown-unknown`.
 
 ## Modules
 
-- `error`: one opaque `Error` (Snafu, backtrace per variant) with `category()`, the upstream
-  conformance category (`DataError`, …). Messages are English and stable; callers localize.
+- `error`: one opaque `Error` (Snafu, backtrace per variant), `category()` its conformance
+  category (`DataError`, …); English, stable messages; `quoted` escapes and caps input it quotes.
 - `pointer`: `Pointer`, an absolute RFC 6901 pointer with empty segments dropped, `~0`/`~1`
   unescaped and `__proto__`/`constructor`/`prototype` refused; list indices are canonical digits
   up to `MAX_LIST_INDEX` (10 000).

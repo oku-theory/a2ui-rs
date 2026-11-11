@@ -13,6 +13,7 @@ use crate::error::{
     UserActivationSnafu,
 };
 use crate::ident::is_identifier;
+use crate::quoted::Quoted;
 use crate::schema::validate_component_metadata;
 
 /// A checked component definition, before its shape and validator exist.
@@ -93,13 +94,19 @@ impl FunctionAttrs {
                 .as_str()
                 .and_then(AllowedCallers::from_catalog_str)
                 .with_context(|| MalformedCatalogSnafu {
-                    reason: format!("function '{name}' has an unknown allowedCallers"),
+                    reason: format!(
+                        "function '{}' has an unknown allowedCallers",
+                        Quoted::new(name)
+                    ),
                 })?,
         };
         let requires_user_activation = match map.get("requiresUserActivation") {
             None => false,
             Some(value) => value.as_bool().with_context(|| MalformedCatalogSnafu {
-                reason: format!("requiresUserActivation of function '{name}' must be a boolean"),
+                reason: format!(
+                    "requiresUserActivation of function '{}' must be a boolean",
+                    Quoted::new(name)
+                ),
             })?,
         };
         ensure!(
@@ -152,7 +159,7 @@ fn check_identifier(
             kind,
             name,
             context: owner
-                .map(|(owner_kind, owner)| format!(" in {owner_kind} '{owner}'"))
+                .map(|(owner_kind, owner)| format!(" in {owner_kind} '{}'", Quoted::new(owner)))
                 .unwrap_or_default(),
         }
     );
@@ -161,7 +168,7 @@ fn check_identifier(
 
 fn entry<'a>(kind: &str, name: &str, schema: &'a Value) -> Result<&'a Map<String, Value>, Error> {
     Ok(schema.as_object().with_context(|| MalformedCatalogSnafu {
-        reason: format!("{kind} '{name}' must be a schema object"),
+        reason: format!("{kind} '{}' must be a schema object", Quoted::new(name)),
     })?)
 }
 
@@ -182,7 +189,10 @@ fn names_list(
                 .collect::<Option<Vec<_>>>()
         })
         .with_context(|| MalformedCatalogSnafu {
-            reason: format!("`{key}` of component '{component}' must be a list of names"),
+            reason: format!(
+                "`{key}` of component '{}' must be a list of names",
+                Quoted::new(component)
+            ),
         })?;
     Ok(Some(names))
 }

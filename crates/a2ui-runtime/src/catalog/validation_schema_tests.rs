@@ -574,3 +574,28 @@ fn check_resolved_runtime_written_ref_is_named_as_the_schema_holds_it() {
                     validation schema does not resolve";
     assert_that!(message).is_equal_to(expected.to_owned());
 }
+
+#[test]
+fn from_json_dangling_ref_with_control_characters_is_named_escaped() {
+    let document = v10(json!({
+        "$defs": {"Unreached": {"$ref": "#/$defs/Missing\n\u{1b}[2J"}},
+        "components": {"A": {}}
+    }));
+    let expected = "Malformed catalog: $ref '#/$defs/Missing\\n\\u{1b}[2J' at /$defs/Unreached/$ref \
+                    does not resolve in the validation schema";
+    assert_that!(catalog_error(load(document))).is_equal_to(expected.to_owned());
+}
+
+#[test]
+fn from_json_long_dangling_ref_keeps_the_wording_around_a_capped_ref() {
+    let reference = format!("#/$defs/{}", "M".repeat(2000));
+    let document = v10(json!({
+        "$defs": {"Unreached": {"$ref": reference}},
+        "components": {"A": {}}
+    }));
+    let message = catalog_error(load(document));
+    assert_that!(message.contains("characters elided")).is_true();
+    assert_that!(message)
+        .ends_with(" at /$defs/Unreached/$ref does not resolve in the validation schema");
+    assert_that!(message.len()).is_less_than(700);
+}

@@ -16,6 +16,7 @@ use crate::bundle::{
     rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
+use crate::quoted::Quoted;
 use crate::validator::DRAFT_2020_12;
 
 /// Keywords whose value maps names to subschemas.
@@ -143,9 +144,15 @@ fn check_resolved(
     };
     let reason = match authored(&at, theme, defs) {
         Some((authored_at, authored_ref)) => format!(
-            "$ref '{authored_ref}' at {authored_at} does not resolve in the validation schema"
+            "$ref '{}' at {} does not resolve in the validation schema",
+            Quoted::new(authored_ref),
+            Quoted::new(&authored_at)
         ),
-        None => format!("$ref '{reference}' at {at} of the validation schema does not resolve"),
+        None => format!(
+            "$ref '{}' at {} of the validation schema does not resolve",
+            Quoted::new(reference),
+            Quoted::new(&at)
+        ),
     };
     Err(MalformedCatalogSnafu { reason }.build().into())
 }

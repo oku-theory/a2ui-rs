@@ -23,6 +23,7 @@ mod expression;
 mod ident;
 mod limits;
 mod pointer;
+mod quoted;
 mod schema;
 mod subscribe;
 mod validator;

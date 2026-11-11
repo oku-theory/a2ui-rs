@@ -1,6 +1,11 @@
 //! Errors raised by the runtime, each tagged with a conformance category.
+//!
+//! Input a message quotes is held as [`Quoted`] (escaped, capped) or, inside runtime wording,
+//! [`Reason`] (escaped), from the moment the error is built.
 
 use snafu::{Backtrace, Snafu};
+
+use crate::quoted::{Quoted, Reason};
 
 /// The conformance category of an [`Error`], as the upstream suites name it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,36 +61,36 @@ impl Error {
 pub(crate) enum Inner {
     #[snafu(display("Forbidden path segment '{segment}' in '{path}'"))]
     ForbiddenSegment {
-        path: String,
-        segment: String,
+        path: Quoted,
+        segment: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Invalid JSON Pointer '{path}': {reason}"))]
     InvalidPointer {
-        path: String,
+        path: Quoted,
         reason: &'static str,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Cannot set path '{path}': segment '{segment}' holds a primitive value"))]
     TraversePrimitive {
-        path: String,
-        segment: String,
+        path: Quoted,
+        segment: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Cannot set path '{path}': non-numeric segment '{segment}' in a list"))]
     NonNumericSegment {
-        path: String,
-        segment: String,
+        path: Quoted,
+        segment: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Cannot set path '{path}': list index '{segment}' exceeds the limit"))]
     IndexOutOfRange {
-        path: String,
-        segment: String,
+        path: Quoted,
+        segment: Quoted,
         backtrace: Backtrace,
     },
 
@@ -105,26 +110,26 @@ pub(crate) enum Inner {
     #[snafu(display("Embedded schema {name} is broken: {message}"))]
     EmbeddedSchema {
         name: &'static str,
-        message: String,
+        message: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Schema does not compile: {message}"))]
     SchemaBuild {
-        message: String,
+        message: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("{message} at '{at}'"))]
     SchemaViolation {
-        at: String,
-        message: String,
+        at: Quoted,
+        message: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Unknown common type '{definition}'"))]
     UnknownDefinition {
-        definition: String,
+        definition: Quoted,
         backtrace: Backtrace,
     },
 
@@ -133,13 +138,13 @@ pub(crate) enum Inner {
 
     #[snafu(display("Catalog document is not valid JSON: {message}"))]
     CatalogJson {
-        message: String,
+        message: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Malformed catalog: {reason}"))]
     MalformedCatalog {
-        reason: String,
+        reason: Reason,
         backtrace: Backtrace,
     },
 
@@ -150,7 +155,7 @@ pub(crate) enum Inner {
         "Catalog protocol version '{version}' is not supported; this runtime implements 1.0"
     ))]
     UnsupportedVersion {
-        version: String,
+        version: Quoted,
         backtrace: Backtrace,
     },
 
@@ -159,41 +164,41 @@ pub(crate) enum Inner {
          only itself and common_types.json"
     ))]
     ExternalRef {
-        reference: String,
-        pointer: String,
+        reference: Quoted,
+        pointer: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Unsupported '{keyword}' at {pointer}: {reason}"))]
     ForbiddenKeyword {
         keyword: &'static str,
-        pointer: String,
+        pointer: Quoted,
         reason: &'static str,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Catalog $defs '{name}' shadows the common type of the same name"))]
-    DefsShadowCommonType { name: String, backtrace: Backtrace },
+    DefsShadowCommonType { name: Quoted, backtrace: Backtrace },
 
     #[snafu(display("Catalog exceeds {limit} {what}"))]
     CatalogLimit {
-        what: String,
+        what: Reason,
         limit: usize,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Catalog '{catalog}' has no {kind} '{name}' to derive from"))]
     DeriveUnknownEntry {
-        catalog: String,
+        catalog: Quoted,
         kind: &'static str,
-        name: String,
+        name: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Derivation lists {kind} '{name}' more than once"))]
     DeriveDuplicateEntry {
         kind: &'static str,
-        name: String,
+        name: Quoted,
         backtrace: Backtrace,
     },
 
@@ -203,8 +208,8 @@ pub(crate) enum Inner {
     #[snafu(display("Invalid UAX #31 {kind} identifier: '{name}'{context}"))]
     InvalidIdentifier {
         kind: &'static str,
-        name: String,
-        context: String,
+        name: Quoted,
+        context: Reason,
         backtrace: Backtrace,
     },
 
@@ -213,13 +218,13 @@ pub(crate) enum Inner {
          rendererOnly"
     ))]
     UserActivation {
-        function: String,
+        function: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Invalid component: {reason}"))]
     ComponentShape {
-        reason: String,
+        reason: Reason,
         backtrace: Backtrace,
     },
 
@@ -228,41 +233,41 @@ pub(crate) enum Inner {
 
     #[snafu(display("Unrecognized component type '{component}'"))]
     UnknownComponent {
-        component: String,
+        component: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("{what} '{name}' must be a valid UAX #31 identifier"))]
     BadIdentifier {
         what: &'static str,
-        name: String,
+        name: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Key '{key}' is reserved: only '@path' and '@call' may start with one '@'"))]
-    ReservedKey { key: String, backtrace: Backtrace },
+    ReservedKey { key: Quoted, backtrace: Backtrace },
 
     #[snafu(display("Invalid function call: {reason}"))]
     CallShape {
-        reason: String,
+        reason: Reason,
         backtrace: Backtrace,
     },
 
     #[snafu(display("System function '{function}' cannot name a catalogId"))]
     SystemFunctionCatalog {
-        function: String,
+        function: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Unrecognized function '{function}'"))]
     UnknownFunction {
-        function: String,
+        function: Quoted,
         backtrace: Backtrace,
     },
 
     #[snafu(display("Function '{function}' is agentOnly and cannot be called from a component"))]
     AgentOnlyCall {
-        function: String,
+        function: Quoted,
         backtrace: Backtrace,
     },
 }
@@ -307,3 +312,7 @@ impl Inner {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

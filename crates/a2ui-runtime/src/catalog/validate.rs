@@ -11,6 +11,7 @@ use crate::error::{
 };
 use crate::ident::is_identifier;
 use crate::limits::{MAX_JSON_DEPTH, deeper_than};
+use crate::quoted::Quoted;
 use crate::schema::{validate_common_type, validate_component_metadata};
 use crate::validator::check;
 
@@ -144,13 +145,13 @@ impl<'a, L: CatalogLookup + ?Sized> Walk<'a, L> {
             .get("catalogId")
             .map(|id| {
                 id.as_str().with_context(|| CallShapeSnafu {
-                    reason: format!("catalogId of '{name}' must be a string"),
+                    reason: format!("catalogId of '{}' must be a string", Quoted::new(name)),
                 })
             })
             .transpose()?;
         if let Some(args) = call.get("args") {
             let args = args.as_object().with_context(|| CallShapeSnafu {
-                reason: format!("args of '{name}' must be an object"),
+                reason: format!("args of '{}' must be an object", Quoted::new(name)),
             })?;
             args.keys()
                 .try_for_each(|argument| identifier("argument", argument))?;

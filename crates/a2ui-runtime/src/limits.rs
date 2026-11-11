@@ -1,4 +1,4 @@
-//! Depth and size caps on JSON that agents send: catalogs and validated values.
+//! Depth and size caps on JSON that agents send, and on the input an error quotes.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ptr;
@@ -71,6 +71,15 @@ pub(crate) const MAX_KEY_BYTES: usize = 256;
 
 /// Longest `$ref` string a catalog document may hold, in bytes.
 pub(crate) const MAX_REF_BYTES: usize = 4096;
+
+/// Most input characters an error keeps of one quoted value.
+///
+/// Longer input keeps its first and last halves around an elision marker; each kept character
+/// may then take up to nine characters escaped (`\u{e007f}`).
+pub(crate) const MAX_QUOTED_CHARS: usize = 512;
+
+// Head and tail take half of the cap each.
+const _: () = assert!(MAX_QUOTED_CHARS.is_multiple_of(2));
 
 /// The first cap of load rule 1 a catalog document breaks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

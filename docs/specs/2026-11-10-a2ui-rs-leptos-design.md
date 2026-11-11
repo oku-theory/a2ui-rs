@@ -94,7 +94,13 @@ A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRI
 `INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `UNKNOWN_FUNCTION`) and
 `category()` matching the harness taxonomy (`Parse`, `Validation`, `Integrity`, `Recursion`,
 `Catalog`, `Data`, `Expression`, `State`, `Compilation`). `Display` is English for logs; the
-application localizes from the code.
+application localizes from the code. Input an error quotes (paths, names, `$ref`s, schema
+messages) is escaped and capped when the error is built: controls, format characters (`Cf`: bidi,
+zero-width, tags) and line separators become Rust escapes, and a value past 512 input characters
+keeps its head and tail around an elision marker. Runtime wording around such values is escaped
+but never capped, so the runtime's own fixed text always survives; a third-party message quoted
+whole (a `jsonschema` violation) can lose wording from its middle. Quotes and backslashes are
+kept, so literal `\n` text reads like an escape: that misleads within one line, never forges one.
 
 Dependencies: `serde`, `serde_json`, `snafu`, `regex`, `time`, `unicode-ident`,
 `percent-encoding`, and `jsonschema` (default features off: no HTTP or file `$ref` resolution;

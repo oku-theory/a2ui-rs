@@ -16,6 +16,7 @@ use crate::limits::{
     Expansion, MAX_CATALOG_EXPANSION, MAX_CATALOG_PATTERNS, MAX_ENTRY_EXPANSION, MAX_SCHEMA_DEPTH,
     expand,
 };
+use crate::quoted::Quoted;
 use crate::schema::common_type_defs;
 use crate::validator::{compile, rooted};
 
@@ -275,24 +276,30 @@ fn reach(root: &Value, name: &str, schema: &Value) -> Result<Reach, Error> {
             targets: reached,
         }),
         Expansion::TooLarge => Err(CatalogLimitSnafu {
-            what: format!("schema nodes in '{name}' once its $refs are expanded"),
+            what: format!(
+                "schema nodes in '{}' once its $refs are expanded",
+                Quoted::new(name)
+            ),
             limit: MAX_ENTRY_EXPANSION,
         }
         .build()
         .into()),
         Expansion::TooDeep => Err(CatalogLimitSnafu {
-            what: format!("levels of '{name}' once its $refs are expanded"),
+            what: format!(
+                "levels of '{}' once its $refs are expanded",
+                Quoted::new(name)
+            ),
             limit: MAX_SCHEMA_DEPTH,
         }
         .build()
         .into()),
         Expansion::Cycle(reference) => Err(MalformedCatalogSnafu {
-            reason: format!("$ref cycle through '{reference}'"),
+            reason: format!("$ref cycle through '{}'", Quoted::new(&reference)),
         }
         .build()
         .into()),
         Expansion::Unresolved(reference) => Err(MalformedCatalogSnafu {
-            reason: format!("$ref '{reference}' does not resolve"),
+            reason: format!("$ref '{}' does not resolve", Quoted::new(&reference)),
         }
         .build()
         .into()),
