@@ -1,0 +1,12 @@
+# release-plz: opens a release PR (version bump + CHANGELOG from Conventional Commits)
+# and publishes to crates.io only when that PR is merged.
+[workspace]
+release_always = false
+changelog_update = true
+git_release_enable = true
+git_tag_enable = true
+
+# Unpublished conformance harness.
+[[package]]
+name = "a2ui-conformance"
+release = false

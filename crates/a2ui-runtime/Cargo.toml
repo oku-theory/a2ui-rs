@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["a2ui", "ui", "protocol", "agent", "renderer"]
+categories = ["gui", "wasm"]
 
 [dependencies]
 snafu.workspace = true
