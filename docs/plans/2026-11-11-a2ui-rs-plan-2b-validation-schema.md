@@ -109,10 +109,13 @@ upstream's reading would be unsafe:
    kept still names it; "kept" covers components, functions and every own `$defs` entry that is
    not a merged mixin. Reachability reads every `$ref` string, data included (as
    `add_common_types` does): it may keep more, never less. Pruning leaves no dangling `$ref` into
-   `$defs`. A `$ref` into a component's or function's *interior* (`#/components/A/allOf/1/…`) can
-   dangle after flattening, as upstream's can: documented on the accessor, tracked as t-1580.
-8. **Theme:** not written into the validation schema (no v1.0 golden has one; the v0.9 golden
-   writes `$defs.theme`). Tracked as t-1579 and said on the accessor.
+   `$defs`. A `$ref` into a component's or function's *interior* (`#/components/A/allOf/1/…`)
+   would dangle after flattening, as upstream's can; t-1580 refuses it at load. A `$ref` to a
+   top-level key the schema does not copy, from the theme or an unreached definition, can still
+   dangle: said on the accessor, tracked as t-1581.
+8. **Theme:** not written into the validation schema by this plan (no v1.0 golden has one; the
+   v0.9 golden writes `$defs.theme`). t-1579 then wrote it as `$defs.theme`, and t-1580 points
+   `$ref`s into `#/theme` there.
 9. **Header:** `$schema`, `catalogId` (the effective id), `protocolVersion` (the effective
    version), `instructions` when a non-empty string; `functions` only when at least one function
    is kept; `components` always. `$id`, `title`, `description` and catalog-level `metadata` are

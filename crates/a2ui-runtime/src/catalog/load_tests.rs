@@ -59,6 +59,18 @@ fn from_json_long_object_key_is_catalog_error() {
 }
 
 #[test]
+fn from_json_ref_inside_another_component_is_catalog_error() {
+    let document = v10(json!({"components": {
+        "A": {"properties": {"x": {"$ref": "#/components/B/properties/x"}}},
+        "B": {"properties": {"x": {"type": "string"}}}
+    }}));
+    assert_that!(catalog_error(load(document))).starts_with(
+        "Malformed catalog: $ref '#/components/B/properties/x' at /components/A/properties/x/$ref \
+         points inside a component or function",
+    );
+}
+
+#[test]
 fn from_json_long_ref_is_catalog_error() {
     let reference = format!("#/$defs/{}", "r".repeat(MAX_REF_BYTES));
     let document = v10(json!({"components": {"A": {"$ref": reference}}}));

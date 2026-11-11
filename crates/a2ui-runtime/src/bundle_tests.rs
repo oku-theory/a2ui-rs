@@ -200,6 +200,41 @@ fn check_references_unsupported_reference_is_catalog_error(
     assert_that!(reference_error(document)).contains(fragment);
 }
 
+#[rstest]
+#[case("#/components/A/allOf/1/properties/x")]
+#[case("#/components/A/properties")]
+#[case("catalog.json#/components/A/properties/x")]
+#[case("#/functions/f/properties/args/additionalProperties")]
+#[case("#/functions/Func_%E2%84%93/properties")]
+#[case("#/components/A%2Fx")]
+#[case("#/components//x")]
+fn check_references_pointer_inside_a_component_or_function_is_catalog_error(
+    #[case] reference: &str,
+) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(reference_error(document)).contains(format!(
+        "$ref '{reference}' at /$defs/x/$ref points inside a component or function"
+    ));
+}
+
+#[rstest]
+#[case("#/components/A")]
+#[case("#/components/A~1B")]
+#[case("#/functions/Func_%E2%84%93")]
+fn check_references_whole_component_or_function_passes(#[case] reference: &str) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(references(document)).is_ok();
+}
+
+#[rstest]
+#[case("#/$defs/A/properties/x")]
+#[case("common_types.json#/$defs/DynamicString/oneOf/0")]
+#[case("#/theme/properties/brand")]
+fn check_references_pointer_inside_defs_or_theme_passes(#[case] reference: &str) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(references(document)).is_ok();
+}
+
 #[test]
 fn check_references_property_named_like_a_keyword_is_walked() {
     let document = json!({"$defs": {"x": {"properties": {"$ref": {"$ref": "x.json#/a"}}}}});

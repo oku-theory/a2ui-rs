@@ -140,9 +140,11 @@ pub(crate) fn localize_ref(reference: &str) -> String {
 /// A key holding an object or array is walked whatever its name, so a property named `$ref`
 /// holding a schema is a property. A scalar under a keyword is checked: `$ref` must be a
 /// supported string with an empty or JSON Pointer fragment, anchors and dynamic references are
-/// refused, and `$id` and `$schema` may only sit at the top level. The walk does not tell
-/// schemas from data, so a `const` or `default` holding such a key is refused too. A numeric
-/// `$anchor` or `$id` is left to the schema build, whose meta-schema check rejects it.
+/// refused, and `$id` and `$schema` may only sit at the top level. A pointer below a component
+/// or function entry (`#/components/A/properties`) is refused: the validation schema rewrites
+/// those entries, so it would dangle there. The walk does not tell schemas from data, so a
+/// `const` or `default` holding such a key is refused too. A numeric `$anchor` or `$id` is left
+/// to the schema build, whose meta-schema check rejects it.
 ///
 /// `#` and `catalog.json#` name the whole document and pass as self-references; an entry that
 /// reaches one fails load rule 11, since such a `$ref` names no entry. Pointers are built only
@@ -210,16 +212,38 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
             ),
         }
     );
-    ensure!(
-        pointer_of(reference).is_some(),
-        MalformedCatalogSnafu {
+    let Some(target) = pointer_of(reference) else {
+        return MalformedCatalogSnafu {
             reason: format!(
                 "$ref '{reference}' at {} has a fragment that is not UTF-8",
                 pointer(path)
             ),
         }
+        .fail()
+        .map_err(Into::into);
+    };
+    ensure!(
+        !is_inside_entry(&target),
+        MalformedCatalogSnafu {
+            reason: format!(
+                "$ref '{reference}' at {} points inside a component or function, which the \
+                 validation schema flattens; reference it whole or move the schema to $defs",
+                pointer(path)
+            ),
+        }
     );
     Ok(())
+}
+
+/// Whether `pointer` names a node below a component or function, such as `/components/A/x`.
+///
+/// The validation schema rewrites those entries (flattened components, closed function
+/// `args`), so no stable node is left for such a pointer; `$defs` entries are copied as is.
+fn is_inside_entry(pointer: &str) -> bool {
+    pointer
+        .strip_prefix("/components/")
+        .or_else(|| pointer.strip_prefix("/functions/"))
+        .is_some_and(|rest| rest.contains('/'))
 }
 
 /// `key` as one of the static [`KEYWORDS`], when it is one.

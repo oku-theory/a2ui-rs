@@ -10,7 +10,9 @@ use serde_json::{Map, Value};
 
 use super::compile::Checked;
 use super::flatten::flattened;
-use crate::bundle::{add_common_types, def_names, localize_refs, whole_def_name};
+use crate::bundle::{
+    add_common_types, def_names, local_ref, localize_refs, pointer_of, whole_def_name,
+};
 use crate::validator::DRAFT_2020_12;
 
 /// Keywords whose value maps names to subschemas.
@@ -85,6 +87,7 @@ pub(super) fn build(
         .collect();
     if let Some(theme) = header.theme {
         defs.insert("theme".to_owned(), theme_def(theme, common));
+        defs.values_mut().for_each(retarget_theme);
     }
     prune(&mut defs, &merged, &components, &functions);
     let mut reached = Map::new();
@@ -126,6 +129,35 @@ fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
         map.insert("additionalProperties".to_owned(), Value::Bool(true));
     }
     theme
+}
+
+/// Points each `$ref` into `#/theme` at the same node under `#/$defs/theme`.
+///
+/// `theme_def` only adds keys, so every node of the authored theme keeps its path there. Load
+/// rule 11 keeps such refs out of components, functions and the definitions they reach, so only
+/// `$defs` (the theme itself, definitions no entry reaches) can hold one. Like
+/// [`localize_refs`], it rewrites every `$ref` string, data included.
+fn retarget_theme(node: &mut Value) {
+    match node {
+        Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                match value {
+                    Value::String(reference) if key == "$ref" => {
+                        if let Some(rest) = pointer_of(reference)
+                            .as_deref()
+                            .and_then(|pointer| pointer.strip_prefix("/theme"))
+                            .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+                        {
+                            *reference = local_ref(&format!("/$defs/theme{rest}"));
+                        }
+                    }
+                    _ => retarget_theme(value),
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(retarget_theme),
+        _ => {}
+    }
 }
 
 /// Gives each whole-entry `$ref` to a common type that type's description, unless it has one.

@@ -212,8 +212,11 @@ impl Catalog {
     /// holds the catalog's definitions, its `theme` (open unless it says otherwise) and the
     /// common types they reach. It can accept instances the per-entry validators reject
     /// (flattening replaces where `allOf` combines); the runtime's verdict is the validators'.
-    /// It may hold definitions no load cap budgeted: compile it only under your own limits. A
-    /// `$ref` into a flattened entry's interior or into `#/theme` can dangle (t-1580).
+    /// It may hold definitions no load cap budgeted: compile it only under your own limits. Load
+    /// refuses a `$ref` inside a component or function, which flattening rewrites, and a `$ref`
+    /// into `#/theme` is pointed at the same node under `#/$defs/theme`. Load does not check
+    /// the theme's `$ref`s nor those of definitions no entry reaches, so one naming a top-level
+    /// key the schema does not copy can still dangle (t-1581).
     pub fn validation_schema(&self) -> &Value {
         &self.validation_schema
     }

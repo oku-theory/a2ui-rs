@@ -153,8 +153,9 @@ Dependencies: `leptos` 0.8 (CSR), `web-sys` (Modal focus only).
 - Delivery: seven plans following the upstream harness stages (C1 data model and expressions; C2
   catalogs and schemas, with `a2ui-catalog-basic` holding the catalog document; C2b the
   `validationSchema` flattening matching upstream's goldens (the theme written as an open
-  `$defs.theme`; a non-string `instructions`, a `theme` that is no schema or one beside a
-  `$defs.theme` is refused at load); C3 validation and processing; C4
+  `$defs.theme`, `$ref`s into `#/theme` pointed there; a non-string `instructions`, a `theme`
+  that is no schema or one beside a `$defs.theme`, and a `$ref` inside a component or function
+  are refused at load); C3 validation and processing; C4
   functions/actions/RPC, adding the basic functions to `a2ui-catalog-basic`; C5 node resolution
   and timing; then `a2ui-leptos`); each plan is written when the previous lands.
 - Leptos: `wasm-bindgen-test` in headless Chrome — mount `<Surface>` on message streams, check the

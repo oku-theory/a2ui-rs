@@ -4,7 +4,7 @@ use speculoos::prelude::*;
 
 use super::super::test_support::{load, mixin_copies, v10};
 use crate::Catalog;
-use crate::bundle::localize_refs;
+use crate::bundle::{localize_refs, resolve};
 use crate::limits::{MAX_CATALOG_EXPANSION, oversize};
 use crate::schema::common_type_defs;
 
@@ -377,6 +377,74 @@ fn validation_schema_theme_common_ref_is_described() {
 fn validation_schema_theme_common_ref_is_bundled() {
     let result = with_theme(json!({"properties": {"name": {"$ref": DYNAMIC_STRING}}}));
     assert_that!(result["$defs"].get("DynamicString")).is_some();
+}
+
+#[rstest]
+#[case::whole("#/theme", "#/$defs/theme")]
+#[case::interior("#/theme/$defs/Brand", "#/$defs/theme/$defs/Brand")]
+#[case::encoded("#/theme/$defs/Brand_%E2%84%93", "#/$defs/theme/$defs/Brand_%E2%84%93")]
+fn validation_schema_theme_self_ref_points_at_theme_def(
+    #[case] reference: &str,
+    #[case] expected: &str,
+) {
+    let result = with_theme(json!({"properties": {"brand": {"$ref": reference}}}));
+    assert_that!(result["$defs"]["theme"]["properties"]["brand"]["$ref"].clone())
+        .is_equal_to(json!(expected));
+}
+
+#[rstest]
+#[case::longer_key("#/themes")]
+#[case::escaped_slash("#/theme~1x")]
+#[case::defs("#/$defs/Brand")]
+fn validation_schema_theme_ref_to_other_node_is_unchanged(#[case] reference: &str) {
+    let result = schema(json!({
+        "$defs": {"Brand": {}, "Unreached": {"$ref": reference}},
+        "theme": {},
+        "components": {"A": {}}
+    }));
+    assert_that!(result["$defs"]["Unreached"]["$ref"].clone()).is_equal_to(json!(reference));
+}
+
+#[test]
+fn validation_schema_def_ref_into_theme_points_at_theme_def() {
+    let result = schema(json!({
+        "$defs": {"Unreached": {"$ref": "#/theme/properties/brand"}},
+        "theme": {"properties": {"brand": {"type": "string"}}},
+        "components": {"A": {}}
+    }));
+    assert_that!(result["$defs"]["Unreached"]["$ref"].clone())
+        .is_equal_to(json!("#/$defs/theme/properties/brand"));
+}
+
+#[test]
+fn validation_schema_recursive_theme_has_no_dangling_ref() {
+    let result = with_theme(json!({
+        "$defs": {"Brand": {"properties": {"inner": {"$ref": "#/theme/$defs/Brand"}}}},
+        "properties": {"brand": {"$ref": "#/theme/$defs/Brand"}}
+    }));
+    let mut references = Vec::new();
+    collect_refs(&result, &mut references);
+    let dangling: Vec<&String> = references
+        .iter()
+        .filter(|reference| resolve(&result, reference).is_none())
+        .collect();
+    assert_that!(dangling).is_empty();
+}
+
+/// Every `$ref` string under `node`.
+fn collect_refs(node: &Value, out: &mut Vec<String>) {
+    match node {
+        Value::Object(map) => {
+            for (key, value) in map {
+                match value {
+                    Value::String(reference) if key == "$ref" => out.push(reference.clone()),
+                    _ => collect_refs(value, out),
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| collect_refs(item, out)),
+        _ => {}
+    }
 }
 
 #[test]
