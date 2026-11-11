@@ -261,7 +261,7 @@ fn validation_schema_merged_mixin_pruned_unless_named(
     assert_that!(result["$defs"].get("M").is_some()).is_equal_to(kept);
 }
 
-/// `anyFunction`, not `anyComponent`: a component naming `anyComponent` is a `$ref` cycle.
+/// `anyFunction`, not `anyComponent`: naming `anyComponent` cycles if the union lists it.
 #[test]
 fn validation_schema_union_named_as_a_member_stays_defined() {
     let result = schema(json!({"components": {"A": {

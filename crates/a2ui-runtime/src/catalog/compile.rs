@@ -19,7 +19,7 @@ use crate::limits::{
 use crate::schema::common_type_defs;
 use crate::validator::{compile, rooted};
 
-/// The self-contained schema of the kept entries, `defs` and the common types they reach.
+/// Bundles the kept entries, own `$defs`, unions and the common types they reach.
 pub(super) fn bundle(
     components: &BTreeMap<String, ComponentAttrs>,
     functions: &BTreeMap<String, FunctionAttrs>,
