@@ -41,6 +41,15 @@ impl Pointer {
             let reason = "an absolute pointer starts with '/'";
             return Err(InvalidPointerSnafu { path, reason }.build().into());
         }
+        Self::from_segments(path)
+    }
+
+    /// Parses a relative path such as `address/city` into segments.
+    pub(crate) fn parse_relative(path: &str) -> Result<Self, Error> {
+        Self::from_segments(path)
+    }
+
+    fn from_segments(path: &str) -> Result<Self, Error> {
         let mut segments = Vec::new();
         for part in path.split('/').filter(|part| !part.is_empty()) {
             let segment = unescape(path, part)?;

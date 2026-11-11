@@ -17,6 +17,8 @@ It builds for `wasm32-unknown-unknown`.
 - `subscribe`: `Watchers<K>`, observers keyed by `K` on pointers; `notified(write, model)` lists
   the keys whose value the write changed (exact path, ancestors, descendants; unchanged values
   stay silent). Renderers map keys to their own reactive cells.
+- `context`: `resolve_path(path, scope)`; `""`/`"."` is the scope, `/…` is absolute, anything
+  else is appended to the scope.
 
 ## Dependencies
 

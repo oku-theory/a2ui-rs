@@ -2309,6 +2309,8 @@ pub fn run(case: &Case) -> Result<(), String> {
 }
 ```
 
+**Executed deviation:** the committed handler is stricter than the code above: `args.path` and `expect` must be strings (no `""` default); `contextPath` absent means root, while a non-string `contextPath` fails; unknown case and `args` keys are rejected.
+
 `contextPath` absent means the root (one `data_context` case omits it); `text` returning `""` for a missing key is that rule, not a fallback, so keep it and say so in a comment on that line. Register `"resolve_path" => Some(resolve_path::run),` in `handlers/mod.rs` (with `mod resolve_path;`) and delete the `resolve_path` line from `skips.toml`.
 
 - [ ] **Step 5: Run the suite**

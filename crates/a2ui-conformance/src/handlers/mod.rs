@@ -1,6 +1,7 @@
 //! The runner for each conformance action.
 
 mod data_model;
+mod resolve_path;
 
 use crate::case::Case;
 
@@ -11,6 +12,7 @@ pub type Handler = fn(&Case) -> Result<(), String>;
 pub fn handler(action: &str) -> Option<Handler> {
     match action {
         "data_model" => Some(data_model::run),
+        "resolve_path" => Some(resolve_path::run),
         _ => None,
     }
 }

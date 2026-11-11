@@ -21,7 +21,6 @@ resolve_nodes = "Plan 5: node resolution and timing"
 measure_growth = "Plan 5: node resolution and timing"
 render_surface = "framework adapter suite: run by a2ui-leptos in the browser (Plan 6)"
 accessibility_check = "framework adapter suite: run by a2ui-leptos in the browser (Plan 6)"
-resolve_path = "Task 6 of Plan 1"
 parse_expression_template = "Task 7 of Plan 1"
 
 # Individual cases skipped on purpose.

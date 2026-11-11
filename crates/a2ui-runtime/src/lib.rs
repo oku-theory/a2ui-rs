@@ -4,15 +4,18 @@
 //! async runtime or I/O, so any UI framework (and the browser) can embed it.
 //!
 //! Key items: [`Pointer`] (normalized RFC 6901 pointers), [`DataModel`]
-//! (pointer-addressed JSON), [`Write`] (one committed change) and [`Error`]
-//! (classified by [`Category`]) and [`Watchers`] (observers a write notifies).
+//! (pointer-addressed JSON), [`Write`] (one committed change), [`Error`]
+//! (classified by [`Category`]), [`Watchers`] (observers a write notifies) and
+//! [`resolve_path`] (scoped relative paths).
 
+mod context;
 mod data;
 mod error;
 mod pointer;
 mod subscribe;
 pub use subscribe::Watchers;
 
+pub use context::resolve_path;
 pub use data::{DataModel, Write};
 pub use error::{Category, Error};
 pub use pointer::{MAX_LIST_INDEX, Pointer};
