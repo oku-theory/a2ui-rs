@@ -308,6 +308,16 @@ fn def_name(reference: &str) -> Option<String> {
         .map(|(_, name)| name)
 }
 
+/// The `$defs` entry a local `$ref` names as a whole, decoded and unescaped.
+///
+/// `None` for a pointer below an entry (`#/$defs/A/properties`): only a whole entry is a mixin
+/// or a described common type, because only a whole entry's `$ref`s were followed by `expand`.
+pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
+    let pointer = pointer_of(reference)?;
+    let token = pointer.strip_prefix("/$defs/")?;
+    (!token.contains('/')).then(|| token.replace("~1", "/").replace("~0", "~"))
+}
+
 /// A `FunctionCall` checking only the envelope: `@call`, `catalogId`, `args`, nothing else.
 ///
 /// A call may run in another catalog, so a component check cannot judge its function; the

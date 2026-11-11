@@ -8,6 +8,7 @@ mod compile;
 mod derive;
 mod document;
 mod entries;
+mod flatten;
 mod load;
 mod shape;
 #[cfg(test)]

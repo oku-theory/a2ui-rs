@@ -278,3 +278,14 @@ fn function_call_envelope_closes_the_call_over_function_common() {
         "unevaluatedProperties": false
     }));
 }
+
+#[rstest]
+#[case::entry("#/$defs/Weight", Some("Weight"))]
+#[case::escaped("#/$defs/a~1b~0c", Some("a/b~c"))]
+#[case::percent_encoded("#/$defs/%C2%B5", Some("µ"))]
+#[case::below_the_entry("#/$defs/Weight/description", None)]
+#[case::other_section("#/components/Weight", None)]
+#[case::section_only("#/$defs", None)]
+fn whole_def_name_names_only_a_whole_entry(#[case] reference: &str, #[case] name: Option<&str>) {
+    assert_that!(whole_def_name(reference)).is_equal_to(name.map(str::to_owned));
+}
