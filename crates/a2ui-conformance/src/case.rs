@@ -4,6 +4,11 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
+use crate::paths::read_json;
+
+/// The version upstream assumes for a catalog that declares none (`catalog_definition.json`).
+pub const UPSTREAM_DEFAULT_VERSION: &str = "0.9";
+
 /// One YAML test case: its suite, name, action and full body.
 #[derive(Debug, Clone)]
 pub struct Case {
@@ -31,9 +36,43 @@ impl Case {
             .and_then(Value::as_str)
     }
 
+    /// The protocol version the case runs under, without a leading `v`.
+    ///
+    /// The declared version (top-level, then inline catalog) wins; else the `catalogPath`
+    /// file's own; a catalog without one is at [`UPSTREAM_DEFAULT_VERSION`].
+    pub fn effective_version(&self, root: &Path) -> Result<Option<String>, String> {
+        let version = match (self.protocol_version(), self.get("catalogPath")) {
+            (Some(declared), _) => Some(declared.to_owned()),
+            (None, Some(Value::String(path))) => {
+                Some(catalog_version(&read_json(&root.join(path))?, &self.at())?)
+            }
+            (None, Some(_)) => {
+                return Err(format!("{}: `catalogPath` must be a string", self.at()));
+            }
+            (None, None) => self
+                .get("catalog")
+                .map(|_| UPSTREAM_DEFAULT_VERSION.to_owned()),
+        };
+        Ok(version.map(|version| {
+            version
+                .strip_prefix('v')
+                .map_or_else(|| version.clone(), str::to_owned)
+        }))
+    }
+
     /// The body value under `key`.
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.body.get(key)
+    }
+}
+
+fn catalog_version(document: &Value, at: &str) -> Result<String, String> {
+    match document.get("protocolVersion") {
+        None => Ok(UPSTREAM_DEFAULT_VERSION.to_owned()),
+        Some(Value::String(version)) => Ok(version.clone()),
+        Some(other) => Err(format!(
+            "{at}: the catalog's protocolVersion is {other}, not a string"
+        )),
     }
 }
 

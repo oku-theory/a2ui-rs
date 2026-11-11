@@ -6,9 +6,6 @@ use serde::Deserialize;
 
 use crate::case::Case;
 
-/// The protocol versions this runtime implements.
-const SUPPORTED_VERSIONS: [&str; 1] = ["1.0"];
-
 /// Actions whose behavior does not depend on the declared protocol version.
 const VERSION_NEUTRAL_ACTIONS: [&str; 3] =
     ["data_model", "resolve_path", "parse_expression_template"];
@@ -21,6 +18,8 @@ pub struct Skips {
     actions: BTreeMap<String, String>,
     #[serde(default)]
     cases: BTreeMap<String, String>,
+    #[serde(default)]
+    versions: BTreeMap<String, String>,
 }
 
 impl Skips {
@@ -29,34 +28,51 @@ impl Skips {
         toml::from_str(text).map_err(|err| format!("skips.toml: {err}"))
     }
 
-    /// Why `case` is skipped, or `None` when it runs.
-    pub fn reason(&self, case: &Case) -> Option<String> {
+    /// Why `case` is skipped under `version`, its effective version, or `None` when it runs.
+    ///
+    /// A version absent from `[versions]` runs, so an unexpected one fails loudly.
+    pub fn reason(&self, case: &Case, version: Option<&str>) -> Option<String> {
         if let Some(reason) = self.cases.get(&case.name) {
             return Some(reason.clone());
         }
         if let Some(reason) = self.actions.get(&case.action) {
             return Some(reason.clone());
         }
-        let version = case.protocol_version()?;
-        let neutral = VERSION_NEUTRAL_ACTIONS.contains(&case.action.as_str());
-        (!neutral && !SUPPORTED_VERSIONS.contains(&version))
-            .then(|| format!("protocol version {version} is not supported"))
+        if is_version_neutral(case) {
+            return None;
+        }
+        self.versions.get(version?).cloned()
     }
 
-    /// Entries that match no case, as `actions.<name>` or `cases.<name>`.
-    pub fn unused(&self, cases: &[Case]) -> Vec<String> {
+    /// Entries that match no case, as `actions.<name>`, `cases.<name>` or `versions.<version>`.
+    ///
+    /// Each case comes with its effective version; a version-neutral case uses no version entry.
+    pub fn unused(&self, cases: &[(&Case, Option<&str>)]) -> Vec<String> {
         let actions = self
             .actions
             .keys()
-            .filter(|action| !cases.iter().any(|case| &case.action == *action))
+            .filter(|action| !cases.iter().any(|(case, _)| &case.action == *action))
             .map(|action| format!("actions.{action}"));
         let named = self
             .cases
             .keys()
-            .filter(|name| !cases.iter().any(|case| &case.name == *name))
+            .filter(|name| !cases.iter().any(|(case, _)| &case.name == *name))
             .map(|name| format!("cases.{name}"));
-        actions.chain(named).collect()
+        let versions = self
+            .versions
+            .keys()
+            .filter(|listed| {
+                !cases.iter().any(|(case, version)| {
+                    !is_version_neutral(case) && *version == Some(listed.as_str())
+                })
+            })
+            .map(|version| format!("versions.{version}"));
+        actions.chain(named).chain(versions).collect()
     }
+}
+
+fn is_version_neutral(case: &Case) -> bool {
+    VERSION_NEUTRAL_ACTIONS.contains(&case.action.as_str())
 }
 
 #[cfg(test)]

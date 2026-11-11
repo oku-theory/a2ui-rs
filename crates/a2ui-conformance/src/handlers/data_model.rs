@@ -54,7 +54,7 @@ pub fn run(case: &Case) -> Result<(), String> {
         .and_then(Value::as_array)
         .ok_or("a case needs `steps`")?;
     for (index, step) in steps.iter().enumerate() {
-        let at = format!("{}#{} step {index}", case.suite, case.name);
+        let at = format!("{} step {index}", case.at());
         let step = step
             .as_object()
             .ok_or_else(|| format!("{at}: a step is a mapping"))?;

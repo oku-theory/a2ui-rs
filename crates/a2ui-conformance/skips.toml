@@ -21,3 +21,10 @@ accessibility_check = "framework adapter suite: run by a2ui-leptos in the browse
 
 # Individual cases skipped on purpose.
 [cases]
+
+# Protocol versions this runtime does not implement (written without the leading `v`); the
+# version-neutral data_model, resolve_path and parse_expression_template run whatever version.
+[versions]
+"0.8" = "protocol v0.8: a2ui-rs implements v1.0 only"
+"0.9" = "protocol v0.9 (also upstream's default for a catalog that declares no version): a2ui-rs implements v1.0 only"
+"0.9.1" = "protocol v0.9.1: a2ui-rs implements v1.0 only"

@@ -5,14 +5,15 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 
 ## Modules
 
-- `case`: `Case` (suite, name, action, body), `parse_suite`, `load_suite`; the protocol version is
-  the top-level `protocolVersion`, else `catalog.protocolVersion`; `at()` is the `suite#name` location.
-- `skips`: `skips.toml` (`[actions]`, `[cases]`, each with a reason) plus the version filter
-  (only `1.0`, except the version-neutral `data_model`, `resolve_path`, `parse_expression_template`).
+- `case`: `Case` (suite, name, action, body), `parse_suite`, `load_suite`; `effective_version` gives
+  the version (declared, else the `catalogPath` file's, else `0.9` for a catalog; no leading `v`; a
+  read error fails that trial); `at()` is the `suite#name` location.
+- `skips`: `skips.toml` `[actions]`, `[cases]`, `[versions]` (each with a reason; the
+  version-neutral `data_model`, `resolve_path`, `parse_expression_template` ignore `[versions]`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.
 - `keys`: strict key checks; an unread key fails the case.
-- `compare`: `json_eq` (numbers as `f64`, key order ignored); `expect_error` (category, optional
-  message regex).
+- `compare`: `json_eq`, `schema_eq` (`enum`/`required` as multisets), `expect_error` (category,
+  then message as a case-insensitive substring or regex).
 - `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR` is set
   (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`.

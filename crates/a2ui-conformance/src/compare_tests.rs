@@ -1,3 +1,4 @@
+use a2ui_runtime::Pointer;
 use rstest::rstest;
 use serde_json::json;
 use speculoos::prelude::*;
@@ -19,8 +20,6 @@ fn json_eq_equivalent_values_are_equal(#[case] a: Value, #[case] b: Value) {
 fn json_eq_different_values_are_not_equal(#[case] a: Value, #[case] b: Value) {
     assert_that!(json_eq(&a, &b)).is_false();
 }
-
-use a2ui_runtime::Pointer;
 
 #[test]
 fn expect_error_matching_category_and_message_passes() {
@@ -69,4 +68,58 @@ fn expect_error_non_mapping_expected_fails() {
     let err = Pointer::parse("/__proto__").unwrap_err();
     let result = expect_error(&err, &json!("DataError"), "here");
     assert_that!(result.unwrap_err().contains("must be a mapping")).is_true();
+}
+
+#[rstest]
+#[case(json!({"enum": ["a", "b"]}), json!({"enum": ["b", "a"]}))]
+#[case(json!({"required": ["x", "y"]}), json!({"required": ["y", "x"]}))]
+#[case(json!({"properties": {"enum": {"enum": [1, 2]}}}), json!({"properties": {"enum": {"enum": [2, 1]}}}))]
+#[case(json!({"a": [1, {"b": 2.0}]}), json!({"a": [1.0, {"b": 2}]}))]
+fn schema_eq_equivalent_schemas_are_equal(#[case] a: Value, #[case] b: Value) {
+    assert_that!(schema_eq(&a, &b)).is_true();
+}
+
+#[rstest]
+#[case(json!({"oneOf": [{"type": "string"}, {"type": "number"}]}), json!({"oneOf": [{"type": "number"}, {"type": "string"}]}))]
+#[case(json!({"enum": ["a", "a"]}), json!({"enum": ["a", "b"]}))]
+#[case(json!({"required": ["x"]}), json!({"required": ["x", "y"]}))]
+#[case(json!({"a": 1}), json!({"a": 1, "b": 2}))]
+fn schema_eq_other_differences_are_detected(#[case] a: Value, #[case] b: Value) {
+    assert_that!(schema_eq(&a, &b)).is_false();
+}
+
+#[test]
+fn expect_error_literal_message_with_regex_metacharacters_matches() {
+    let err = Pointer::parse("$x").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "Pointer '$x'"});
+    assert_that!(expect_error(&err, &expected, "here")).is_ok();
+}
+
+#[test]
+fn expect_error_literal_message_is_case_insensitive() {
+    let err = Pointer::parse("$x").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "invalid json pointer"});
+    assert_that!(expect_error(&err, &expected, "here")).is_ok();
+}
+
+#[test]
+fn expect_error_regex_message_matches() {
+    let err = Pointer::parse("$x").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "^Invalid JSON Pointer '.x'"});
+    assert_that!(expect_error(&err, &expected, "here")).is_ok();
+}
+
+#[test]
+fn expect_error_regex_message_is_case_insensitive() {
+    let err = Pointer::parse("$x").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "^INVALID json pointer '.x'"});
+    assert_that!(expect_error(&err, &expected, "here")).is_ok();
+}
+
+#[test]
+fn expect_error_invalid_regex_found_nowhere_is_reported() {
+    let err = Pointer::parse("$x").unwrap_err();
+    let expected = json!({"category": "DataError", "message": "something else ("});
+    let result = expect_error(&err, &expected, "here");
+    assert_that!(result.unwrap_err()).contains("does not match");
 }
