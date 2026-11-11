@@ -3,11 +3,22 @@
 version = 4
 
 [[package]]
-name = "a2ui-conformance"
+name = "a2ui-catalog-basic"
 version = "0.1.0"
 dependencies = [
  "a2ui-runtime",
+ "serde_json",
+ "speculoos",
+]
+
+[[package]]
+name = "a2ui-conformance"
+version = "0.1.0"
+dependencies = [
+ "a2ui-catalog-basic",
+ "a2ui-runtime",
  "libtest-mimic",
+ "percent-encoding",
  "regex",
  "rstest",
  "serde",

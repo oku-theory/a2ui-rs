@@ -36,4 +36,12 @@ rm -f "$schemas/NOTICE-A2UI"
 if [[ -f "$work/a2ui/NOTICE" ]]; then
   cp "$work/a2ui/NOTICE" "$schemas/NOTICE-A2UI"
 fi
+basic="$repo/crates/a2ui-catalog-basic"
+mkdir -p "$basic"
+cp "$work/a2ui/catalogs/basic/v1/catalog.json" "$basic/catalog.json"
+cp "$work/a2ui/LICENSE" "$basic/LICENSE-A2UI"
+rm -f "$basic/NOTICE-A2UI"
+if [[ -f "$work/a2ui/NOTICE" ]]; then
+  cp "$work/a2ui/NOTICE" "$basic/NOTICE-A2UI"
+fi
 printf '%s\n' "$commit" > "$root/UPSTREAM"

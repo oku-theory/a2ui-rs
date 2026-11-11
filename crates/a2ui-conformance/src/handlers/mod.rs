@@ -1,12 +1,15 @@
 //! The runner for each conformance action.
 
+mod catalog_checks;
 mod catalog_input;
 mod common_type;
 mod data_model;
 mod expression;
+mod from_json;
 mod resolve_path;
 mod round_trip;
 mod schema_doc;
+mod to_json;
 
 use crate::case::Case;
 
@@ -23,6 +26,8 @@ pub fn handler(action: &str) -> Option<Handler> {
         "common_types_schema" => Some(schema_doc::run_common_types),
         "agent_to_renderer_schema" => Some(schema_doc::run_agent_to_renderer),
         "round_trip" => Some(round_trip::run),
+        "from_json" => Some(from_json::run),
+        "to_json" => Some(to_json::run),
         _ => None,
     }
 }

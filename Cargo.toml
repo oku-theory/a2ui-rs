@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/a2ui-runtime", "crates/a2ui-conformance"]
+members = ["crates/a2ui-runtime", "crates/a2ui-catalog-basic", "crates/a2ui-conformance"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,6 +10,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/oku-theory/a2ui-rs"
 
 [workspace.dependencies]
+a2ui-catalog-basic = { path = "crates/a2ui-catalog-basic", version = "0.1.0" }
 a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
 jsonschema = { version = "=0.61.1", default-features = false }
 libtest-mimic = "0.8"

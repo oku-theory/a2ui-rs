@@ -24,7 +24,7 @@ test:
 
 # The runtime must build for the browser.
 wasm:
-    cargo build -p a2ui-runtime --target wasm32-unknown-unknown
+    cargo build -p a2ui-runtime -p a2ui-catalog-basic --target wasm32-unknown-unknown
 
 # Licenses and advisories.
 audit:
