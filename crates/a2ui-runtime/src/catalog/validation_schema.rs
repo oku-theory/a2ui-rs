@@ -3,7 +3,7 @@
 //! [`build`] takes a [`Checked`] bundle, so it only runs after `compile_entries` enforced the
 //! expansion caps on every `$ref` it follows (see `flatten`). The result keeps `$defs` no entry
 //! reaches, which those caps never budgeted, so it is output only: nothing compiles it. It
-//! refuses a result holding a `$ref` that does not resolve in it.
+//! refuses a result holding a `$ref` that does not name a schema (an object or a boolean) of it.
 
 use std::collections::BTreeSet;
 
@@ -12,8 +12,8 @@ use serde_json::{Map, Value};
 use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
-    add_common_types, def_names, first_unresolved, local_ref, localize_refs, pointer_of,
-    rewrite_refs, whole_def_name,
+    NotASchema, add_common_types, def_names, first_not_a_schema, local_ref, localize_refs,
+    pointer_of, rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::quoted::Quoted;
@@ -61,8 +61,9 @@ pub(super) struct Header<'a> {
 /// Builds the validation schema of a checked bundle under the catalog's `header`.
 ///
 /// A `MalformedCatalog` error reports the first `$ref` of the result that names no node of it
-/// (`#/$defs/Missing`, `#/theme` with no theme, a dropped component), as the author wrote it
-/// and where. Load rule 11 already resolved those the kept entries reach, so one under
+/// (`#/$defs/Missing`, `#/theme` with no theme, a dropped component) or a node that is not a
+/// schema (`#/$defs/X/title`), as the author wrote it and where (plan 2b, Decision 14). Load
+/// rule 11 and the compile already refused those the kept entries reach, so one under
 /// `/components` or `/functions` would be a runtime bug; this completes rule 11 for the theme
 /// and unreached definitions.
 pub(super) fn build(
@@ -124,36 +125,44 @@ pub(super) fn build(
     }
     out.insert("$defs".to_owned(), Value::Object(defs));
     let out = Value::Object(out);
-    check_resolved(&out, header.theme, header.defs)?;
+    check_refs_name_schemas(&out, header.theme, header.defs)?;
     Ok(out)
 }
 
-/// Fails on the first `$ref` string of `schema` that names no node of `schema`.
+/// Fails on the first `$ref` string of `schema` that names no schema of `schema`.
 ///
 /// The error names the `$ref` as authored in `theme` or `defs`, at its authored place. A `$ref`
 /// the runtime wrote (a component's, a common type's, a synthesized union's) has no authored
 /// place: it is named as the validation schema holds it, and only a runtime bug can leave one
 /// dangling.
-fn check_resolved(
+fn check_refs_name_schemas(
     schema: &Value,
     theme: Option<&Value>,
     defs: Option<&Map<String, Value>>,
 ) -> Result<(), Error> {
-    let Some((reference, at)) = first_unresolved(schema) else {
+    let Some((reference, at, found)) = first_not_a_schema(schema) else {
         return Ok(());
     };
-    let reason = match authored(&at, theme, defs) {
-        Some((authored_at, authored_ref)) => format!(
-            "$ref '{}' at {} does not resolve in the validation schema",
+    // An authored place is the author's; a runtime-written one is the validation schema's.
+    let (reference, place, in_schema) = match authored(&at, theme, defs) {
+        Some((authored_at, authored_ref)) => (
             Quoted::new(authored_ref),
-            Quoted::new(&authored_at)
+            format!("at {}", Quoted::new(&authored_at)),
+            " in the validation schema",
         ),
-        None => format!(
-            "$ref '{}' at {} of the validation schema does not resolve",
+        None => (
             Quoted::new(reference),
-            Quoted::new(&at)
+            format!("at {} of the validation schema", Quoted::new(&at)),
+            "",
         ),
     };
+    let outcome = match found {
+        NotASchema::Missing => format!("does not resolve{in_schema}"),
+        NotASchema::Value(kind) => {
+            format!("names {kind}{in_schema}, not a schema (an object or a boolean)")
+        }
+    };
+    let reason = format!("$ref '{reference}' {place} {outcome}");
     Err(MalformedCatalogSnafu { reason }.build().into())
 }
 

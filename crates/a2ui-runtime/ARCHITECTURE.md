@@ -30,7 +30,7 @@ It builds for `wasm32-unknown-unknown`.
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries
   its unions list and the authored document (`to_json`), compiles each entry against a bundle
   pruned to what it reaches (the validator lives in its `ComponentDef`/`FunctionDef`), then builds
-  `validation_schema` in upstream's flattened shape, output only, each `$ref` resolving in it.
+  `validation_schema` in upstream's flattened shape, output only, each `$ref` naming a schema.
   `validate_component` checks an instance: depth, reserved `@` keys, undeclared envelope keys
   removed, its validator, then each nested call in its catalog (via `CatalogLookup`): exists, not
   `agentOnly`, matches the function's validator; `@index` as `IndexSystemFunction`; unknown

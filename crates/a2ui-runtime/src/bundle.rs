@@ -175,15 +175,32 @@ pub(crate) fn resolve<'a>(root: &'a Value, reference: &str) -> Option<&'a Value>
     root.pointer(&pointer_of(reference)?)
 }
 
-/// The first unresolvable `$ref` string under `root`, with its JSON Pointer.
+/// What a `$ref` that names no schema names instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NotASchema {
+    /// No node: the `$ref` does not resolve.
+    Missing,
+    /// A node that is neither an object nor a boolean, such as `"a string"`.
+    Value(&'static str),
+}
+
+/// The first `$ref` string under `root` that names no schema of it, with its JSON Pointer.
 ///
-/// It only looks pointers up, never follows one, so its cost is linear in `root` whatever the
-/// `$ref`s chain. The pointer is built only for the `$ref` found. It walks with [`find_ref`].
-pub(crate) fn first_unresolved(root: &Value) -> Option<(&str, String)> {
+/// A schema is an object or a boolean (JSON Schema 2020-12, 4.3.1); one in a data position
+/// still passes. It only looks pointers up, never follows one, so its cost is linear in `root`
+/// whatever the `$ref`s chain. The pointer is built only for the `$ref` found. It walks with
+/// [`find_ref`].
+pub(crate) fn first_not_a_schema(root: &Value) -> Option<(&str, String, NotASchema)> {
     find_ref(root, &mut |reference, path| {
-        resolve(root, reference)
-            .is_none()
-            .then(|| (reference, pointer(path)))
+        let found = match resolve(root, reference) {
+            None => NotASchema::Missing,
+            Some(Value::Object(_) | Value::Bool(_)) => return None,
+            Some(Value::String(_)) => NotASchema::Value("a string"),
+            Some(Value::Number(_)) => NotASchema::Value("a number"),
+            Some(Value::Array(_)) => NotASchema::Value("an array"),
+            Some(Value::Null) => NotASchema::Value("null"),
+        };
+        Some((reference, pointer(path), found))
     })
 }
 

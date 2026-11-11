@@ -565,9 +565,9 @@ fn authored_validation_schema_place_is_authored_place_or_none(
 }
 
 #[test]
-fn check_resolved_runtime_written_ref_is_named_as_the_schema_holds_it() {
+fn check_refs_name_schemas_runtime_written_ref_is_named_as_the_schema_holds_it() {
     let schema = json!({"components": {"A": {"$ref": "#/$defs/Gone"}}, "$defs": {}});
-    let message = super::check_resolved(&schema, None, None)
+    let message = super::check_refs_name_schemas(&schema, None, None)
         .unwrap_err()
         .to_string();
     let expected = "Malformed catalog: $ref '#/$defs/Gone' at /components/A/$ref of the \
@@ -598,4 +598,90 @@ fn from_json_long_dangling_ref_keeps_the_wording_around_a_capped_ref() {
     assert_that!(message)
         .ends_with(" at /$defs/Unreached/$ref does not resolve in the validation schema");
     assert_that!(message.len()).is_less_than(700);
+}
+
+#[rstest]
+#[case::theme_to_a_string(
+    json!({"theme": {"title": "T", "properties": {"b": {"$ref": "#/theme/title"}}}}),
+    "#/theme/title",
+    "/theme/properties/b/$ref",
+    "a string"
+)]
+#[case::unreached_def_to_an_array(
+    json!({"$defs": {"X": {"enum": [1]}, "Unreached": {"$ref": "#/$defs/X/enum"}}}),
+    "#/$defs/X/enum",
+    "/$defs/Unreached/$ref",
+    "an array"
+)]
+#[case::unreached_def_to_a_number(
+    json!({"$defs": {"X": {"minimum": 1}, "Unreached": {"$ref": "#/$defs/X/minimum"}}}),
+    "#/$defs/X/minimum",
+    "/$defs/Unreached/$ref",
+    "a number"
+)]
+#[case::unreached_def_to_null(
+    json!({"$defs": {"X": {"const": null}, "Unreached": {"$ref": "#/$defs/X/const"}}}),
+    "#/$defs/X/const",
+    "/$defs/Unreached/$ref",
+    "null"
+)]
+fn from_json_ref_to_a_non_schema_node_is_catalog_error_naming_it(
+    #[case] mut extra: Value,
+    #[case] reference: &str,
+    #[case] at: &str,
+    #[case] kind: &str,
+) {
+    extra["components"] = json!({"A": {}});
+    let expected = format!(
+        "Malformed catalog: $ref '{reference}' at {at} names {kind} in the validation schema, \
+         not a schema (an object or a boolean)"
+    );
+    assert_that!(catalog_error(load(v10(extra)))).is_equal_to(expected);
+}
+
+#[rstest]
+#[case::boolean_schema(json!({"B": true}), "#/$defs/B")]
+#[case::object_in_a_data_position(json!({"X": {"default": {}}}), "#/$defs/X/default")]
+#[case::boolean_in_a_data_position(json!({"X": {"uniqueItems": true}}), "#/$defs/X/uniqueItems")]
+fn from_json_ref_to_an_object_or_boolean_node_keeps_it(
+    #[case] mut defs: Value,
+    #[case] reference: &str,
+) {
+    defs["Unreached"] = json!({"$ref": reference});
+    let catalog = load(v10(json!({"$defs": defs, "components": {"A": {}}})));
+    let kept = catalog.map(|catalog| catalog.validation_schema()["$defs"]["Unreached"].clone());
+    assert_that!(kept).is_ok_containing(json!({"$ref": reference}));
+}
+
+#[test]
+fn from_json_data_ref_to_a_string_is_catalog_error_like_any_ref() {
+    let document = v10(json!({
+        "$defs": {"X": {"title": "T"}, "Unreached": {"default": {"$ref": "#/$defs/X/title"}}},
+        "components": {"A": {}}
+    }));
+    let expected = "Malformed catalog: $ref '#/$defs/X/title' at /$defs/Unreached/default/$ref \
+                    names a string in the validation schema, not a schema (an object or a boolean)";
+    assert_that!(catalog_error(load(document))).is_equal_to(expected.to_owned());
+}
+
+#[test]
+fn from_json_kept_component_ref_to_a_string_fails_its_compile() {
+    let document = v10(json!({
+        "$defs": {"X": {"title": "T"}},
+        "components": {"A": {"properties": {"p": {"$ref": "#/$defs/X/title"}}}}
+    }));
+    let expected = "Schema does not compile: \"T\" is not of types \"boolean\", \"object\"";
+    assert_that!(catalog_error(load(document))).is_equal_to(expected.to_owned());
+}
+
+#[test]
+fn check_refs_name_schemas_runtime_written_ref_to_a_string_is_named_as_the_schema_holds_it() {
+    let schema =
+        json!({"components": {"A": {"$ref": "#/$defs/X/title"}}, "$defs": {"X": {"title": "T"}}});
+    let message = super::check_refs_name_schemas(&schema, None, None)
+        .unwrap_err()
+        .to_string();
+    let expected = "Malformed catalog: $ref '#/$defs/X/title' at /components/A/$ref of the \
+                    validation schema names a string, not a schema (an object or a boolean)";
+    assert_that!(message).is_equal_to(expected.to_owned());
 }

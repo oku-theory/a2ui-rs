@@ -131,6 +131,19 @@ upstream's reading would be unsafe:
 13. **Shape vs flatten:** `ComponentShape` (every property name the validator may see, through
     any `$ref`) and flattening (upstream's output format) stay separate on purpose; an invariant
     test in `a2ui-catalog-basic` checks the flattened names are a subset of the shape's.
+14. **`$ref` targets are schemas (t-1586):** load refuses a validation schema holding a `$ref`
+    that resolves to a node that is neither an object nor a boolean (`#/$defs/X/title`,
+    `#/theme/title`). JSON Schema 2020-12 resolves `$ref` to a schema (§8.2.3.1), and a
+    schema is an object or a boolean (§4.3.1); upstream's `selfContained` only asks that each
+    `$ref` resolve, so this is stricter, as the compile of kept entries already is: it
+    fails on such a target. The check is one type test per `$ref` in the walk that finds
+    unresolved ones, so it covers the theme and unreached definitions. Like Decision 7 it reads
+    every `$ref` string, data included: a `{"$ref": "#/$defs/X/title"}` under `default` or
+    `examples` is refused too, as a missing target there already was. An object or boolean that
+    is not a schema (`#/$defs/X/default`, `#/$defs/X/properties`, `#/$defs/X/uniqueItems`) still
+    passes: telling schema positions from the rest is a compiler's job and no v1.0 catalog needs
+    it; the guarantee is "every `$ref` names an object or a boolean", not "the schema compiles".
+    None of the 995 `$ref`s under `vendor/a2ui` is affected.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

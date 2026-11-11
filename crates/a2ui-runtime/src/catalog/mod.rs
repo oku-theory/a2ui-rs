@@ -216,9 +216,10 @@ impl Catalog {
     /// refuses a `$ref` inside a component or function, which flattening rewrites, and one that
     /// names neither the theme nor a `$defs`, component or function entry (`#`, `#/title`); a
     /// `$ref` into `#/theme` is pointed at the same node under `#/$defs/theme`. Every `$ref` it
-    /// holds names a node of it: load refuses one, from the theme or an unreached definition
-    /// too, naming a missing definition, an absent theme or a dropped component. That node may
-    /// be data (`#/$defs/X/title`), so a `$ref` resolving is no promise the schema compiles.
+    /// holds names a schema of it, an object or a boolean: load refuses one, from the theme or an
+    /// unreached definition too, naming a missing definition, an absent theme, a dropped
+    /// component or a value such as `#/$defs/X/title`. An object or boolean that is not a schema
+    /// (`#/$defs/X/default`) still passes, so this is no promise the schema compiles.
     pub fn validation_schema(&self) -> &Value {
         &self.validation_schema
     }
