@@ -129,7 +129,10 @@ fn check_references_supported_refs_pass() {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://example.com/c.json",
         "components": {"A": {"allOf": [{"$ref": "common_types.json#/$defs/Checkable"}]}},
-        "$defs": {"whole": {"$ref": "catalog.json#"}, "local": {"$ref": "#/$defs/whole"}}
+        "$defs": {
+            "whole": {"$ref": "catalog.json#/$defs/local"},
+            "local": {"$ref": "#/$defs/whole"}
+        }
     });
     assert_that!(references(document)).is_ok();
 }
@@ -231,6 +234,38 @@ fn check_references_whole_component_or_function_passes(#[case] reference: &str) 
 #[case("common_types.json#/$defs/DynamicString/oneOf/0")]
 #[case("#/theme/properties/brand")]
 fn check_references_pointer_inside_defs_or_theme_passes(#[case] reference: &str) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(references(document)).is_ok();
+}
+
+#[rstest]
+#[case::bare("#")]
+#[case::bare_catalog("catalog.json#")]
+#[case::bare_common_types("common_types.json#")]
+#[case::title("#/title")]
+#[case::vendor_key("#/x-shared/Brand")]
+#[case::catalog_id("catalog.json#/catalogId")]
+#[case::defs_section("#/$defs")]
+#[case::components_section("#/components")]
+#[case::functions_section("#/functions")]
+#[case::common_types_entry_section("common_types.json#/components/A")]
+#[case::common_types_theme("common_types.json#/theme")]
+#[case::common_types_defs_section("common_types.json#/$defs")]
+#[case::longer_than_theme("#/themes")]
+#[case::escaped_theme_key("#/theme~1x")]
+fn check_references_target_the_validation_schema_drops_is_catalog_error(#[case] reference: &str) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(reference_error(document)).contains(format!(
+        "$ref '{reference}' at /$defs/x/$ref names no definition, entry or theme"
+    ));
+}
+
+#[rstest]
+#[case::theme("#/theme")]
+#[case::catalog_theme("catalog.json#/theme")]
+#[case::def("catalog.json#/$defs/A")]
+#[case::absolute_common_type("https://a2ui.org/specification/v1_0/common_types.json#/$defs/Weight")]
+fn check_references_target_the_validation_schema_keeps_passes(#[case] reference: &str) {
     let document = json!({"$defs": {"x": {"$ref": reference}}});
     assert_that!(references(document)).is_ok();
 }

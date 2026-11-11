@@ -392,11 +392,9 @@ fn validation_schema_theme_self_ref_points_at_theme_def(
         .is_equal_to(json!(expected));
 }
 
-#[rstest]
-#[case::longer_key("#/themes")]
-#[case::escaped_slash("#/theme~1x")]
-#[case::defs("#/$defs/Brand")]
-fn validation_schema_theme_ref_to_other_node_is_unchanged(#[case] reference: &str) {
+#[test]
+fn validation_schema_def_ref_to_a_def_is_unchanged() {
+    let reference = "#/$defs/Brand";
     let result = schema(json!({
         "$defs": {"Brand": {}, "Unreached": {"$ref": reference}},
         "theme": {},

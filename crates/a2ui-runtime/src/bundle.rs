@@ -140,15 +140,17 @@ pub(crate) fn localize_ref(reference: &str) -> String {
 /// A key holding an object or array is walked whatever its name, so a property named `$ref`
 /// holding a schema is a property. A scalar under a keyword is checked: `$ref` must be a
 /// supported string with an empty or JSON Pointer fragment, anchors and dynamic references are
-/// refused, and `$id` and `$schema` may only sit at the top level. A pointer below a component
+/// refused, and `$id` and `$schema` may only sit at the top level. A pointer must name the
+/// theme or a `$defs`, component or function entry (common types: a `$defs` entry), or a node
+/// in one, since the validation schema keeps nothing else. A pointer below a component
 /// or function entry (`#/components/A/properties`) is refused: the validation schema rewrites
 /// those entries, so it would dangle there. The walk does not tell schemas from data, so a
 /// `const` or `default` holding such a key is refused too. A numeric `$anchor` or `$id` is left
 /// to the schema build, whose meta-schema check rejects it.
 ///
-/// `#` and `catalog.json#` name the whole document and pass as self-references; an entry that
-/// reaches one fails load rule 11, since such a `$ref` names no entry. Pointers are built only
-/// for an error. The document is at most `MAX_JSON_DEPTH` deep, so the walk recurses.
+/// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
+/// so they are refused like `#/title`. Pointers are built only for an error. The document is at
+/// most `MAX_JSON_DEPTH` deep, so the walk recurses.
 pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Error> {
     check_map(document, &mut Vec::new())
 }
@@ -223,6 +225,16 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
         .map_err(Into::into);
     };
     ensure!(
+        is_kept_target(reference, &target),
+        MalformedCatalogSnafu {
+            reason: format!(
+                "$ref '{reference}' at {} names no definition, entry or theme, which are the only \
+                 parts of the catalog the validation schema keeps",
+                pointer(path)
+            ),
+        }
+    );
+    ensure!(
         !is_inside_entry(&target),
         MalformedCatalogSnafu {
             reason: format!(
@@ -233,6 +245,28 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
         }
     );
     Ok(())
+}
+
+/// Whether a supported `reference` to `pointer` names a node the validation schema keeps.
+///
+/// A common types reference must name a `$defs` entry or a node in one. A catalog reference
+/// must name the theme, or a `$defs`, component or function entry or a node in one. The whole
+/// document (`#`), a bare section (`#/$defs`) and any other top-level key (`#/title`) are not
+/// kept as they are, so a `$ref` to them would dangle or change meaning there.
+fn is_kept_target(reference: &str, pointer: &str) -> bool {
+    let from_common_types = reference
+        .split_once('#')
+        .is_some_and(|(document, _)| COMMON_TYPES_URIS.contains(&document));
+    let Some((section, rest)) = pointer
+        .strip_prefix('/')
+        .map(|tokens| tokens.split_once('/').unwrap_or((tokens, "")))
+    else {
+        return false;
+    };
+    if from_common_types {
+        return section == "$defs" && !rest.is_empty();
+    }
+    section == "theme" || (ENTRY_SECTIONS.contains(&section) && !rest.is_empty())
 }
 
 /// Whether `pointer` names a node below a component or function, such as `/components/A/x`.
