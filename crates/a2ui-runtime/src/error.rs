@@ -14,6 +14,8 @@ pub enum Category {
     Expression,
     /// A catalog that cannot be loaded, or an embedded schema that is broken.
     Catalog,
+    /// A value that breaks a schema, such as a component its catalog rejects.
+    Validation,
 }
 
 impl Category {
@@ -24,6 +26,7 @@ impl Category {
             Self::Parse => "ParseError",
             Self::Expression => "ExpressionError",
             Self::Catalog => "CatalogError",
+            Self::Validation => "ValidationError",
         }
     }
 }
@@ -96,6 +99,28 @@ pub(crate) enum Inner {
         message: String,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("Schema does not compile: {message}"))]
+    SchemaBuild {
+        message: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{message} at '{at}'"))]
+    SchemaViolation {
+        at: String,
+        message: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Unknown common type '{definition}'"))]
+    UnknownDefinition {
+        definition: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Value nesting exceeds {limit} levels"))]
+    ValueLimit { limit: usize, backtrace: Backtrace },
 }
 
 impl Inner {
@@ -108,7 +133,10 @@ impl Inner {
             | Self::IndexOutOfRange { .. } => Category::Data,
             Self::ExpressionSyntax { .. } => Category::Parse,
             Self::ExpressionLimit { .. } => Category::Expression,
-            Self::EmbeddedSchema { .. } => Category::Catalog,
+            Self::EmbeddedSchema { .. } | Self::SchemaBuild { .. } => Category::Catalog,
+            Self::SchemaViolation { .. }
+            | Self::UnknownDefinition { .. }
+            | Self::ValueLimit { .. } => Category::Validation,
         }
     }
 }

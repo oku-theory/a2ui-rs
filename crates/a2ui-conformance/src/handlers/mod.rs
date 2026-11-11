@@ -1,5 +1,6 @@
 //! The runner for each conformance action.
 
+mod common_type;
 mod data_model;
 mod expression;
 mod resolve_path;
@@ -16,6 +17,7 @@ pub fn handler(action: &str) -> Option<Handler> {
         "data_model" => Some(data_model::run),
         "resolve_path" => Some(resolve_path::run),
         "parse_expression_template" => Some(expression::run),
+        "validate_common_type" => Some(common_type::run),
         "common_types_schema" => Some(schema_doc::run_common_types),
         "agent_to_renderer_schema" => Some(schema_doc::run_agent_to_renderer),
         _ => None,

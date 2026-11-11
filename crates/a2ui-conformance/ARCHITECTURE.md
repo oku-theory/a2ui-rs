@@ -16,7 +16,7 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 - `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR` is set
   (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`.
-- `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two schema-equality actions).
+- `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two schema-equality actions; common_type).
 
 ## Rule
 

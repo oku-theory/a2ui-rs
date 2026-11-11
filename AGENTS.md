@@ -21,7 +21,7 @@ just conformance-manifest <dir>   # executed-case manifest for upstream's compar
 - Use expect with a reason instead of allow, and leave no dead code. (spec:2026-11-10-a2ui-rs-leptos-design)
 - Document every pub item and module, with a first sentence under 15 words. (spec:2026-11-10-a2ui-rs-leptos-design)
 - Keep each ARCHITECTURE.md at most 50 lines, current, and committed with the code it describes. (spec:2026-11-10-a2ui-rs-leptos-design)
-- Keep a2ui-runtime free of Leptos, wasm-bindgen, async runtimes, randomness and I/O. (spec:2026-11-10-a2ui-rs-leptos-design)
+- Keep a2ui-runtime free of direct Leptos, wasm-bindgen, async-runtime and I/O dependencies, and its results free of randomness. (spec:2026-11-10-a2ui-rs-leptos-design)
 - Report errors with stable A2UI codes and categories; the library never localizes messages. (spec:2026-11-10-a2ui-rs-leptos-design)
 - Change vendor/a2ui only through vendor/sync.sh, which rewrites vendor/UPSTREAM. (spec:2026-11-10-a2ui-rs-leptos-design)
 

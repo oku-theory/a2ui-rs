@@ -8,15 +8,19 @@
 //! (classified by [`Category`]), [`Watchers`] (observers a write notifies),
 //! [`resolve_path`] (scoped relative paths) and [`parse_template`] (`${...}`
 //! expression templates), [`common_types_schema`] and [`agent_to_renderer_schema`] (the
-//! embedded v1.0 schemas).
+//! embedded v1.0 schemas) and [`validate_common_type`] (a value against one common type).
 
+mod bundle;
 mod context;
 mod data;
 mod error;
 mod expression;
+mod ident;
+mod limits;
 mod pointer;
 mod schema;
 mod subscribe;
+mod validator;
 pub use subscribe::Watchers;
 
 pub use context::resolve_path;
@@ -24,4 +28,4 @@ pub use data::{DataModel, Write};
 pub use error::{Category, Error};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
 pub use pointer::{MAX_LIST_INDEX, Pointer};
-pub use schema::{agent_to_renderer_schema, common_types_schema};
+pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};

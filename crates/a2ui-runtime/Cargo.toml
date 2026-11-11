@@ -14,6 +14,8 @@ categories = ["gui", "wasm"]
 snafu.workspace = true
 serde_json.workspace = true
 unicode-ident.workspace = true
+jsonschema.workspace = true
+percent-encoding.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

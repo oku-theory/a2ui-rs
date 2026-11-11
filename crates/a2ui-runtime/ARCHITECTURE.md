@@ -23,8 +23,16 @@ It builds for `wasm32-unknown-unknown`.
   with named arguments); `\${` is literal text. Limits: 10 000 characters, 1 000 parts, nesting
   100 (interpolations and call arguments together). Grammar notes: Plan 1, Task 7.
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
-  `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is.
+  `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
+  `validate_common_type` (cached validators; `FunctionCall` accepts any function but `@index`).
+- `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by the parser and catalogs.
+- `limits`: caps on agent JSON (64 levels deep, 128 KiB per compiled pattern).
+- `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors are `CatalogError`,
+  the first violation a `ValidationError`.
+- `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`), percent-encoded
+  `local_ref`/`localize_refs`.
 
 ## Dependencies
 
-`snafu`, `serde_json`, `unicode-ident` (UAX #31 identifiers).
+`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;
+brings `wasm-bindgen` through `getrandom` on wasm32, checked by `just deps`).

@@ -11,7 +11,9 @@ repository = "https://github.com/oku-theory/a2ui-rs"
 
 [workspace.dependencies]
 a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
+jsonschema = { version = "=0.61.1", default-features = false }
 libtest-mimic = "0.8"
+percent-encoding = "2"
 regex = "1"
 rstest = "0.28"
 serde = { version = "1", features = ["derive"] }

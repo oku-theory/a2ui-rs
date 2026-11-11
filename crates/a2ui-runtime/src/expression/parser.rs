@@ -1,10 +1,11 @@
 //! Recursive-descent parser for templates, interpolations and calls.
 
 use serde_json::Value;
-use unicode_ident::{is_xid_continue, is_xid_start};
+use unicode_ident::is_xid_continue;
 
 use super::{Expr, MAX_DEPTH, number, syntax};
 use crate::error::Error;
+use crate::ident::is_identifier;
 
 const DELIMITERS: [char; 7] = ['(', ')', ',', ':', '\'', '"', '}'];
 
@@ -213,11 +214,6 @@ fn classify(token: &str, start: usize) -> Result<Expr, Error> {
         }
         _ => Err(syntax(start, "Unexpected characters")),
     }
-}
-
-fn is_identifier(name: &str) -> bool {
-    let mut chars = name.chars();
-    chars.next().is_some_and(|c| c == '_' || is_xid_start(c)) && chars.all(is_xid_continue)
 }
 
 fn flush(parts: &mut Vec<Expr>, text: &mut String) {

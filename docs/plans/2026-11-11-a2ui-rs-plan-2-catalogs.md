@@ -56,7 +56,7 @@ paragraph) and `vendor/a2ui/conformance/conformance_harness_implementation_guide
 ## Decisions (approved by the user, 2026-11-11)
 
 - JSON Schema validation uses `jsonschema` pinned exactly to 0.61.1 with default features off
-  (no HTTP or file resolution, hence no `idna` dependency), `PatternOptions::regex()` with 64 KiB
+  (no HTTP or file resolution, hence no `idna` dependency), `PatternOptions::regex()` with 128 KiB
   `size_limit`/`dfa_size_limit`, and `.offline()` (the crate's own retriever that refuses every
   fetch) on every build. The `format` keyword stays an annotation (format assertion off); no C2
   case needs it.
@@ -104,7 +104,7 @@ paragraph) and `vendor/a2ui/conformance/conformance_harness_implementation_guide
   (`Cycle`), and its own walkers stay cycle-safe.
 - A schema nested 5000 levels overflows the stack at build: documents are capped at 64 levels,
   and the depth reached through followed `$ref`s at `MAX_SCHEMA_DEPTH` (128).
-- Pattern cost is bounded by the 64 KiB compile cap per pattern and `MAX_CATALOG_PATTERNS` (256
+- Pattern cost is bounded by the 128 KiB compile cap per pattern and `MAX_CATALOG_PATTERNS` (256
   `pattern` values and `patternProperties` keys per catalog); a catalog document is capped at
   `MAX_CATALOG_NODES` (200 000 JSON nodes). The published basic catalog has 1011 JSON nodes, a
   `$ref`-expanded depth of 23, no `$ref` cycle, no anchor and 2 patterns, so every cap sits far
@@ -317,7 +317,7 @@ subset (256/4096 code-point caps, no nested or overlapping quantifiers, no backr
 lookbehind) in front of the `regex` crate.``) with:
 
 ```markdown
-- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 64 KiB
+- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
   size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
   backtracking regex.
 ```
@@ -598,7 +598,7 @@ Oku: t-1555.
 - Produces:
   - `Category::Validation` (`"ValidationError"`).
   - `pub(crate) fn ident::is_identifier(name: &str) -> bool`.
-  - `pub(crate) const limits::{MAX_JSON_DEPTH, MAX_PATTERN_BYTES}` (64 and 64 KiB),
+  - `pub(crate) const limits::{MAX_JSON_DEPTH, MAX_PATTERN_BYTES}` (64 and 128 KiB),
     `pub(crate) fn limits::deeper_than(value: &Value, limit: usize) -> bool`.
   - `pub(crate) fn validator::compile(document: &Value) -> Result<jsonschema::Validator, Error>`,
     `pub(crate) fn validator::rooted(top: &Map<String, Value>, reference: &str) -> Value`,
@@ -845,7 +845,7 @@ fn compile_non_ascii_name_through_local_ref_builds() {
 ```
 
 (`\w{5000}` builds with `regex`'s default limits and was probed to fail under a 256 KiB cap,
-so it fails under 64 KiB. The fragments
+so it fails under 128 KiB. The fragments
 `is not a "regex"` and `Retrieval is disabled` are the texts of `jsonschema` 0.60.2
 (`keywords/pattern.rs`, `retriever.rs`), unchanged in 0.61.1.)
 
@@ -1059,7 +1059,7 @@ use serde_json::Value;
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
 
 /// Compiled size cap of one schema `pattern`, in bytes, for the regex and its lazy DFA.
-pub(crate) const MAX_PATTERN_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_PATTERN_BYTES: usize = 128 * 1024;
 
 /// Whether `value` nests arrays and objects more than `limit` levels deep.
 ///
@@ -1426,7 +1426,7 @@ Expected: every `test_v10_*` case of `core/common_types` passes; v0.9/v0.9.1 cas
 
 ```markdown
 - `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by the parser and catalogs.
-- `limits`: caps on agent JSON (64 levels deep, 64 KiB per compiled pattern).
+- `limits`: caps on agent JSON (64 levels deep, 128 KiB per compiled pattern).
 - `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors are `CatalogError`,
   the first violation a `ValidationError`.
 - `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`), percent-encoded
