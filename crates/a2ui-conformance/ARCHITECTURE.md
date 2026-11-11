@@ -18,9 +18,10 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`.
 - `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two
-  schema-equality actions; common_type; round_trip; from_json; to_json; catalog_checks: entries,
-  `selfContained`, `matchesBuiltinCatalog` against `a2ui-catalog-basic`); `catalog_input` reads the case's catalog
-  (inline or `catalogPath`) and its `catalogId`/`protocolVersion` overrides.
+  schema-equality actions; common_type; round_trip; from_json; to_json; derive; catalog_checks:
+  entries, `selfContained`, `matchesBuiltinCatalog` against `a2ui-catalog-basic`);
+  `catalog_input` reads the case's catalog (inline or `catalogPath`) and its
+  `catalogId`/`protocolVersion` overrides.
 
 Depends on: `a2ui-runtime`, `a2ui-catalog-basic`, `percent-encoding`.
 

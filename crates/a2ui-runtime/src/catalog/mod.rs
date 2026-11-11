@@ -5,6 +5,7 @@
 //! one validator per entry, which its [`ComponentDef`] or [`FunctionDef`] holds.
 
 mod compile;
+mod derive;
 mod document;
 mod entries;
 mod load;
@@ -19,6 +20,7 @@ use std::sync::Arc;
 use jsonschema::Validator;
 use serde_json::{Map, Value};
 
+pub use derive::{Derivation, DeriveEntry};
 pub use shape::ComponentShape;
 pub use validate::CatalogLookup;
 

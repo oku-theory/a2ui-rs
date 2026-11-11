@@ -22,9 +22,9 @@ It builds for `wasm32-unknown-unknown`.
   100 (interpolations and call arguments together). Grammar notes: Plan 1, Task 7.
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
-  `validate_common_type` (cached validators; `FunctionCall` accepts any function but `@index`).
-- `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by the parser and catalogs.
-- `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors are `CatalogError`,
+  `validate_common_type` (cached validators; `FunctionCall` takes any function but `@index`).
+- `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by parser and catalogs.
+- `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors `CatalogError`,
   the first violation a `ValidationError`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, `$ref`
   rules, UAX #31 names, callers, metadata, entry caps), keeps the entries its unions list and
@@ -33,8 +33,10 @@ It builds for `wasm32-unknown-unknown`.
   in its `ComponentDef`/`FunctionDef`. `validate_component` checks an instance: depth, reserved
   `@` keys, undeclared envelope keys removed, its validator, then each nested call in the catalog
   it runs in (found through `CatalogLookup`): exists, not `agentOnly`, matches the function's
-  validator; `@index` as `IndexSystemFunction`; calls into catalogs not found only for
-  identifiers. Submodules `load`, `entries`, `compile`, `document`, `shape`, `validate`.
+  validator; `@index` as `IndexSystemFunction`; unknown catalogs only for identifiers.
+  `derive`: a new-id catalog from a `Derivation`, keeping the source's version, theme and
+  `$defs`, rejecting duplicate names, regenerating changed unions, loaded by `from_json`.
+  Submodules `load`, `entries`, `compile`, `document`, `shape`, `validate`, `derive`.
 - `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`; no anchors, dynamic
   refs or nested `$id`), percent-encoded `local_ref`/`localize_refs`, common-type closure.
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
@@ -44,6 +46,5 @@ It builds for `wasm32-unknown-unknown`.
   entries before any compile.
 
 ## Dependencies
-
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;
 brings `wasm-bindgen` through `getrandom` on wasm32, checked by `just deps`).

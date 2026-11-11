@@ -176,6 +176,21 @@ pub(crate) enum Inner {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("Catalog '{catalog}' has no {kind} '{name}' to derive from"))]
+    DeriveUnknownEntry {
+        catalog: String,
+        kind: &'static str,
+        name: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Derivation lists {kind} '{name}' more than once"))]
+    DeriveDuplicateEntry {
+        kind: &'static str,
+        name: String,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("Component name 'Surface' is reserved for the surface root"))]
     ReservedComponent { backtrace: Backtrace },
 
@@ -266,6 +281,8 @@ impl Inner {
             | Self::ForbiddenKeyword { .. }
             | Self::DefsShadowCommonType { .. }
             | Self::CatalogLimit { .. }
+            | Self::DeriveUnknownEntry { .. }
+            | Self::DeriveDuplicateEntry { .. }
             | Self::ReservedComponent { .. }
             | Self::InvalidIdentifier { .. }
             | Self::UserActivation { .. } => Category::Catalog,

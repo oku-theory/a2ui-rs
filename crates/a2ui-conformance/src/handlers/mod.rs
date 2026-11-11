@@ -4,6 +4,7 @@ mod catalog_checks;
 mod catalog_input;
 mod common_type;
 mod data_model;
+mod derive;
 mod expression;
 mod from_json;
 mod resolve_path;
@@ -28,6 +29,7 @@ pub fn handler(action: &str) -> Option<Handler> {
         "round_trip" => Some(round_trip::run),
         "from_json" => Some(from_json::run),
         "to_json" => Some(to_json::run),
+        "derive" => Some(derive::run),
         _ => None,
     }
 }

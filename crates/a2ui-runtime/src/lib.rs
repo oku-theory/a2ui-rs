@@ -10,7 +10,8 @@
 //! expression templates), [`common_types_schema`] and [`agent_to_renderer_schema`] (the
 //! embedded v1.0 schemas), [`validate_common_type`] (a value against one common type) and
 //! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
-//! [`AllowedCallers`]) and [`CatalogLookup`] (finds the catalogs nested calls run in).
+//! [`AllowedCallers`]) and [`CatalogLookup`] (finds the catalogs nested calls run in), derived
+//! with [`Catalog::derive`].
 
 mod bundle;
 mod catalog;
@@ -27,7 +28,8 @@ mod validator;
 pub use subscribe::Watchers;
 
 pub use catalog::{
-    AllowedCallers, Catalog, CatalogLookup, ComponentDef, ComponentShape, FunctionDef,
+    AllowedCallers, Catalog, CatalogLookup, ComponentDef, ComponentShape, Derivation, DeriveEntry,
+    FunctionDef,
 };
 pub use context::resolve_path;
 pub use data::{DataModel, Write};
