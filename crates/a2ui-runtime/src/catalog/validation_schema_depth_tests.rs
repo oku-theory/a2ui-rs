@@ -29,14 +29,17 @@ fn deep_dangling(keys: &[&str], levels: usize) -> Value {
 ///
 /// The root, the place keys and the `$ref` object take the levels the chain does not.
 #[rstest]
-#[case::theme(&["theme"], MAX_JSON_DEPTH - 2)]
-#[case::unreached_def(&["$defs", "Deep"], MAX_JSON_DEPTH - 3)]
-fn from_json_deepest_dangling_ref_on_a_small_stack_is_catalog_error(
+#[case::theme(&["theme"], MAX_JSON_DEPTH - 2, "/theme/not/")]
+#[case::unreached_def(&["$defs", "Deep"], MAX_JSON_DEPTH - 3, "/$defs/Deep/not/")]
+fn from_json_deepest_dangling_ref_on_a_small_stack_is_catalog_error_at_authored_place(
     #[case] keys: &[&str],
     #[case] levels: usize,
+    #[case] place: &str,
 ) {
     let message = catalog_error(load_on_a_small_stack(deep_dangling(keys, levels)));
-    assert_that!(message).ends_with("of the validation schema does not resolve");
+    let prefix = format!("Malformed catalog: $ref '#/$defs/Missing' at {place}");
+    assert_that!(message.starts_with(&prefix)).is_true();
+    assert_that!(message).ends_with("does not resolve in the validation schema");
 }
 
 /// One level past the cases above: proves they sit exactly at the depth limit.

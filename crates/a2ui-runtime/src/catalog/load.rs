@@ -93,6 +93,7 @@ impl Catalog {
             version,
             instructions,
             theme,
+            defs,
         };
         let schema = validation_schema::build(checked, header, common_type_defs()?)?;
         Ok(Self {

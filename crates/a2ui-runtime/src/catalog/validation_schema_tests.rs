@@ -437,17 +437,17 @@ fn validation_schema_mixin_named_by_theme_is_kept() {
 #[case::theme_to_missing_def(
     json!({"theme": {"properties": {"brand": {"$ref": "#/$defs/Missing"}}}}),
     "#/$defs/Missing",
-    "/$defs/theme/properties/brand/$ref"
+    "/theme/properties/brand/$ref"
 )]
 #[case::theme_to_missing_theme_node(
     json!({"theme": {"properties": {"brand": {"$ref": "#/theme/$defs/Missing"}}}}),
-    "#/$defs/theme/$defs/Missing",
-    "/$defs/theme/properties/brand/$ref"
+    "#/theme/$defs/Missing",
+    "/theme/properties/brand/$ref"
 )]
 #[case::theme_to_missing_common_type(
     json!({"theme": {"properties": {"brand": {"$ref": "common_types.json#/$defs/Missing"}}}}),
-    "#/$defs/Missing",
-    "/$defs/theme/properties/brand/$ref"
+    "common_types.json#/$defs/Missing",
+    "/theme/properties/brand/$ref"
 )]
 #[case::unreached_def_to_missing_def(
     json!({"$defs": {"Unreached": {"$ref": "#/$defs/Missing"}}}),
@@ -491,6 +491,21 @@ fn validation_schema_mixin_named_by_theme_is_kept() {
     "#/$defs/Missing",
     "/$defs/Unreached/default/$ref"
 )]
+#[case::percent_encoded_as_authored(
+    json!({"$defs": {"Unreached": {"$ref": "catalog.json#/$defs/Missing_%E2%84%93"}}}),
+    "catalog.json#/$defs/Missing_%E2%84%93",
+    "/$defs/Unreached/$ref"
+)]
+#[case::unreached_def_to_missing_theme_node(
+    json!({"theme": {}, "$defs": {"Unreached": {"$ref": "#/theme/missing"}}}),
+    "#/theme/missing",
+    "/$defs/Unreached/$ref"
+)]
+#[case::authored_defs_theme_without_top_level_theme(
+    json!({"$defs": {"theme": {"properties": {"b": {"$ref": "#/$defs/Missing"}}}}}),
+    "#/$defs/Missing",
+    "/$defs/theme/properties/b/$ref"
+)]
 #[case::under_an_escaped_name(
     json!({"$defs": {"a/b~c": {"$ref": "#/$defs/Missing"}}}),
     "#/$defs/Missing",
@@ -506,7 +521,7 @@ fn from_json_dangling_ref_outside_kept_entries_is_catalog_error_naming_it(
         map.entry("components").or_insert(json!({"A": {}}));
     }
     let expected = format!(
-        "Malformed catalog: $ref '{reference}' at {at} of the validation schema does not resolve"
+        "Malformed catalog: $ref '{reference}' at {at} does not resolve in the validation schema"
     );
     assert_that!(catalog_error(load(v10(extra)))).is_equal_to(expected);
 }
@@ -519,4 +534,43 @@ fn from_json_theme_ref_to_own_def_loads() {
         "components": {"A": {}}
     }));
     assert_that!(load(document)).is_ok();
+}
+
+#[rstest]
+#[case::theme_node(
+    "/$defs/theme/properties/b/$ref",
+    true,
+    Some(("/theme/properties/b/$ref", "#/x"))
+)]
+#[case::defs_theme_without_theme("/$defs/theme/$ref", false, Some(("/$defs/theme/$ref", "#/z")))]
+#[case::def_node("/$defs/a~1b/$ref", true, Some(("/$defs/a~1b/$ref", "#/y")))]
+#[case::common_type("/$defs/DynamicString/$ref", true, None)]
+#[case::component("/components/A/$ref", true, None)]
+#[case::not_a_ref_string("/$defs/theme/properties", true, None)]
+fn authored_validation_schema_place_is_authored_place_or_none(
+    #[case] at: &str,
+    #[case] with_theme: bool,
+    #[case] expected: Option<(&str, &str)>,
+) {
+    let theme = json!({"properties": {"b": {"$ref": "#/x"}}});
+    let defs = Map::from_iter([
+        ("a/b".to_owned(), json!({"$ref": "#/y"})),
+        ("theme".to_owned(), json!({"$ref": "#/z"})),
+    ]);
+    let found = super::authored(at, with_theme.then_some(&theme), Some(&defs));
+    let found = found
+        .as_ref()
+        .map(|(place, reference)| (place.as_str(), *reference));
+    assert_that!(found).is_equal_to(expected);
+}
+
+#[test]
+fn check_resolved_runtime_written_ref_is_named_as_the_schema_holds_it() {
+    let schema = json!({"components": {"A": {"$ref": "#/$defs/Gone"}}, "$defs": {}});
+    let message = super::check_resolved(&schema, None, None)
+        .unwrap_err()
+        .to_string();
+    let expected = "Malformed catalog: $ref '#/$defs/Gone' at /components/A/$ref of the \
+                    validation schema does not resolve";
+    assert_that!(message).is_equal_to(expected.to_owned());
 }

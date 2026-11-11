@@ -53,14 +53,17 @@ pub(super) struct Header<'a> {
     pub(super) instructions: Option<&'a str>,
     /// The catalog's `theme` schema, if any.
     pub(super) theme: Option<&'a Value>,
+    /// The catalog's own `$defs`, as authored, if any.
+    pub(super) defs: Option<&'a Map<String, Value>>,
 }
 
 /// Builds the validation schema of a checked bundle under the catalog's `header`.
 ///
 /// A `MalformedCatalog` error reports the first `$ref` of the result that names no node of it
-/// (`#/$defs/Missing`, `#/theme` with no theme, a dropped component). Load rule 11 already
-/// resolved those the kept entries reach, so one under `/components` or `/functions` would be
-/// a runtime bug; this completes rule 11 for the theme and unreached definitions.
+/// (`#/$defs/Missing`, `#/theme` with no theme, a dropped component), as the author wrote it
+/// and where. Load rule 11 already resolved those the kept entries reach, so one under
+/// `/components` or `/functions` would be a runtime bug; this completes rule 11 for the theme
+/// and unreached definitions.
 pub(super) fn build(
     checked: Checked<'_>,
     header: Header<'_>,
@@ -120,23 +123,54 @@ pub(super) fn build(
     }
     out.insert("$defs".to_owned(), Value::Object(defs));
     let out = Value::Object(out);
-    check_resolved(&out)?;
+    check_resolved(&out, header.theme, header.defs)?;
     Ok(out)
 }
 
 /// Fails on the first `$ref` string of `schema` that names no node of `schema`.
 ///
-/// The `$ref` and its place are those of the validation schema: a theme node is under
-/// `/$defs/theme`, and a common types `$ref` is local.
-fn check_resolved(schema: &Value) -> Result<(), Error> {
-    match first_unresolved(schema) {
-        None => Ok(()),
-        Some((reference, at)) => Err(MalformedCatalogSnafu {
-            reason: format!("$ref '{reference}' at {at} of the validation schema does not resolve"),
+/// The error names the `$ref` as authored in `theme` or `defs`, at its authored place. A `$ref`
+/// the runtime wrote (a component's, a common type's, a synthesized union's) has no authored
+/// place: it is named as the validation schema holds it, and only a runtime bug can leave one
+/// dangling.
+fn check_resolved(
+    schema: &Value,
+    theme: Option<&Value>,
+    defs: Option<&Map<String, Value>>,
+) -> Result<(), Error> {
+    let Some((reference, at)) = first_unresolved(schema) else {
+        return Ok(());
+    };
+    let reason = match authored(&at, theme, defs) {
+        Some((authored_at, authored_ref)) => format!(
+            "$ref '{authored_ref}' at {authored_at} does not resolve in the validation schema"
+        ),
+        None => format!("$ref '{reference}' at {at} of the validation schema does not resolve"),
+    };
+    Err(MalformedCatalogSnafu { reason }.build().into())
+}
+
+/// The authored place and `$ref` of the validation schema's `$ref` at `at`, if authored.
+///
+/// The theme moves to `/$defs/theme` and a definition stays at `/$defs/<name>`; both are copied
+/// with every node at its path (localizing and describing only rewrite or add values).
+fn authored<'a>(
+    at: &str,
+    theme: Option<&'a Value>,
+    defs: Option<&'a Map<String, Value>>,
+) -> Option<(String, &'a str)> {
+    let rest = at.strip_prefix("/$defs/")?;
+    let (token, below) = rest
+        .find('/')
+        .map_or((rest, ""), |slash| rest.split_at(slash));
+    let (place, node) = match theme {
+        Some(theme) if token == "theme" => (format!("/theme{below}"), theme.pointer(below)?),
+        _ => {
+            let name = token.replace("~1", "/").replace("~0", "~");
+            (at.to_owned(), defs?.get(&name)?.pointer(below)?)
         }
-        .build()
-        .into()),
-    }
+    };
+    node.as_str().map(|reference| (place, reference))
 }
 
 /// The theme as upstream writes it in `$defs`: localized, described, open unless it says.
