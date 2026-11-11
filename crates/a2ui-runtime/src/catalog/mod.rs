@@ -11,6 +11,7 @@ mod load;
 mod shape;
 #[cfg(test)]
 pub(crate) mod test_support;
+mod validate;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ use jsonschema::Validator;
 use serde_json::{Map, Value};
 
 pub use shape::ComponentShape;
+pub use validate::CatalogLookup;
 
 /// Who may call a catalog function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,7 +99,6 @@ impl ComponentDef {
     }
 
     /// The compiled schema, with function calls checked only as envelopes.
-    #[expect(dead_code, reason = "validate_component (Task 5) reads it")]
     pub(crate) fn validator(&self) -> &Validator {
         &self.validator
     }
@@ -141,7 +142,6 @@ impl FunctionDef {
     }
 
     /// The compiled schema of a call, with nested calls checked only as envelopes.
-    #[expect(dead_code, reason = "validate_component (Task 5) reads it")]
     pub(crate) fn validator(&self) -> &Validator {
         &self.validator
     }

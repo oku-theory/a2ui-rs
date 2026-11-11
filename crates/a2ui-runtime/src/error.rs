@@ -195,6 +195,55 @@ pub(crate) enum Inner {
         function: String,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("Invalid component: {reason}"))]
+    ComponentShape {
+        reason: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Component has no 'component' type name"))]
+    MissingComponentType { backtrace: Backtrace },
+
+    #[snafu(display("Unrecognized component type '{component}'"))]
+    UnknownComponent {
+        component: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{what} '{name}' must be a valid UAX #31 identifier"))]
+    BadIdentifier {
+        what: &'static str,
+        name: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Key '{key}' is reserved: only '@path' and '@call' may start with one '@'"))]
+    ReservedKey { key: String, backtrace: Backtrace },
+
+    #[snafu(display("Invalid function call: {reason}"))]
+    CallShape {
+        reason: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("System function '{function}' cannot name a catalogId"))]
+    SystemFunctionCatalog {
+        function: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Unrecognized function '{function}'"))]
+    UnknownFunction {
+        function: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Function '{function}' is agentOnly and cannot be called from a component"))]
+    AgentOnlyCall {
+        function: String,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -222,7 +271,16 @@ impl Inner {
             | Self::UserActivation { .. } => Category::Catalog,
             Self::SchemaViolation { .. }
             | Self::UnknownDefinition { .. }
-            | Self::ValueLimit { .. } => Category::Validation,
+            | Self::ValueLimit { .. }
+            | Self::ComponentShape { .. }
+            | Self::MissingComponentType { .. }
+            | Self::UnknownComponent { .. }
+            | Self::BadIdentifier { .. }
+            | Self::ReservedKey { .. }
+            | Self::CallShape { .. }
+            | Self::SystemFunctionCatalog { .. }
+            | Self::UnknownFunction { .. }
+            | Self::AgentOnlyCall { .. } => Category::Validation,
         }
     }
 }
