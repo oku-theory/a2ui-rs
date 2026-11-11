@@ -11,4 +11,8 @@ checked against the upstream conformance suites, with a Leptos renderer.
 `vendor/a2ui` is a copy of upstream files (Apache-2.0) at the commit in `vendor/UPSTREAM`;
 refresh it with `just vendor-sync <commit>`.
 
+## Status
+
+Conformance: stage C1 (data model, paths, expression parsing) passes; later stages are listed in crates/a2ui-conformance/skips.toml.
+
 Licensed under MIT or Apache-2.0, at your option.

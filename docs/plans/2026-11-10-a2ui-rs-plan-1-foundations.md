@@ -2969,6 +2969,8 @@ oku cli task done --project slider --id t-1551 --result "parse_template; express
 
 ### Task 8: Consolidation and Plan 1 gate (t-1552)
 
+Deferred: the spec's `Error::code() -> ErrorCode` (A2UI codes) is not part of Plan 1; Plan 3 adds it next to `category()`.
+
 **Files:**
 - Modify: any file the checks below flag; `crates/a2ui-runtime/ARCHITECTURE.md`, `crates/a2ui-conformance/ARCHITECTURE.md`, `README.md`
 
