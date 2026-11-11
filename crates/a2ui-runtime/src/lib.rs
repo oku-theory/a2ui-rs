@@ -10,8 +10,9 @@
 //! expression templates), [`common_types_schema`] and [`agent_to_renderer_schema`] (the
 //! embedded v1.0 schemas), [`validate_common_type`] (a value against one common type) and
 //! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
-//! [`AllowedCallers`]) and [`CatalogLookup`] (finds the catalogs nested calls run in), derived
-//! with [`Catalog::derive`].
+//! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
+//! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
+//! [`Derivation`].
 
 mod bundle;
 mod catalog;
