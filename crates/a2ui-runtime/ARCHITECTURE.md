@@ -14,6 +14,9 @@ It builds for `wasm32-unknown-unknown`.
   creates missing containers (a list when the next segment is index-like), validates the whole
   path before mutating, and treats `null` as delete. Each change returns a `Write` (path plus the
   previous value), whose `changes(watched)` tells whether an observer's value differs.
+- `subscribe`: `Watchers<K>`, observers keyed by `K` on pointers; `notified(write, model)` lists
+  the keys whose value the write changed (exact path, ancestors, descendants; unchanged values
+  stay silent). Renderers map keys to their own reactive cells.
 
 ## Dependencies
 

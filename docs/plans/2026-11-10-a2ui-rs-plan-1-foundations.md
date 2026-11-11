@@ -2148,7 +2148,7 @@ fn watched(watch: Option<&Value>) -> Result<Watched, String> {
 }
 ```
 
-and change the import to `use a2ui_runtime::{DataModel, Pointer, Watchers, Write};`. `watched.clear()` in the `dispose` arm is unchanged.
+and change the import to `use a2ui_runtime::{DataModel, Pointer, Watchers, Write};`. Also align `op_keys` with the YAML header: `delete` allows `expect_error`, and `dispose` allows `expect_notified` and `expect_values` (observers are gone, so nothing fires). `watched.clear()` in the `dispose` arm is unchanged.
 
 - [ ] **Step 5: Run everything**
 

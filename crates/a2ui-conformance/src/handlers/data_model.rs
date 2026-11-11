@@ -1,6 +1,6 @@
 //! The `data_model` action: pointer reads, writes, deletes and observers.
 
-use a2ui_runtime::{DataModel, Pointer, Write};
+use a2ui_runtime::{DataModel, Pointer, Watchers, Write};
 use serde_json::{Map, Value};
 
 use crate::case::Case;
@@ -26,15 +26,21 @@ fn op_keys(op: &str) -> Option<&'static [&'static str]> {
             "expect_notified",
             "expect_values",
         ]),
-        "delete" => Some(&["op", "path", "expect_notified", "expect_values"]),
+        "delete" => Some(&[
+            "op",
+            "path",
+            "expect_error",
+            "expect_notified",
+            "expect_values",
+        ]),
         "mutate_input" => Some(&["op", "path", "value", "expect_notified"]),
-        "dispose" => Some(&["op"]),
+        "dispose" => Some(&["op", "expect_notified", "expect_values"]),
         _ => None,
     }
 }
 
-/// Observed paths, kept as written in `watch` so notifications compare verbatim.
-type Watched = Vec<(String, Pointer)>;
+/// Observers keyed by the path as written in `watch`.
+type Watched = Watchers<String>;
 
 /// Runs a `data_model` case: build from `initial`, watch `watch`, run `steps`.
 pub fn run(case: &Case) -> Result<(), String> {
@@ -133,28 +139,23 @@ fn run_step(
 }
 
 fn fired(write: Option<&Write>, watched: &Watched, model: &DataModel) -> Vec<String> {
-    let Some(write) = write else {
-        return Vec::new();
-    };
-    watched
-        .iter()
-        .filter(|(_, pointer)| write.changes(pointer, model))
-        .map(|(raw, _)| raw.clone())
-        .collect()
+    match write {
+        Some(write) => watched.notified(write, model),
+        None => Vec::new(),
+    }
 }
 
 fn watched(watch: Option<&Value>) -> Result<Watched, String> {
+    let mut watchers = Watchers::default();
     let Some(list) = watch else {
-        return Ok(Vec::new());
+        return Ok(watchers);
     };
-    let list = list.as_array().ok_or("`watch` is a list")?;
-    list.iter()
-        .map(|raw| {
-            let raw = raw.as_str().ok_or("`watch` holds strings")?;
-            let pointer = Pointer::parse(raw).map_err(|err| err.to_string())?;
-            Ok((raw.to_owned(), pointer))
-        })
-        .collect()
+    for raw in list.as_array().ok_or("`watch` is a list")? {
+        let raw = raw.as_str().ok_or("`watch` holds strings")?;
+        let pointer = Pointer::parse(raw).map_err(|err| err.to_string())?;
+        watchers.watch(raw.to_owned(), pointer);
+    }
+    Ok(watchers)
 }
 
 fn check_read(value: Option<&Value>, step: &Map<String, Value>, at: &str) -> Result<(), String> {

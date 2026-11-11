@@ -5,11 +5,13 @@
 //!
 //! Key items: [`Pointer`] (normalized RFC 6901 pointers), [`DataModel`]
 //! (pointer-addressed JSON), [`Write`] (one committed change) and [`Error`]
-//! (classified by [`Category`]).
+//! (classified by [`Category`]) and [`Watchers`] (observers a write notifies).
 
 mod data;
 mod error;
 mod pointer;
+mod subscribe;
+pub use subscribe::Watchers;
 
 pub use data::{DataModel, Write};
 pub use error::{Category, Error};
