@@ -2349,13 +2349,13 @@ oku cli task done --project slider --id t-1550 --result "resolve_path; core/data
   - `pub fn parse_template(input: &str) -> Result<Vec<Expr>, Error>`; constants `MAX_TEMPLATE_CHARS = 10_000`, `MAX_TEMPLATE_PARTS = 1_000`, `MAX_DEPTH = 100`.
   - `Category::Parse` (`"ParseError"`) and `Category::Expression` (`"ExpressionError"`); variants `ExpressionSyntax { message: &'static str, offset: usize }` (Parse) and `ExpressionLimit { limit: &'static str }` (Expression).
 
-Grammar, derived from the `parse_expression_template` cases of `core/expressions.yaml` (the 86 cases are the acceptance test; the TypeScript reference parser under `typescript/core/web_core/src/` upstream is the tie-breaker when a case is ambiguous):
+Grammar, derived from the `parse_expression_template` cases of `core/expressions.yaml` (the 92 cases of the vendored suite are the acceptance test; the TypeScript reference parser under `typescript/core/web_core/src/` upstream is the tie-breaker when a case is ambiguous):
 
 - Template: text with `${ expr }` interpolations; `\${` is a literal `${`. Adjacent text parts are joined; empty text is dropped. More than 10 000 characters or 1 000 parts → `ExpressionLimit`.
 - `expr` is, after skipping whitespace: a nested `${ expr }`; a `'…'` or `"…"` string (escapes `\n`, `\t`, `\r`, `\\`, `\'`, `\"`; any other `\x` is `x`); or a *token* (maximal run of characters other than whitespace, `( ) , : ' " }`), then:
   - token followed by `(` → call; the name is a UAX #31 identifier (`XID_Start` or `_`, then `XID_Continue`), optionally prefixed by `@`; arguments are `name: expr` separated by `,`, trailing comma allowed; a positional or malformed argument → `Expected ':' after argument name`; anything else after an argument → `Expected ',' or ')' after function arguments`.
   - `true` / `false` → booleans; `null` → empty string (dropped in templates, `""` as an argument).
-  - numeric-looking token (`[+-]?` then a digit, or `.` and a digit) → number: `[+-]? (digits [. digits*] | . digits) ([eE] [+-]? digits)?`, else `Invalid number literal`; non-finite → `Number literal out of range`; `-0` → `0`; integral values within ±(2^53−1) become JSON integers.
+  - numeric-looking token (`[+-]?` then a digit, or `.` and a digit; checked before the call rule) → number literal: the longest prefix of sign, digits and dots, then an exponent (`e`/`E`, sign, digits) even when malformed; it must match `[+-]? (digits [. digits*] | . digits) ([eE] [+-]? digits)?`, else `Invalid number literal`; the rest of the token is left to the caller, so `${-1x}` → `Unexpected characters` (conformance `test_expr_error_trailing_characters_after_number`, as the TypeScript reference scans); non-finite → `Number literal out of range`; `-0` → `0`; integral values within ±(2^53−1) become JSON integers.
   - anything else is a path if every character is `XID_Continue` or one of `/ . - ~`, else `Unexpected characters`.
 - After `expr`, only whitespace then `}` may follow: end of input → `Unclosed interpolation`; anything else → `Unexpected characters`.
 - Nesting deeper than 100 (interpolations and call arguments together) → `Max recursion depth exceeded`.
@@ -2377,7 +2377,7 @@ use super::*;
 
 #[rstest]
 #[case("42", json!(42))]
-#[case("-3.14", json!(-3.14))]
+#[case("-3.25", json!(-3.25))]
 #[case("1e5", json!(100000))]
 #[case("1.", json!(1))]
 #[case(".5", json!(0.5))]
@@ -2412,6 +2412,16 @@ fn parse_huge_literal_is_out_of_range() {
 #[case("-.5", true)]
 fn looks_numeric_classifies_token(#[case] token: &str, #[case] numeric: bool) {
     assert_that!(looks_numeric(token)).is_equal_to(numeric);
+}
+
+#[rstest]
+#[case("-1x", 2)]
+#[case("1.2.3", 5)]
+#[case("1e+", 3)]
+#[case("-.5E-1}", 6)]
+#[case("1e5x", 3)]
+fn literal_len_numeric_token_stops_after_literal(#[case] token: &str, #[case] len: usize) {
+    assert_that!(literal_len(token)).is_equal_to(len);
 }
 ```
 
@@ -2453,6 +2463,7 @@ fn parse_template_valid_input_gives_parts(#[case] input: &str, #[case] expected:
 #[case("${add(a: 1, b: 2}", "after function arguments")]
 #[case("${a b}", "Unexpected characters")]
 #[case("${a½}", "Unexpected characters")]
+#[case("${-1x}", "Unexpected characters")]
 fn parse_template_malformed_input_is_parse_error(#[case] input: &str, #[case] message: &str) {
     assert_that!(parse_template(input).unwrap_err().to_string()).contains(message);
 }
@@ -2600,6 +2611,27 @@ pub(super) fn looks_numeric(token: &str) -> bool {
     }
 }
 
+/// Byte length of the literal at the start of a numeric `token`.
+///
+/// Scans a sign, digits and dots, then an exponent (`e`, sign, digits) even
+/// when malformed, so `1e+` is rejected as a literal while `-1x` stops before `x`.
+pub(super) fn literal_len(token: &str) -> usize {
+    let bytes = token.as_bytes();
+    let at = |end: usize, accept: fn(u8) -> bool| bytes.get(end).copied().is_some_and(accept);
+    let mut end = usize::from(at(0, |b| matches!(b, b'+' | b'-')));
+    while at(end, |b| b.is_ascii_digit() || b == b'.') {
+        end += 1;
+    }
+    if at(end, |b| matches!(b, b'e' | b'E')) {
+        end += 1;
+        end += usize::from(at(end, |b| matches!(b, b'+' | b'-')));
+        while at(end, |b| b.is_ascii_digit()) {
+            end += 1;
+        }
+    }
+    end
+}
+
 /// Parses a numeric token; integral values become JSON integers.
 pub(super) fn parse(token: &str, offset: usize) -> Result<Value, Error> {
     if !well_formed(token) {
@@ -2726,6 +2758,13 @@ impl Parser {
             _ => {
                 let start = self.pos;
                 let token = self.token();
+                if number::looks_numeric(&token) {
+                    // The literal is ASCII, so its byte length is its char count;
+                    // whatever follows it is left for the caller to reject.
+                    let len = number::literal_len(&token);
+                    self.pos = start + len;
+                    return number::parse(&token[..len], start).map(Expr::Literal);
+                }
                 if token.is_empty() {
                     return Err(match self.peek() {
                         None => syntax(start, "Unclosed interpolation"),
@@ -2836,7 +2875,6 @@ fn classify(token: &str, start: usize) -> Result<Expr, Error> {
         "true" => Ok(Expr::Literal(Value::Bool(true))),
         "false" => Ok(Expr::Literal(Value::Bool(false))),
         "null" => Ok(Expr::Literal(Value::String(String::new()))),
-        _ if number::looks_numeric(token) => number::parse(token, start).map(Expr::Literal),
         _ if token.chars().all(|c| is_xid_continue(c) || matches!(c, '/' | '.' | '-' | '~')) => {
             Ok(Expr::Path(token.to_owned()))
         }
@@ -2886,6 +2924,9 @@ pub fn run(case: &Case) -> Result<(), String> {
     assert_case_keys(case, &["input", "expect", "expect_error"])?;
     let at = format!("{}#{}", case.suite, case.name);
     let input = case.get("input").and_then(Value::as_str).ok_or("a case needs `input`")?;
+    if case.get("expect").is_some() && case.get("expect_error").is_some() {
+        return Err(format!("{at}: `expect` and `expect_error` are exclusive"));
+    }
     match (parse_template(input), case.get("expect_error"), case.get("expect")) {
         (Err(err), Some(expected), _) => expect_error(&err, expected, &at),
         (Err(err), None, _) => Err(format!("{at}: {err}")),

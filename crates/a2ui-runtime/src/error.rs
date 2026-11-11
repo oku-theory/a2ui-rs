@@ -8,6 +8,10 @@ use snafu::{Backtrace, Snafu};
 pub enum Category {
     /// A data model read or write that cannot be satisfied at its path.
     Data,
+    /// Malformed text, such as an expression template that does not parse.
+    Parse,
+    /// An expression template past the length or part limits.
+    Expression,
 }
 
 impl Category {
@@ -15,6 +19,8 @@ impl Category {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Data => "DataError",
+            Self::Parse => "ParseError",
+            Self::Expression => "ExpressionError",
         }
     }
 }
@@ -67,6 +73,19 @@ pub(crate) enum Inner {
         segment: String,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("{message} at offset {offset}"))]
+    ExpressionSyntax {
+        message: &'static str,
+        offset: usize,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Expression template exceeds {limit}"))]
+    ExpressionLimit {
+        limit: &'static str,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -77,6 +96,8 @@ impl Inner {
             | Self::TraversePrimitive { .. }
             | Self::NonNumericSegment { .. }
             | Self::IndexOutOfRange { .. } => Category::Data,
+            Self::ExpressionSyntax { .. } => Category::Parse,
+            Self::ExpressionLimit { .. } => Category::Expression,
         }
     }
 }

@@ -25,6 +25,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "speculoos",
+ "unicode-ident",
 ]
 
 [[package]]

@@ -19,7 +19,10 @@ It builds for `wasm32-unknown-unknown`.
   stay silent). Renderers map keys to their own reactive cells.
 - `context`: `resolve_path(path, scope)`; `""`/`"."` is the scope, `/…` is absolute, anything
   else is appended to the scope.
+- `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
+  with named arguments); `\${` is literal text. Limits: 10 000 characters, 1 000 parts, nesting
+  100 (interpolations and call arguments together). Grammar notes: Plan 1, Task 7.
 
 ## Dependencies
 
-`snafu`, `serde_json`.
+`snafu`, `serde_json`, `unicode-ident` (UAX #31 identifiers).
