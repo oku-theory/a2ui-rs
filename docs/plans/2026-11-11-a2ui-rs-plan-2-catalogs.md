@@ -55,11 +55,11 @@ paragraph) and `vendor/a2ui/conformance/conformance_harness_implementation_guide
 
 ## Decisions (approved by the user, 2026-11-11)
 
-- JSON Schema validation uses `jsonschema` pinned to 0.61.1 with default features off (no HTTP
-  or file resolution, hence no `idna` dependency), `PatternOptions::regex()` with 64 KiB
+- JSON Schema validation uses `jsonschema` pinned exactly to 0.61.1 with default features off
+  (no HTTP or file resolution, hence no `idna` dependency), `PatternOptions::regex()` with 64 KiB
   `size_limit`/`dfa_size_limit`, and `.offline()` (the crate's own retriever that refuses every
-  fetch) on every build. The `format` keyword stays an annotation (format assertion off); no C2 case
-  needs it.
+  fetch) on every build. The `format` keyword stays an annotation (format assertion off); no C2
+  case needs it.
 - One `build` per catalog entry, not `ValidationOptions::build_map`: `build_map` compiles every
   object node independently and silently drops the nodes whose compilation fails, so a broken
   entry would just be missing; it is also slower (basic catalog: 51 ms against 21 ms).
@@ -76,8 +76,10 @@ paragraph) and `vendor/a2ui/conformance/conformance_harness_implementation_guide
   (the no-catalog one): the common types form a cycle `FunctionCall` -> `IndexSystemFunction`
   -> `DynamicNumber` -> `FunctionCall`, so one shared envelope cannot serve both. The review
   suggestion to unify them is declined.
+- `Error::code()` (stable A2UI codes) is deferred to Plan 3 (t-1565): Plan 2 reports categories
+  only, as Plan 1 did, since codes need the message processor that reports them.
 - `schema.rs` stays one module: it is under 200 lines even with the common types and the
-  metadata and `@index` helpers, so splitting it would add files without a concept to name.
+  metadata helpers, so splitting it would add files without a concept to name.
 - The harness writes protocol versions without the leading `v` (`0.9`, as catalogs spell it);
   the runtime's default for a catalog without `protocolVersion` is `0.9`
   (`catalog_definition.json`), which it refuses, and the harness skips such cases through
@@ -144,12 +146,13 @@ Cargo.toml                                   # + jsonschema 0.61.1, percent-enco
 deny.toml                                    # allow: MIT, MIT-0, Apache-2.0, Unicode-3.0, Zlib (T2)
 justfile                                     # deps recipe in check (T2); wasm builds a2ui-catalog-basic (T6)
 AGENTS.md                                    # runtime dependency invariant reworded (T2)
-vendor/sync.sh                               # + mcp/v1, vegachart/v1, NOTICE, embedded copies (T1)
+vendor/sync.sh                               # + mcp/v1, vegachart/v1, NOTICE, embedded copies (T1);
+                                             # basic catalog copy (T6)
 docs/specs/2026-11-10-a2ui-rs-leptos-design.md   # amended (T1)
 crates/a2ui-runtime/
   schemas/v1_0/{common_types.json,agent_to_renderer.json,LICENSE}   # copied by sync.sh (T1)
   src/schema.rs (+ _tests)        # embedded documents (T1), common types (T2), metadata (T4),
-                                  # @index (T5); stays one file (under 200 lines)
+                                  # stays one file (under 200 lines)
   src/ident.rs (+ _tests)         # is_identifier, moved from expression/parser.rs (T2)
   src/limits.rs (+ _tests)        # depth, pattern cap (T2); catalog caps, `expand` (T4)
   src/validator.rs (+ _tests)     # jsonschema compile/check (T2)
@@ -192,7 +195,8 @@ Oku: t-1554.
 - Create: `crates/a2ui-runtime/src/schema.rs`, `crates/a2ui-runtime/src/schema_tests.rs`,
   `crates/a2ui-conformance/src/handlers/schema_doc.rs`
 - Modify: `crates/a2ui-runtime/src/{lib.rs,error.rs}`, `crates/a2ui-runtime/ARCHITECTURE.md`,
-  `crates/a2ui-conformance/src/{lib.rs,paths.rs,case.rs,keys.rs,handlers/mod.rs,handlers/expression.rs,handlers/resolve_path.rs}`,
+  `crates/a2ui-conformance/src/{lib.rs,paths.rs,case.rs,case_tests.rs,keys.rs,handlers/mod.rs,handlers/expression.rs,handlers/resolve_path.rs}`,
+  `crates/a2ui-conformance/tests/core.rs`,
   `crates/a2ui-conformance/skips.toml`, `crates/a2ui-conformance/ARCHITECTURE.md`
 
 **Interfaces:**
@@ -228,7 +232,7 @@ rm -rf "$root/a2ui"
 mkdir -p "$root/a2ui/specification" "$root/a2ui/catalogs/basic" "$root/a2ui/catalogs/mcp" \
   "$root/a2ui/catalogs/vegachart"
 cp "$work/a2ui/LICENSE" "$root/a2ui/LICENSE"
-if [ -f "$work/a2ui/NOTICE" ]; then
+if [[ -f "$work/a2ui/NOTICE" ]]; then
   cp "$work/a2ui/NOTICE" "$root/a2ui/NOTICE"
 fi
 cp -R "$work/a2ui/specification/v1_0" "$root/a2ui/specification/v1_0"
@@ -241,7 +245,8 @@ mkdir -p "$schemas"
 cp "$work/a2ui/specification/v1_0/json/common_types.json" \
   "$work/a2ui/specification/v1_0/json/agent_to_renderer.json" "$schemas/"
 cp "$work/a2ui/LICENSE" "$schemas/LICENSE"
-if [ -f "$work/a2ui/NOTICE" ]; then
+rm -f "$schemas/NOTICE-A2UI"
+if [[ -f "$work/a2ui/NOTICE" ]]; then
   cp "$work/a2ui/NOTICE" "$schemas/NOTICE-A2UI"
 fi
 printf '%s\n' "$commit" > "$root/UPSTREAM"
@@ -252,8 +257,8 @@ printf '%s\n' "$commit" > "$root/UPSTREAM"
 Run: `just vendor-sync 3295e67b5f4820639aa88c578a64af2196d0b752` (needs network to github.com).
 Then: `git status --short vendor crates/a2ui-runtime/schemas`
 Expected: only new paths (`vendor/a2ui/catalogs/mcp/`, `vendor/a2ui/catalogs/vegachart/`,
-`crates/a2ui-runtime/schemas/`); `git diff --stat vendor/a2ui/conformance vendor/a2ui/specification`
-prints nothing.
+`vendor/a2ui/NOTICE` when upstream has one, `crates/a2ui-runtime/schemas/`);
+`git diff --stat vendor/a2ui/conformance vendor/a2ui/specification` prints nothing.
 
 - [ ] **Step 3: Amend the spec**
 
@@ -307,6 +312,16 @@ names. `vendor/sync.sh` further copies upstream's `LICENSE` (and its `NOTICE`, a
 when it exists) beside the schemas the runtime embeds, since a crate cannot include files outside
 its directory."
 
+(g) In §2, replace the `regex_guard` bullet (``- `regex_guard`: static analyzer for the ECMAScript
+subset (256/4096 code-point caps, no nested or overlapping quantifiers, no backreferences or
+lookbehind) in front of the `regex` crate.``) with:
+
+```markdown
+- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 64 KiB
+  size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
+  backtracking regex.
+```
+
 - [ ] **Step 4: Write the failing runtime test**
 
 Create `crates/a2ui-runtime/src/schema_tests.rs`:
@@ -334,7 +349,7 @@ fn agent_to_renderer_schema_embedded_document_is_v1_0() {
 - [ ] **Step 5: Run it to see it fail**
 
 Run: `cargo nextest run -p a2ui-runtime schema`
-Expected: compile error (`schema` module missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 6: Add the `Catalog` category and the embedded-schema error**
 
@@ -605,7 +620,7 @@ common type closure, metadata validation) arrive with their caller in Task 4, so
 Root `Cargo.toml`, in `[workspace.dependencies]` (alphabetical):
 
 ```toml
-jsonschema = { version = "0.61.1", default-features = false }
+jsonschema = { version = "=0.61.1", default-features = false }
 percent-encoding = "2"
 ```
 
@@ -717,13 +732,13 @@ fn deeper_than_value_past_the_cap_is_rejected() {
 }
 
 #[test]
-fn deeper_than_million_levels_in_a_small_stack_is_rejected() {
+fn deeper_than_hundred_thousand_levels_in_a_small_stack_is_rejected() {
     let rejected = std::thread::Builder::new()
         .stack_size(256 * 1024)
         .spawn(|| {
-            let value = nested(1_000_000);
+            let value = nested(100_000);
             let rejected = deeper_than(&value, MAX_JSON_DEPTH);
-            // Dropping 1 000 000 levels would recurse through serde_json's `Drop` and
+            // Dropping 100 000 levels would recurse through serde_json's `Drop` and
             // overflow this thread's stack: the test leaks the value on purpose.
             std::mem::forget(value);
             rejected
@@ -963,7 +978,7 @@ fn validate_common_type_too_deep_value_is_validation_error() {
 - [ ] **Step 3: Run them to see them fail**
 
 Run: `cargo nextest run -p a2ui-runtime ident limits validator bundle schema`
-Expected: compile errors (modules and functions missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 4: Add the `Validation` category and the new errors**
 
@@ -1099,6 +1114,11 @@ pub(crate) const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/sc
 
 /// Compiles `document`, whose root `$ref` names the schema instances must match.
 pub(crate) fn compile(document: &Value) -> Result<Validator, Error> {
+    build(document).map_err(|message| -> Error { SchemaBuildSnafu { message }.build().into() })
+}
+
+/// [`compile`] with the bare `jsonschema` build message as the error, for cached validators.
+pub(crate) fn build(document: &Value) -> Result<Validator, String> {
     let patterns = PatternOptions::regex()
         .size_limit(MAX_PATTERN_BYTES)
         .dfa_size_limit(MAX_PATTERN_BYTES);
@@ -1107,13 +1127,7 @@ pub(crate) fn compile(document: &Value) -> Result<Validator, Error> {
         .with_pattern_options(patterns)
         .offline()
         .build(document)
-        .map_err(|err| -> Error {
-            SchemaBuildSnafu {
-                message: err.to_string(),
-            }
-            .build()
-            .into()
-        })
+        .map_err(|err| err.to_string())
 }
 
 /// `top` as a schema document whose root `$ref` is `reference`, such as `#/components/Text`.
@@ -1262,7 +1276,7 @@ use snafu::{OptionExt, ensure};
 use crate::bundle::{any_function_envelope, local_ref, localize_refs};
 use crate::error::{EmbeddedSchemaSnafu, Error, UnknownDefinitionSnafu, ValueLimitSnafu};
 use crate::limits::{MAX_JSON_DEPTH, deeper_than};
-use crate::validator::{check, compile, rooted};
+use crate::validator::{build, check, rooted};
 ```
 
 and it gains:
@@ -1270,7 +1284,7 @@ and it gains:
 ```rust
 /// One compiled validator per common type, built on first use.
 static COMMON_VALIDATORS: LazyLock<Result<BTreeMap<String, Validator>, String>> =
-    LazyLock::new(|| common_validators().map_err(|err| err.to_string()));
+    LazyLock::new(common_validators);
 
 /// The `$defs` of `common_types.json`, by name.
 pub(crate) fn common_type_defs() -> Result<&'static Map<String, Value>, Error> {
@@ -1294,13 +1308,16 @@ pub(crate) fn common_document() -> Result<Map<String, Value>, Error> {
     Ok(Map::from_iter([("$defs".to_owned(), Value::Object(defs))]))
 }
 
-fn common_validators() -> Result<BTreeMap<String, Validator>, Error> {
-    let top = common_document()?;
-    common_type_defs()?
+/// Builds the validators; the error is the cause only (the document's own error, or the
+/// `jsonschema` build message), which `embedded_error` prefixes once.
+fn common_validators() -> Result<BTreeMap<String, Validator>, String> {
+    let top = common_document().map_err(|err| err.to_string())?;
+    common_type_defs()
+        .map_err(|err| err.to_string())?
         .keys()
         .map(|name| {
             let reference = local_ref(&format!("/$defs/{name}"));
-            Ok((name.clone(), compile(&rooted(&top, &reference))?))
+            Ok((name.clone(), build(&rooted(&top, &reference))?))
         })
         .collect()
 }
@@ -1554,13 +1571,15 @@ fn effective_version_case_without_catalog_is_none() {
 #[test]
 fn effective_version_missing_catalog_file_is_error() {
     let case = one("- {name: t, action: round_trip, catalogPath: 'nope.json'}");
-    assert_that!(case.effective_version(&root())).is_err();
+    let message = case.effective_version(&root()).unwrap_err();
+    assert_that!(message).contains("nope.json");
 }
 
 #[test]
 fn effective_version_non_string_catalog_path_is_error() {
     let case = one("- {name: t, action: round_trip, catalogPath: 3}");
-    assert_that!(case.effective_version(&root())).is_err();
+    let message = case.effective_version(&root()).unwrap_err();
+    assert_that!(message).contains("`catalogPath` must be a string");
 }
 ```
 
@@ -2017,13 +2036,12 @@ and fix the runtime or the skip entry, never the baseline.
 
 - [ ] **Step 7: Update `crates/a2ui-conformance/ARCHITECTURE.md`**
 
-Change the `case` bullet (lines 8-9: "the protocol version is the top-level `protocolVersion`,
-else `catalog.protocolVersion`") to say that `effective_version` gives the version (declared,
-else the `catalogPath` file's, else `0.9` for a catalog; no leading `v`; a read error fails
-that trial).
+Change the `case` bullet (the one saying "the protocol version is the top-level
+`protocolVersion`, else `catalog.protocolVersion`") to say that `effective_version` gives the
+version (declared, else the `catalogPath` file's, else `0.9` for a catalog; no leading `v`; a
+read error fails that trial), keeping Task 1's clause "`at()` is the `suite#name` location".
 
-Replace the `skips` bullet (lines 10-13; line 11 still describes the hardcoded version filter)
-with:
+Replace the `skips` bullet (it still describes the hardcoded version filter) with:
 
 ```markdown
 - `skips`: `skips.toml` `[actions]`, `[cases]`, `[versions]` (each with a reason; the
@@ -2099,7 +2117,7 @@ Oku: t-1557.
     MAX_SCHEMA_DEPTH, MAX_CATALOG_PATTERNS, Expansion, expand, more_nodes_than}`,
     `schema::validate_component_metadata`, `catalog::document::union(section: &str, names: &[&str],
     discriminator: Option<&str>) -> Value` (sorts `names` itself; Task 7 regenerates unions
-    with it), `Catalog::kept_document() -> Map<String, Value>` (Task 7 derives from it),
+    with it), `pub(super) Catalog::kept_document() -> Map<String, Value>` (Task 7 derives from it),
     `ComponentDef::validator()` and `FunctionDef::validator()` `-> &jsonschema::Validator`
     (Task 5 reads them and removes their `dead_code` expectations),
     `AllowedCallers::from_catalog_str(text: &str) -> Option<AllowedCallers>`.
@@ -2353,7 +2371,9 @@ fn function_call_envelope_closes_the_call_over_function_common() {
 ```
 
 Append to `crates/a2ui-runtime/src/limits_tests.rs` (its imports gain
-`use std::collections::BTreeSet;`):
+`use std::collections::BTreeSet;` and
+`use crate::catalog::test_support::{fan_out, nested};`; delete its own `nested` helper from
+Task 2, since the shared one below replaces it):
 
 ```rust
 #[rstest]
@@ -2369,17 +2389,8 @@ fn more_nodes_than_every_node_is_counted(
     assert_that!(more_nodes_than(&value, limit)).is_equal_to(expected);
 }
 
-fn fan_out(levels: usize) -> Value {
-    let mut defs = serde_json::Map::new();
-    defs.insert("L0".to_owned(), json!({"type": "string"}));
-    for level in 1..=levels {
-        let below = format!("#/$defs/L{}", level - 1);
-        defs.insert(
-            format!("L{level}"),
-            json!({"allOf": [{"$ref": below}, {"$ref": below}]}),
-        );
-    }
-    json!({"$defs": defs})
+fn fan_out_document(levels: usize) -> Value {
+    json!({"$defs": fan_out(levels, false)})
 }
 
 fn chain(links: usize) -> Value {
@@ -2416,13 +2427,13 @@ fn expand_ref_counts_its_target() {
 
 #[test]
 fn expand_fan_out_counts_every_followed_ref() {
-    let root = fan_out(6);
+    let root = fan_out_document(6);
     assert_that!(within(expand(&root, &root["$defs"]["L6"], 10_000)).0).is_equal_to(506);
 }
 
 #[test]
 fn expand_past_the_budget_is_too_large() {
-    let root = fan_out(40);
+    let root = fan_out_document(40);
     assert_that!(expand(&root, &root["$defs"]["L40"], 1000)).is_equal_to(Expansion::TooLarge);
 }
 
@@ -2550,6 +2561,11 @@ pub(crate) fn catalog_error(result: Result<Catalog, Error>) -> String {
     let err = result.unwrap_err();
     assert_that!(err.category()).is_equal_to(Category::Catalog);
     err.to_string()
+}
+
+/// A scalar wrapped in `levels` single-key objects.
+pub(crate) fn nested(levels: usize) -> Value {
+    (0..levels).fold(json!(1), |inner, _| json!({"a": inner}))
 }
 
 /// `$defs` `L0` to `L<levels>`, each level an `allOf` of two `$ref`s to the one below.
@@ -2682,9 +2698,9 @@ use super::super::test_support::{catalog_error, load, v10};
 use crate::Catalog;
 use crate::limits::{MAX_CATALOG_BYTES, MAX_CATALOG_ENTRIES, MAX_CATALOG_NODES, MAX_JSON_DEPTH};
 
-/// A v1.0 catalog whose deepest node lies `levels` levels down (`levels` at least 2).
+/// A v1.0 catalog nesting exactly `levels` levels of objects (`levels` at least 2).
 fn nested_document(levels: usize) -> Value {
-    let deep = (2..levels).fold(json!({}), |inner, _| json!({"type": "object", "x": inner}));
+    let deep = (2..levels).fold(json!(true), |inner, _| json!({"type": "object", "x": inner}));
     v10(json!({"$defs": {"deep": deep}}))
 }
 
@@ -2877,9 +2893,11 @@ fn accessors_instructions_are_read_from_the_document() {
 }
 ```
 
-(`nested_document(n)`: the root is level 0, `$defs` 1, `deep` 2, and each of the `n - 2` folds
-one more, so its innermost `{}` lies `n` levels down. The node cap document holds the root,
-`catalogId`, `protocolVersion`, `$defs`, `big`, `enum`, its array and 200 000 zeros.)
+(`nested_document(n)` nests exactly `n` levels, as Task 2's `deeper_than` counts them (a scalar
+is 0, `{"a": 1}` is 1): the root object is level 1, `$defs` 2, and each of the `n - 2` folds adds
+one object around a scalar, so `n = 64` is accepted and `n = 65` is rejected. The node cap
+document holds the root, `catalogId`, `protocolVersion`, `$defs`, `big`, `enum`, its array and
+200 000 zeros.)
 
 Create `crates/a2ui-runtime/src/catalog/entries_tests.rs`:
 
@@ -3927,11 +3945,13 @@ Its imports gain `bundle::local_ref` (already there). Add:
 ```rust
 /// The validator of a component definition's `metadata`, built on first use.
 static METADATA_VALIDATOR: LazyLock<Result<Validator, String>> =
-    LazyLock::new(|| metadata_validator().map_err(|err| err.to_string()));
+    LazyLock::new(metadata_validator);
 
-fn metadata_validator() -> Result<Validator, Error> {
+/// Builds the validator; the error is the cause only, as for `common_validators`.
+fn metadata_validator() -> Result<Validator, String> {
     let reference = local_ref("/$defs/ComponentCommon/properties/metadata");
-    compile(&rooted(&common_document()?, &reference))
+    let top = common_document().map_err(|err| err.to_string())?;
+    build(&rooted(&top, &reference))
 }
 
 /// Validates a component definition's `metadata`, which holds only UAX #31 `extensions`.
@@ -4139,7 +4159,7 @@ mod entries;
 mod load;
 mod shape;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -4342,10 +4362,10 @@ In `lib.rs` add `mod catalog;`,
 the crate doc's key items: `` [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`],
 [`FunctionDef`] and [`AllowedCallers`]) ``.
 
-The validators live in the definitions, behind an `Arc` so the definitions stay `Clone`
-(`jsonschema::Validator` is not). Nothing in this task reads them, so each `validator()`
-accessor carries a `dead_code` expectation (an unread accessor also leaves its field unread;
-the expectation on the method covers both, as probed). Task 5's `validate_component` reads
+The validators live in the definitions, behind an `Arc` so the definitions stay cheap to
+clone (`jsonschema::Validator`'s `Clone` is a deep copy of the compiled tree). Nothing in this
+task reads them, so each `validator()` accessor carries a `dead_code` expectation (an unread
+accessor also leaves its field unread; the expectation on the method covers both, as probed). Task 5's `validate_component` reads
 both accessors and deletes both expectations; no test of this task calls them, so the
 expectations hold in test builds too.
 
@@ -5245,7 +5265,7 @@ use rstest::rstest;
 use serde_json::{Value, json};
 use speculoos::prelude::*;
 
-use super::super::test_support::load;
+use super::super::test_support::{load, nested};
 use crate::limits::MAX_JSON_DEPTH;
 use crate::{Catalog, Category, Error};
 
@@ -5343,10 +5363,6 @@ fn any(key: &str, value: Value) -> Value {
     let mut component = json!({"id": "a1", "component": "Any"});
     component[key] = value;
     component
-}
-
-fn nested(levels: usize) -> Value {
-    (0..levels).fold(json!(1), |inner, _| json!({"a": inner}))
 }
 
 fn validate(component: &Value) -> Result<(), Error> {
@@ -5589,7 +5605,7 @@ The `oneOf` and `Unevaluated properties` texts are jsonschema 0.61.1's, followed
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cargo nextest run -p a2ui-runtime validate_component`
-Expected: compile errors (`validate_component` missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 3: Add the validation errors**
 
@@ -5899,6 +5915,10 @@ the catalog it runs in, found through `CatalogLookup`: exists, not `agentOnly`, 
 function's validator; `@index` as `IndexSystemFunction`; calls into catalogs not found only for
 identifiers).
 
+This task's additions bring the file past 50 lines: condense the older bullets (Plan 1's
+and Tasks 1 to 4's) until the file is at most 50 lines, keeping every module named, and check
+the final count with `wc -l crates/a2ui-runtime/ARCHITECTURE.md`.
+
 - [ ] **Step 7: Gate and commit**
 
 Run: `cargo fmt --all`, then `just check` then `just test`. Expected: green.
@@ -5938,7 +5958,8 @@ Oku: t-1559.
 
 **Interfaces:**
 - Consumes: `Catalog` API, `ComponentDef::shape` (Task 4), `Catalog::validate_component(component,
-  default_catalog, catalogs: &dyn CatalogLookup)`, with `Catalog: CatalogLookup` (Task 5);
+  default_catalog, catalogs: &(impl CatalogLookup + ?Sized))`, with `Catalog: CatalogLookup`
+  (Task 5);
   `catalog_input::{document, load}`, `schema_eq`, `json_eq`, `expect_error`,
   `assert_known_keys`, `Case::at` (Tasks 1, 3, 4).
 - Produces:
@@ -5959,13 +5980,7 @@ unit tests below prove `matches_builtin` can fail.
 
 The crate ships upstream's Apache-2.0 data, so it also ships upstream's license and, when
 upstream has one, its `NOTICE` (Apache-2.0 section 4(d)). In `vendor/sync.sh` (as Task 1 left
-it), add `/NOTICE` to the sparse set, so its first pattern line reads:
-
-```bash
-  /LICENSE /NOTICE /specification/v1_0 /catalogs/basic/v1 /catalogs/mcp/v1 /catalogs/vegachart/v1 \
-```
-
-and insert before the `printf` line:
+it), insert before the `printf` line:
 
 ```bash
 basic="$repo/crates/a2ui-catalog-basic"
@@ -6013,7 +6028,9 @@ workspace = true
 ```
 
 `license` is `Apache-2.0`, not the workspace's `MIT OR Apache-2.0`: the crate's substance is
-upstream's Apache-2.0 catalog, which cannot be offered under MIT. `cargo deny` accepts it
+upstream's Apache-2.0 catalog, which cannot be offered under MIT. (The runtime keeps its
+dual licence: Apache-2.0 files may ship inside a dual-licensed crate with their notice, here the
+upstream `LICENSE` beside the embedded schemas.) `cargo deny` accepts it
 (`Apache-2.0` is on the allow list). An `include` entry naming an absent file is skipped by
 `cargo package`, so `NOTICE-A2UI` ships exactly when sync.sh copied it. (`src/**` also ships
 `lib_tests.rs`, which `#[cfg(test)]` keeps out of builds, as in `a2ui-runtime`.)
@@ -6087,7 +6104,7 @@ fn catalog_text_field_without_value_is_invalid() {
 because the call's catalog, the default `CATALOG_ID`, is found through the lookup.
 
 Run: `cargo nextest run -p a2ui-catalog-basic`
-Expected: compile error (`src/lib.rs` items missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 3: Write `src/lib.rs`**
 
@@ -6256,7 +6273,7 @@ fn entries_mismatch_is_reported(#[case] expected: Value, #[case] fragment: &str)
 ```
 
 Run: `cargo nextest run -p a2ui-conformance --lib catalog_checks`
-Expected: compile errors (`catalog_checks` missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 5: Write `catalog_checks.rs`**
 
@@ -6338,7 +6355,7 @@ fn named(
     Ok(())
 }
 
-/// Every `$ref` of `schema` starts with `#` and resolves in it, and there is at least one.
+/// Checks every `$ref` of `schema` is local and resolves.
 ///
 /// Fragments are percent-decoded first, as a URI reference requires.
 pub fn self_contained(schema: &Value) -> Result<(), String> {
@@ -6554,7 +6571,7 @@ fn list<'a>(expect: &'a Map<String, Value>, key: &str, at: &str) -> Result<&'a [
 `unwrap_or(Value::Null)` on the metadata: the suite writes "no metadata" as `null`, so `None`
 compares as `null`; this is the expectation's encoding, not a fallback. Components are
 validated with the catalog's own id as the surface default and the catalog itself as the
-`CatalogLookup` (`&Catalog` coerces to `&dyn CatalogLookup`), as the suite's single-catalog
+`CatalogLookup` (the handler passes the catalog itself), as the suite's single-catalog
 cases mean: a call into another catalog id is checked for identifiers only.
 
 Create `crates/a2ui-conformance/src/handlers/to_json.rs`:
@@ -6910,7 +6927,7 @@ tests do; the default catalog `"derived"` is the derived catalog, found through 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cargo nextest run -p a2ui-runtime derive`
-Expected: compile errors (`Derivation`, `DeriveEntry` missing).
+Expected: fails to compile: unresolved items.
 
 - [ ] **Step 3: Add the errors**
 
@@ -6958,7 +6975,7 @@ const SOURCE_ONLY: [&str; 4] = ["$id", "title", "description", "instructions"];
 pub enum DeriveEntry {
     /// Keep the source catalog's entry of this name.
     Keep(String),
-    /// A new entry with this name and schema, replacing a source entry of the same name.
+    /// A new entry, replacing any source entry of that name.
     Define(String, Value),
 }
 
@@ -7249,7 +7266,7 @@ Expected: the seven v1.0 derive cases pass;
 a new id from a `Derivation`, keeping the source's version, theme and `$defs`, rejecting
 duplicate names, regenerating the unions of the lists it changes, loaded by `from_json`).
 `crates/a2ui-conformance/ARCHITECTURE.md`: `handlers` gains `derive`. Both stay at most 50
-lines.
+lines: condense older runtime bullets again if needed, and check both with `wc -l`.
 
 - [ ] **Step 9: Gate and commit**
 
@@ -7300,16 +7317,13 @@ Run each and fix what it finds (G10):
 grep -rn "dead_code\|#\[allow" crates/
 grep -rnE '\.(unwrap|expect)\(' crates/*/src --include='*.rs' \
   | grep -v '_tests\.rs:\|/test_support\.rs:'
-grep -rn "struct Validators\|fn expanded_size\|fn is_schema\|AllowedCallers::parse(" crates/
 grep -rn "fn is_identifier\|fn localize_ref\|fn pointer_of\|fn collect_refs\|fn refs(" crates/
 find crates -name '*.rs' -exec wc -l {} + | sort -n | tail -5
 wc -l crates/*/ARCHITECTURE.md
 ```
 
-Expected: the first three print nothing (no `dead_code` expectation or `allow`; no `unwrap`
-or `expect` outside tests; no leftover of the pre-contract names: validators live in
-`ComponentDef` / `FunctionDef`, `expand` replaced `expanded_size`, `argument_names` decides by
-key, `AllowedCallers::from_catalog_str` replaced `parse`). `is_identifier` is defined once
+Expected: the first two print nothing (no `dead_code` expectation or `allow`; no `unwrap`
+or `expect` outside tests). `is_identifier` is defined once
 (`ident.rs`), `localize_ref` and `pointer_of` once (`bundle.rs`); the two `$ref` collectors are
 the test helper in `compile_tests.rs` and `catalog_checks::collect_refs` (harness), which stay
 apart because the harness must not reuse runtime internals to judge the runtime. No source file
