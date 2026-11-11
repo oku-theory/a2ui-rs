@@ -22,6 +22,8 @@ It builds for `wasm32-unknown-unknown`.
 - `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
   with named arguments); `\${` is literal text. Limits: 10 000 characters, 1 000 parts, nesting
   100 (interpolations and call arguments together). Grammar notes: Plan 1, Task 7.
+- `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
+  `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is.
 
 ## Dependencies
 

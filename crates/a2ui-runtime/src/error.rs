@@ -12,6 +12,8 @@ pub enum Category {
     Parse,
     /// An expression template past the length or part limits.
     Expression,
+    /// A catalog that cannot be loaded, or an embedded schema that is broken.
+    Catalog,
 }
 
 impl Category {
@@ -21,6 +23,7 @@ impl Category {
             Self::Data => "DataError",
             Self::Parse => "ParseError",
             Self::Expression => "ExpressionError",
+            Self::Catalog => "CatalogError",
         }
     }
 }
@@ -86,6 +89,13 @@ pub(crate) enum Inner {
         limit: &'static str,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("Embedded schema {name} is broken: {message}"))]
+    EmbeddedSchema {
+        name: &'static str,
+        message: String,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -98,6 +108,7 @@ impl Inner {
             | Self::IndexOutOfRange { .. } => Category::Data,
             Self::ExpressionSyntax { .. } => Category::Parse,
             Self::ExpressionLimit { .. } => Category::Expression,
+            Self::EmbeddedSchema { .. } => Category::Catalog,
         }
     }
 }

@@ -15,5 +15,5 @@ pub use case::{Case, load_suite, parse_suite};
 pub use compare::{expect_error, json_eq};
 pub use keys::{assert_case_keys, assert_known_keys};
 pub use manifest::{Manifest, Status};
-pub use paths::upstream_root;
+pub use paths::{read_json, upstream_root};
 pub use skips::Skips;

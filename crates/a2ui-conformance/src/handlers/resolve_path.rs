@@ -9,7 +9,7 @@ use crate::keys::{assert_case_keys, assert_known_keys};
 /// Resolves `args.path` against `args.contextPath` and compares with `expect`.
 pub fn run(case: &Case) -> Result<(), String> {
     assert_case_keys(case, &["catalog", "protocolVersion", "args", "expect"])?;
-    let at = format!("{}#{}", case.suite, case.name);
+    let at = case.at();
     let args = case
         .get("args")
         .and_then(Value::as_object)

@@ -21,5 +21,5 @@ pub fn assert_known_keys(
 /// Checks a case's top-level keys; `name`, `description`, `features`, `action` are implied.
 pub fn assert_case_keys(case: &Case, allowed: &[&str]) -> Result<(), String> {
     let all: Vec<&str> = CASE_METADATA.iter().chain(allowed).copied().collect();
-    assert_known_keys(&case.body, &all, &format!("{}#{}", case.suite, case.name))
+    assert_known_keys(&case.body, &all, &case.at())
 }

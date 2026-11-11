@@ -53,3 +53,9 @@ fn parse_suite_empty_list_is_error() {
 fn parse_suite_case_without_action_is_error() {
     assert_that!(parse_suite("core/x.yaml", "- name: test_x\n")).is_err();
 }
+
+#[test]
+fn at_parsed_case_joins_suite_and_name() {
+    let cases = parse_suite("core/x.yaml", SUITE).unwrap();
+    assert_that!(cases[0].at()).is_equal_to("core/x.yaml#test_top_level_version".to_owned());
+}

@@ -33,7 +33,11 @@ surfaces in one step (separate spec).
 
 Cargo workspace; upstream `specification/v1_0`, `catalogs/basic/v1` and `conformance/` vendored by
 `vendor/sync.sh` (a sparse clone copying only those directories; `git subtree` would pull every
-upstream SDK) at a pinned commit recorded in `vendor/UPSTREAM`.
+upstream SDK) at a pinned commit recorded in `vendor/UPSTREAM`. The directories
+copied also include `catalogs/mcp/v1` and `catalogs/vegachart/v1`, which the catalog suite
+names. `vendor/sync.sh` further copies upstream's `LICENSE` (and its `NOTICE`, as `NOTICE-A2UI`,
+when it exists) beside the schemas the runtime embeds, since a crate cannot include files outside
+its directory.
 
 | Crate | Published | Role |
 |---|---|---|
@@ -67,10 +71,13 @@ One concept per module:
 - `function`: `FunctionRegistry` (`returnType`, `allowedCallers`, `requiresUserActivation`, local
   vs `callAgentFunction` routing); implementations are `Fn(&Args, &Ctx) -> Result<Value>` registered
   per catalog.
-- `regex_guard`: static analyzer for the ECMAScript subset (256/4096 code-point caps, no nested or
-  overlapping quantifiers, no backreferences or lookbehind) in front of the `regex` crate.
-- `catalog`: catalog loading and validation (allowed top-level keys, restricted `$ref` targets
-  never fetched, reserved `Surface` name, parent/child rules); a surface's `CatalogSet`.
+- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 64 KiB
+  size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
+  backtracking regex.
+- `catalog`: catalog loading and validation (no allowed top-level key list, since upstream
+  accepts `theme`, catalog-level `metadata` and vendor keys; restricted `$ref` targets never
+  fetched; reserved `Surface` name; size and depth caps; parent/child rules); a surface's
+  `CatalogSet`.
 - `surface`: `Surface` = id → `ComponentNode` map, buffer until `root`, default catalog, `DataModel`.
 - `processor`: `MessageProcessor::handle(msg) -> Outcome { outbound: Vec<RendererMessage>,
   changes: ChangeSet }`; no I/O, no async — transport belongs to the application. User input goes
@@ -87,8 +94,13 @@ A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRI
 `Catalog`, `Data`, `Expression`, `State`, `Compilation`). `Display` is English for logs; the
 application localizes from the code.
 
-Dependencies: `serde`, `serde_json`, `snafu`, `regex`, `time`. No `tokio`, no randomness; the
-clock is injected (action timestamps).
+Dependencies: `serde`, `serde_json`, `snafu`, `regex`, `time`, `unicode-ident`,
+`percent-encoding`, and `jsonschema` (default features off: no HTTP or file `$ref` resolution;
+patterns on the linear `regex` engine; builds offline). The published v1.0 schemas are the
+runtime's models: it embeds `common_types.json` and `agent_to_renderer.json` and validates
+against them. No `tokio`, no randomness in any result; the clock is injected (action
+timestamps). On wasm32, `jsonschema` brings `wasm-bindgen` through `getrandom`, which seeds its
+hash maps; that is the only path (`just deps` checks it) and no outcome depends on it.
 
 ## 3. `a2ui-catalog-basic` and `a2ui-leptos`
 
@@ -132,12 +144,14 @@ Dependencies: `leptos` 0.8 (CSR), `web-sys` (Modal focus only).
   categories. `skips.toml` lists `SKIP_TEST_NAMES` with a reason each; an unmatched skip fails the
   run. Catalog loading is relaxed outside `CatalogError` cases, as in the reference harnesses.
   Target: every v1.0 `core/*` case passes at 0.1; the only skips left are cases declaring another
-  protocol version (the version-neutral `data_model`, `resolve_path`, `parse_expression_template`
+  protocol version or whose catalog declares none (upstream's default is v0.9) (the version-neutral `data_model`, `resolve_path`, `parse_expression_template`
   run whatever version they declare) and the two adapter suites, which `a2ui-leptos` runs in the
   browser. Any other remaining skip blocks the release.
-- Delivery: six plans following the upstream harness stages (C1 data model and expressions, C2
-  catalogs, C3 validation and processing, C4 functions/actions/RPC with `a2ui-catalog-basic`, C5
-  node resolution and timing, then `a2ui-leptos`); each plan is written when the previous lands.
+- Delivery: seven plans following the upstream harness stages (C1 data model and expressions; C2
+  catalogs and schemas, with `a2ui-catalog-basic` holding the catalog document; C2b the
+  `validationSchema` flattening matching upstream's goldens; C3 validation and processing; C4
+  functions/actions/RPC, adding the basic functions to `a2ui-catalog-basic`; C5 node resolution
+  and timing; then `a2ui-leptos`); each plan is written when the previous lands.
 - Leptos: `wasm-bindgen-test` in headless Chrome — mount `<Surface>` on message streams, check the
   DOM, check that only subscribed components re-render (counted by a test hook), check unmount.
   `examples/gallery` (Trunk) shows every basic component from the upstream fixtures.
@@ -163,7 +177,8 @@ The new repository's root `AGENTS.md` takes Oku's generic rules, each re-sourced
 New rules specific to the library:
 
 - Errors carry stable A2UI codes; the library never localizes (no Fluent).
-- `a2ui-runtime` stays free of Leptos, wasm-bindgen, async runtimes and I/O.
+- `a2ui-runtime` has no direct Leptos, wasm-bindgen, async-runtime or I/O dependency
+  (`wasm-bindgen` reaches it only through `jsonschema`'s `getrandom`, see §2).
 - Vendored upstream files are updated only by `git subtree pull` with `vendor/UPSTREAM` bumped.
 
 Oku-only rules (Loro, Typst, OpenDAL storage, Fluent, the duplicated `CATALOG_ID`) stay in Oku.

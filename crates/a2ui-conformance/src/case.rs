@@ -18,6 +18,11 @@ pub struct Case {
 }
 
 impl Case {
+    /// The case's location for messages, such as `core/catalog.yaml#test_x`.
+    pub fn at(&self) -> String {
+        format!("{}#{}", self.suite, self.name)
+    }
+
     /// The declared protocol version: top-level, else `catalog.protocolVersion`.
     pub fn protocol_version(&self) -> Option<&str> {
         self.body

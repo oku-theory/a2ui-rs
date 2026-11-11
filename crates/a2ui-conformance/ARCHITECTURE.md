@@ -6,7 +6,7 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 ## Modules
 
 - `case`: `Case` (suite, name, action, body), `parse_suite`, `load_suite`; the protocol version is
-  the top-level `protocolVersion`, else `catalog.protocolVersion`.
+  the top-level `protocolVersion`, else `catalog.protocolVersion`; `at()` is the `suite#name` location.
 - `skips`: `skips.toml` (`[actions]`, `[cases]`, each with a reason) plus the version filter
   (only `1.0`, except the version-neutral `data_model`, `resolve_path`, `parse_expression_template`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.
@@ -15,8 +15,8 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   message regex).
 - `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR` is set
   (`just conformance-manifest` sets it).
-- `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory.
-- `handlers`: `handler(action)`, one runner per implemented action.
+- `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`.
+- `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two schema-equality actions).
 
 ## Rule
 

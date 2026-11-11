@@ -74,10 +74,7 @@ fn trial(case: Case, skips: &Skips, manifest: Option<Arc<Manifest>>) -> Result<T
     Ok(Trial::test(name, move || {
         let outcome = match handlers::handler(&case.action) {
             Some(run) => run(&case),
-            None => Err(format!(
-                "Unknown action '{}' in {}#{}",
-                case.action, case.suite, case.name
-            )),
+            None => Err(format!("Unknown action '{}' in {}", case.action, case.at())),
         };
         if let Some(manifest) = &manifest {
             let status = if outcome.is_ok() {
