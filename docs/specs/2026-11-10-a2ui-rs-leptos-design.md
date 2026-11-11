@@ -60,6 +60,8 @@ agent side.
 
 ## 2. `a2ui-runtime` internals
 
+It builds for wasm32-unknown-unknown; running needs a JS host (getrandom `wasm_js`).
+
 One concept per module:
 
 - `message`: serde types `AgentMessage` / `RendererMessage`; `"version": "1.0"` checked on read.
@@ -71,7 +73,7 @@ One concept per module:
 - `function`: `FunctionRegistry` (`returnType`, `allowedCallers`, `requiresUserActivation`, local
   vs `callAgentFunction` routing); implementations are `Fn(&Args, &Ctx) -> Result<Value>` registered
   per catalog.
-- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 64 KiB
+- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
   size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
   backtracking regex.
 - `catalog`: catalog loading and validation (no allowed top-level key list, since upstream
@@ -144,7 +146,8 @@ Dependencies: `leptos` 0.8 (CSR), `web-sys` (Modal focus only).
   categories. `skips.toml` lists `SKIP_TEST_NAMES` with a reason each; an unmatched skip fails the
   run. Catalog loading is relaxed outside `CatalogError` cases, as in the reference harnesses.
   Target: every v1.0 `core/*` case passes at 0.1; the only skips left are cases declaring another
-  protocol version or whose catalog declares none (upstream's default is v0.9) (the version-neutral `data_model`, `resolve_path`, `parse_expression_template`
+  protocol version or whose catalog declares none (upstream's default is v0.9) (the
+  version-neutral `data_model`, `resolve_path`, `parse_expression_template`
   run whatever version they declare) and the two adapter suites, which `a2ui-leptos` runs in the
   browser. Any other remaining skip blocks the release.
 - Delivery: seven plans following the upstream harness stages (C1 data model and expressions; C2
@@ -179,7 +182,8 @@ New rules specific to the library:
 - Errors carry stable A2UI codes; the library never localizes (no Fluent).
 - `a2ui-runtime` has no direct Leptos, wasm-bindgen, async-runtime or I/O dependency
   (`wasm-bindgen` reaches it only through `jsonschema`'s `getrandom`, see §2).
-- Vendored upstream files are updated only by `git subtree pull` with `vendor/UPSTREAM` bumped.
+- Vendored upstream files are updated only through `vendor/sync.sh`, which rewrites
+  `vendor/UPSTREAM`.
 
 Oku-only rules (Loro, Typst, OpenDAL storage, Fluent, the duplicated `CATALOG_ID`) stay in Oku.
 
