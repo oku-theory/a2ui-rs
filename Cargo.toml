@@ -13,13 +13,13 @@ repository = "https://github.com/oku-theory/a2ui-rs"
 a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
 libtest-mimic = "0.8"
 regex = "1"
-rstest = "0.26"
+rstest = "0.28"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml_ng = "0.10"
-snafu = "0.8"
+snafu = "0.9"
 speculoos = "0.13"
-toml = "0.9"
+toml = "1"
 unicode-ident = "1"
 
 [workspace.lints.rust]
