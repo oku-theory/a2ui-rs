@@ -5203,6 +5203,19 @@ cases run.
 
 Then `oku cli task done --project slider --id t-1557 --result "<one line>"`.
 
+**Review amendments (applied during execution):**
+
+- Rule 1 also caps every object key at `MAX_KEY_BYTES` (256) and every `$ref` string at
+  `MAX_REF_BYTES` (4096), in the node-count walk, and `expand` resolves each `$ref` site once
+  (memoized by the string node's address): per-follow cost grew with string length, so a
+  1.9 MB key under a ref fan-out took 161 s to load.
+- The first `$ref` reaching an entry charges that entry's whole weight to the expansion, and
+  compiling reuses the targets the cap check found: compile copies reached entries whole, so
+  1000 pointers into one large entry took 49 s while counting only the pointed sub-node.
+- Strings weigh `1 + len / 64` nodes (an object key adds `len / 64` to its member), in the
+  walk and the entry charge: string bytes were uncharged, so a shared 4 MB description or
+  pattern was kept or recompiled per entry (3.9 GB RSS, or 15 s).
+
 ---
 ### Task 5: Component validation with nested calls
 

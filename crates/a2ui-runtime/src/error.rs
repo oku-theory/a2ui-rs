@@ -35,6 +35,9 @@ impl Category {
 #[derive(Debug, Snafu)]
 pub struct Error(Inner);
 
+// `Result<_, Error>` stays under clippy's `result_large_err` threshold of 128 bytes.
+const _: () = assert!(size_of::<Error>() <= 128);
+
 impl Error {
     /// The conformance category this error belongs to.
     pub fn category(&self) -> Category {
@@ -121,6 +124,77 @@ pub(crate) enum Inner {
 
     #[snafu(display("Value nesting exceeds {limit} levels"))]
     ValueLimit { limit: usize, backtrace: Backtrace },
+
+    #[snafu(display("Catalog document is not valid JSON: {message}"))]
+    CatalogJson {
+        message: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Malformed catalog: {reason}"))]
+    MalformedCatalog {
+        reason: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("catalog_id must be provided or exist in catalog schema"))]
+    MissingCatalogId { backtrace: Backtrace },
+
+    #[snafu(display(
+        "Catalog protocol version '{version}' is not supported; this runtime implements 1.0"
+    ))]
+    UnsupportedVersion {
+        version: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display(
+        "Unsupported external $ref '{reference}' at {pointer}: a v1.0 catalog may reference \
+         only itself and common_types.json"
+    ))]
+    ExternalRef {
+        reference: String,
+        pointer: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Unsupported '{keyword}' at {pointer}: {reason}"))]
+    ForbiddenKeyword {
+        keyword: &'static str,
+        pointer: String,
+        reason: &'static str,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Catalog $defs '{name}' shadows the common type of the same name"))]
+    DefsShadowCommonType { name: String, backtrace: Backtrace },
+
+    #[snafu(display("Catalog exceeds {limit} {what}"))]
+    CatalogLimit {
+        what: String,
+        limit: usize,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Component name 'Surface' is reserved for the surface root"))]
+    ReservedComponent { backtrace: Backtrace },
+
+    #[snafu(display("Invalid UAX #31 {kind} identifier: '{name}'{context}"))]
+    InvalidIdentifier {
+        kind: &'static str,
+        name: String,
+        context: String,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display(
+        "Function '{function}' sets requiresUserActivation, so its allowedCallers must be \
+         rendererOnly"
+    ))]
+    UserActivation {
+        function: String,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -133,7 +207,19 @@ impl Inner {
             | Self::IndexOutOfRange { .. } => Category::Data,
             Self::ExpressionSyntax { .. } => Category::Parse,
             Self::ExpressionLimit { .. } => Category::Expression,
-            Self::EmbeddedSchema { .. } | Self::SchemaBuild { .. } => Category::Catalog,
+            Self::EmbeddedSchema { .. }
+            | Self::SchemaBuild { .. }
+            | Self::CatalogJson { .. }
+            | Self::MalformedCatalog { .. }
+            | Self::MissingCatalogId { .. }
+            | Self::UnsupportedVersion { .. }
+            | Self::ExternalRef { .. }
+            | Self::ForbiddenKeyword { .. }
+            | Self::DefsShadowCommonType { .. }
+            | Self::CatalogLimit { .. }
+            | Self::ReservedComponent { .. }
+            | Self::InvalidIdentifier { .. }
+            | Self::UserActivation { .. } => Category::Catalog,
             Self::SchemaViolation { .. }
             | Self::UnknownDefinition { .. }
             | Self::ValueLimit { .. } => Category::Validation,

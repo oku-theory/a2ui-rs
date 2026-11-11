@@ -26,11 +26,21 @@ It builds for `wasm32-unknown-unknown`.
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached validators; `FunctionCall` accepts any function but `@index`).
 - `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by the parser and catalogs.
-- `limits`: caps on agent JSON (64 levels deep, 128 KiB per compiled pattern).
 - `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors are `CatalogError`,
   the first violation a `ValidationError`.
-- `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`), percent-encoded
-  `local_ref`/`localize_refs`.
+- `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, `$ref`
+  rules, UAX #31 names, callers, metadata, entry caps), keeps the entries its unions list and
+  the authored document (`to_json`), bundles `validation_schema` (unflattened until Plan 2b)
+  and compiles each entry against a document pruned to what it reaches; the validator lives
+  in its `ComponentDef`/`FunctionDef`. Submodules `load`, `entries`, `compile`, `document`,
+  `shape`.
+- `bundle`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`; no anchors, dynamic
+  refs or nested `$id`), percent-encoded `local_ref`/`localize_refs`, common-type closure.
+- `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
+  4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
+  reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound
+  retained string bytes), and rejects cycles, depth past 128 and oversized or pattern-heavy
+  entries before any compile.
 
 ## Dependencies
 

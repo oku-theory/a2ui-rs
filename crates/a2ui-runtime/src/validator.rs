@@ -13,13 +13,6 @@ use crate::limits::MAX_PATTERN_BYTES;
 pub(crate) const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// Compiles `document`, whose root `$ref` names the schema instances must match.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "catalog loading (Task 4) compiles with it; only tests do now"
-    )
-)]
 pub(crate) fn compile(document: &Value) -> Result<Validator, Error> {
     build(document).map_err(|message| -> Error { SchemaBuildSnafu { message }.build().into() })
 }

@@ -119,6 +119,26 @@ pub fn validate_common_type(definition: &str, value: &Value) -> Result<(), Error
     check(validator, value)
 }
 
+/// The validator of a component definition's `metadata`, built on first use.
+static METADATA_VALIDATOR: LazyLock<Result<Validator, String>> = LazyLock::new(metadata_validator);
+
+/// Builds the validator; the error is the cause only, as for `common_validators`.
+fn metadata_validator() -> Result<Validator, String> {
+    let reference = local_ref("/$defs/ComponentCommon/properties/metadata");
+    let top = common_document().map_err(|err| err.to_string())?;
+    build(&rooted(&top, &reference))
+}
+
+/// Validates a component definition's `metadata`, which holds only UAX #31 `extensions`.
+///
+/// The catalog holding it is already depth-checked.
+pub(crate) fn validate_component_metadata(metadata: &Value) -> Result<(), Error> {
+    let validator = METADATA_VALIDATOR
+        .as_ref()
+        .map_err(|message| embedded_error(message))?;
+    check(validator, metadata)
+}
+
 #[cfg(test)]
 #[path = "schema_tests.rs"]
 mod tests;

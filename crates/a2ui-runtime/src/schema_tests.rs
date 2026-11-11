@@ -70,3 +70,21 @@ fn validate_common_type_too_deep_value_is_validation_error() {
     let err = validate_common_type("DynamicValue", &value).unwrap_err();
     assert_that!(err.to_string()).contains("nesting exceeds 64");
 }
+
+#[test]
+fn validate_component_metadata_dotted_extension_key_is_validation_error() {
+    let err = validate_component_metadata(&json!({"extensions": {"com.example": 1}})).unwrap_err();
+    assert_that!(err.category()).is_equal_to(Category::Validation);
+}
+
+#[test]
+fn validate_component_metadata_dotted_extension_key_is_named() {
+    let err = validate_component_metadata(&json!({"extensions": {"com.example": 1}})).unwrap_err();
+    assert_that!(err.to_string()).contains("'com.example' was unexpected");
+}
+
+#[test]
+fn validate_component_metadata_extensions_only_is_accepted() {
+    let metadata = json!({"extensions": {"com_example": {"track": true}}});
+    assert_that!(validate_component_metadata(&metadata)).is_ok();
+}

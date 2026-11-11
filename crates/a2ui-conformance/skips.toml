@@ -2,7 +2,6 @@
 [actions]
 from_json = "Plan 2: catalogs and schemas"
 to_json = "Plan 2: catalogs and schemas"
-round_trip = "Plan 2: catalogs and schemas"
 validation_schema = "Plan 2: catalogs and schemas"
 derive = "Plan 2: catalogs and schemas"
 validate = "Plan 3: validation and message processing"
