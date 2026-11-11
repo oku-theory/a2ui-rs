@@ -2,7 +2,7 @@ use rstest::rstest;
 use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
-use super::super::test_support::{catalog_error, load, mixin_copies, v10};
+use super::super::test_support::{catalog_error, load, load_on_a_small_stack, mixin_copies, v10};
 use crate::Catalog;
 use crate::bundle::localize_refs;
 use crate::limits::{MAX_CATALOG_EXPANSION, oversize};
@@ -313,13 +313,7 @@ fn from_json_long_sub_pointer_chain_loads_on_a_small_stack() {
         "$defs": defs,
         "components": {"A": {"allOf": [{"$ref": "#/$defs/M0/properties"}]}}
     }));
-    let loaded = std::thread::Builder::new()
-        .stack_size(1 << 20)
-        .spawn(move || load(document).map(|catalog| catalog.validation_schema().clone()))
-        .unwrap()
-        .join()
-        .unwrap();
-    assert_that!(loaded).is_ok();
+    assert_that!(load_on_a_small_stack(document)).is_ok();
 }
 
 /// The validation schema of a catalog with component `A` and `theme`.

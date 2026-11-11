@@ -276,3 +276,7 @@ fn prune(
 #[cfg(test)]
 #[path = "validation_schema_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "validation_schema_depth_tests.rs"]
+mod depth_tests;

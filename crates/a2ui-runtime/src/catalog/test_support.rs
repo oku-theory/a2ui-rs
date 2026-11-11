@@ -29,10 +29,28 @@ pub(crate) fn catalog_error(result: Result<Catalog, Error>) -> String {
 
 /// A scalar wrapped in `levels` single-key objects.
 pub(crate) fn nested(levels: usize) -> Value {
-    // `json!({"a": inner})` clones `inner` recursively, so deep values are built by moving.
-    (0..levels).fold(json!(1), |inner, _| {
-        Value::Object(Map::from_iter([("a".to_owned(), inner)]))
+    wrapped(json!(1), "a", levels)
+}
+
+/// `leaf` wrapped in `levels` objects, each holding the one below under `key`.
+pub(crate) fn wrapped(leaf: Value, key: &str, levels: usize) -> Value {
+    // `json!({key: inner})` clones `inner` recursively, so deep values are built by moving.
+    (0..levels).fold(leaf, |inner, _| {
+        Value::Object(Map::from_iter([(key.to_owned(), inner)]))
     })
+}
+
+/// The stack a wasm32 build gets by default, 1 MiB; native frames only approximate wasm ones.
+pub(crate) const WASM_STACK: usize = 1 << 20;
+
+/// Loads `document` as [`load`] does, on a thread with a [`WASM_STACK`] stack.
+pub(crate) fn load_on_a_small_stack(document: Value) -> Result<Catalog, Error> {
+    std::thread::Builder::new()
+        .stack_size(WASM_STACK)
+        .spawn(move || load(document))
+        .unwrap()
+        .join()
+        .unwrap()
 }
 
 /// `$defs` `L0` to `L<levels>`, each level an `allOf` of two `$ref`s to the one below.
