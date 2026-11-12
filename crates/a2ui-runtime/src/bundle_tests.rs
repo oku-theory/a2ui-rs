@@ -456,3 +456,53 @@ fn def_names_lists_only_defs_entries() {
     def_names(&node, &mut names);
     assert_that!(names).is_equal_to(vec!["A".to_owned(), "D".to_owned()]);
 }
+
+/// The scalar members `find_member` visits under `node`: key, value and JSON Pointer.
+fn members(node: &Value) -> Vec<(String, Value, String)> {
+    let mut seen = Vec::new();
+    find_member(node, &mut |key, value, path| {
+        seen.push((key.to_owned(), value.clone(), pointer(path)));
+        None::<()>
+    });
+    seen
+}
+
+#[test]
+fn find_member_visits_each_scalar_member_with_its_path() {
+    let node = json!({"a": {"$ref": "#/x", "n": 5}, "b": [{"$id": null}]});
+    assert_that!(members(&node)).is_equal_to(vec![
+        ("$ref".to_owned(), json!("#/x"), "/a/$ref".to_owned()),
+        ("n".to_owned(), json!(5), "/a/n".to_owned()),
+        ("$id".to_owned(), Value::Null, "/b/0/$id".to_owned()),
+    ]);
+}
+
+#[rstest]
+#[case::array_items(json!({"enum": ["#/x", 1]}))]
+#[case::root(json!("#/x"))]
+fn find_member_scalar_without_a_key_is_not_visited(#[case] node: Value) {
+    assert_that!(members(&node)).is_empty();
+}
+
+#[test]
+fn find_member_stops_at_the_first_some() {
+    let node = json!({"a": [{"x": 1}], "b": 2});
+    let mut calls = 0;
+    let found = find_member(&node, &mut |key, _, _| {
+        calls += 1;
+        Some(key.to_owned())
+    });
+    assert_that!((found, calls)).is_equal_to((Some("x".to_owned()), 1));
+}
+
+#[test]
+fn check_references_two_faults_reports_the_first_in_walk_order() {
+    let document = json!({"$defs": {"a": {"$ref": 5}, "b": {"$ref": "x.json#/a"}}});
+    assert_that!(reference_error(document)).contains("$ref at /$defs/a/$ref must be a string");
+}
+
+#[test]
+fn check_references_array_under_ref_key_is_walked() {
+    let document = json!({"$defs": {"x": {"$ref": [{"$ref": "x.json#/a"}]}}});
+    assert_that!(reference_error(document)).contains("at /$defs/x/$ref/0/$ref");
+}

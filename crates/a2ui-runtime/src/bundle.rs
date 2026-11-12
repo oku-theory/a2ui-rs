@@ -56,44 +56,68 @@ pub(crate) fn localize_refs(node: &mut Value) {
     rewrite_refs(node, &mut |reference| *reference = localize_ref(reference));
 }
 
-/// Calls `visit` on each `$ref` string and its path, until one returns `Some`.
+/// Calls `visit` on each scalar object member under `node`, until one returns `Some`.
 ///
-/// A key holding an object or array is walked whatever its name, so a property named `$ref`
-/// holding a schema is a property; every `$ref` string is visited, data included, since the
-/// walk does not tell schemas from data. Keys are visited in map order, and `pointer(path)`
+/// `visit` gets the member's key, its value and its path; a member holding an object or array
+/// is walked whatever its key, and an array item or the root is never visited, having no key.
+/// Object members come in map order and array items in index order, and `pointer(path)`
 /// spells a path within this module. It recurses: callers pass a document that load rule 1
-/// bounded to `MAX_JSON_DEPTH` levels, or one built from it.
-/// [`check_references`] has its own walk, as it reads every reference keyword, not only `$ref`.
-pub(crate) fn find_ref<'a, T>(
+/// bounded to `MAX_JSON_DEPTH` levels, or one built from it. [`find_ref`] walks with it, and
+/// [`check_references`] with its descent from a map (`find_member_in`).
+fn find_member<'a, T>(
     node: &'a Value,
-    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
+    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
 ) -> Option<T> {
-    find_ref_under(node, &mut Vec::new(), visit)
+    find_member_under(node, &mut Vec::new(), visit)
 }
 
-fn find_ref_under<'a, T>(
+fn find_member_under<'a, T>(
     node: &'a Value,
     path: &mut Vec<Segment<'a>>,
-    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
+    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
 ) -> Option<T> {
     match node {
-        Value::Object(map) => map.iter().find_map(|(key, value)| {
-            path.push(Segment::Key(key));
-            let found = match value {
-                Value::String(reference) if key == "$ref" => visit(reference, path),
-                _ => find_ref_under(value, path, visit),
-            };
-            path.pop();
-            found
-        }),
+        Value::Object(map) => find_member_in(map, path, visit),
         Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
             path.push(Segment::Index(index));
-            let found = find_ref_under(item, path, visit);
+            let found = find_member_under(item, path, visit);
             path.pop();
             found
         }),
         _ => None,
     }
+}
+
+/// [`find_member`]'s descent from a map, for a root that is one (load rule 4's document).
+fn find_member_in<'a, T>(
+    map: &'a Map<String, Value>,
+    path: &mut Vec<Segment<'a>>,
+    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
+) -> Option<T> {
+    map.iter().find_map(|(key, value)| {
+        path.push(Segment::Key(key));
+        let found = match value {
+            Value::Object(_) | Value::Array(_) => find_member_under(value, path, visit),
+            _ => visit(key, value, path),
+        };
+        path.pop();
+        found
+    })
+}
+
+/// Calls `visit` on each `$ref` string and its path, until one returns `Some`.
+///
+/// It walks with [`find_member`], so a property named `$ref` holding a schema is a property,
+/// and every `$ref` string is visited, data included, since the walk does not tell schemas
+/// from data. A `$ref` that is not a string is skipped (load rule 4 refuses it).
+pub(crate) fn find_ref<'a, T>(
+    node: &'a Value,
+    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
+) -> Option<T> {
+    find_member(node, &mut |key, value, path| match value {
+        Value::String(reference) if key == "$ref" => visit(reference, path),
+        _ => None,
+    })
 }
 
 /// Calls `visit` on every `$ref` string under `node`, as [`find_ref`] visits them.
@@ -235,9 +259,24 @@ pub(crate) fn localize_ref(reference: &str) -> String {
 ///
 /// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
 /// so they are refused like `#/title`. Pointers are built only for an error. The document is at
-/// most `MAX_JSON_DEPTH` deep, so the walk recurses.
+/// most `MAX_JSON_DEPTH` deep; it walks with [`find_member`]'s descent, which recurses.
 pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Error> {
-    check_map(document, &mut Vec::new())
+    let first_error = find_member_in(document, &mut Vec::new(), &mut |key, value, path| {
+        let checked = match value {
+            Value::String(reference) if key == "$ref" => check_ref(reference, path),
+            _ if key == "$ref" => Err(MalformedCatalogSnafu {
+                reason: format!("$ref at {} must be a string", Quoted::new(&pointer(path))),
+            }
+            .build()
+            .into()),
+            _ => check_keyword(key, value, path),
+        };
+        checked.err()
+    });
+    match first_error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 /// One step of the path from a document root to a node.
@@ -246,41 +285,6 @@ pub(crate) enum Segment<'a> {
     Key(&'a str),
     /// An array item, by its index.
     Index(usize),
-}
-
-fn check_map<'a>(map: &'a Map<String, Value>, path: &mut Vec<Segment<'a>>) -> Result<(), Error> {
-    for (key, value) in map {
-        path.push(Segment::Key(key));
-        match value {
-            Value::Object(_) | Value::Array(_) => check_node(value, path)?,
-            Value::String(reference) if key == "$ref" => check_ref(reference, path)?,
-            _ if key == "$ref" => {
-                return Err(MalformedCatalogSnafu {
-                    reason: format!("$ref at {} must be a string", Quoted::new(&pointer(path))),
-                }
-                .build()
-                .into());
-            }
-            _ => check_keyword(key, value, path)?,
-        }
-        path.pop();
-    }
-    Ok(())
-}
-
-fn check_node<'a>(node: &'a Value, path: &mut Vec<Segment<'a>>) -> Result<(), Error> {
-    match node {
-        Value::Object(map) => check_map(map, path),
-        Value::Array(items) => {
-            for (index, item) in items.iter().enumerate() {
-                path.push(Segment::Index(index));
-                check_node(item, path)?;
-                path.pop();
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
 }
 
 fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
