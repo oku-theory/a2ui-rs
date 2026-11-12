@@ -75,6 +75,27 @@ fn quoted_cap_never_cuts_an_escape() {
 }
 
 #[test]
+fn push_escaped_longest_escape_of_any_char_is_nine_bytes() {
+    let longest = ('\0'..=char::MAX)
+        .map(|c| {
+            let mut out = String::new();
+            push_escaped(&mut out, c);
+            out.len()
+        })
+        .max();
+    assert_that!(longest).is_equal_to(Some(9));
+}
+
+#[test]
+fn quoted_worst_case_input_is_nine_bytes_per_kept_character() {
+    let total = 10 * MAX_QUOTED_CHARS;
+    let text = "\u{e007f}".repeat(total);
+    let marker = elision_marker(total - MAX_QUOTED_CHARS);
+    let bytes = Quoted::new(&text).to_string().len();
+    assert_that!(bytes).is_equal_to(9 * MAX_QUOTED_CHARS + marker.len());
+}
+
+#[test]
 fn quoted_debug_is_the_escaped_text_as_a_string_literal() {
     let debug = format!("{:?}", Quoted::new("a\nb"));
     assert_that!(debug).is_equal_to("\"a\\\\nb\"".to_owned());

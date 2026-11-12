@@ -1,0 +1,26 @@
+error[E0277]: the trait bound `Reason: Piece` is not satisfied
+  --> tests/ui/../../src/quoted.rs
+   |
+   |         $crate::quoted::Reason::of(&[$(&$piece as &dyn $crate::quoted::Piece),+])
+   |                                        ^^^^^^^ unsatisfied trait bound
+   |
+  ::: tests/ui/reason_reason_piece.rs:13:13
+   |
+13 |     let _ = quoted::reason!["outer: ", inner];
+   |             --------------------------------- in this macro invocation
+   |
+help: the trait `Piece` is not implemented for `Reason`
+  --> tests/ui/../../src/quoted.rs
+   |
+   | pub(crate) struct Reason(String);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+help: the following other types implement trait `Piece`
+  --> tests/ui/../../src/quoted.rs
+   |
+   | impl Piece for &'static str {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&'static str`
+...
+   | impl Piece for Quoted {
+   | ^^^^^^^^^^^^^^^^^^^^^ `Quoted`
+   = note: required for the cast from `&Reason` to `&dyn Piece`
+   = note: this error originates in the macro `quoted::reason` (in Nightly builds, run with -Z macro-backtrace for more info)

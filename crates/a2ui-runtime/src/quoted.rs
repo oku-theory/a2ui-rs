@@ -8,6 +8,7 @@
 
 use std::fmt;
 
+// `tests/ui` compiles this file alone with a stub `limits`: keep `limits` its only import.
 use crate::limits::MAX_QUOTED_CHARS;
 
 /// One input value an error quotes, escaped and capped when built.

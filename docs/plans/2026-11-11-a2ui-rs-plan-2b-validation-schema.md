@@ -185,6 +185,20 @@ upstream's reading would be unsafe:
     needing a silent fallback or an `expect`. `written_ref` is idempotent (`FRAGMENT` encodes
     `%`), so re-localizing bundle `$defs` changes nothing.
 
+18. **Composed wording stays `reason!` (t-1597, t-1598, t-1599, t-1600, t-1601):** trybuild
+    cases (`tests/ui/*.rs`, which include `src/quoted.rs` with a stub `limits`) pin the compile
+    errors of a `String`, a borrowed `&str` and a `Reason` piece. Their `.stderr` files hold
+    rustc's wording on the floating stable toolchain: a release that rewords them turns `just
+    test` red, and the fix is `TRYBUILD=overwrite` after re-reading that each still fails on
+    the `Piece` bound or a `'static` borrow. `Reason::of` stays callable directly: its sealed
+    `Piece` bound and constant `N` give it the macro's guarantees, so hiding it would guard
+    nothing. No `Fixed` literal newtype: the macro would have to build it from any `&'static
+    str` expression, which moves the gap without closing it; the std leaks (`Box`, `String`,
+    `Vec`) are clippy-disallowed, and a static cell filled from input is left to review. No
+    variant per message: rule 4 and the validation schema have dozens of wordings that share
+    pieces, and `Quoted` already caps every input. A capped `Quoted` takes at most nine bytes
+    per kept character (`\u{e007f}`, checked over every `char`) plus the elision marker.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +

@@ -1,0 +1,15 @@
+error[E0597]: `document` does not live long enough
+  --> tests/ui/reason_borrowed_str_piece.rs:13:23
+   |
+12 |     let document = String::from("read from a document");
+   |         -------- binding `document` declared here
+13 |     let input: &str = &document;
+   |                       ^^^^^^^^^ borrowed value does not live long enough
+14 |     let _ = quoted::reason!["$ref '", input, "' does not resolve"];
+15 | }
+   | - `document` dropped here while still borrowed
+   |
+  ::: tests/ui/../../src/quoted.rs
+   |
+   |         $crate::quoted::Reason::of(&[$(&$piece as &dyn $crate::quoted::Piece),+])
+   |                                         ------------------------------------ cast requires that `document` is borrowed for `'static`

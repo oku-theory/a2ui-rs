@@ -1,0 +1,18 @@
+error[E0277]: the trait bound `String: Piece` is not satisfied
+  --> tests/ui/../../src/quoted.rs
+   |
+   |         $crate::quoted::Reason::of(&[$(&$piece as &dyn $crate::quoted::Piece),+])
+   |                                        ^^^^^^^ the trait `Piece` is not implemented for `String`
+   |
+  ::: tests/ui/reason_string_piece.rs:13:13
+   |
+13 |     let _ = quoted::reason!["$ref '", input, "' does not resolve"];
+   |             ------------------------------------------------------ in this macro invocation
+   |
+help: the trait `Piece` is implemented for `&str`
+  --> tests/ui/../../src/quoted.rs
+   |
+   | impl Piece for &'static str {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: required for the cast from `&String` to `&dyn Piece`
+   = note: this error originates in the macro `quoted::reason` (in Nightly builds, run with -Z macro-backtrace for more info)

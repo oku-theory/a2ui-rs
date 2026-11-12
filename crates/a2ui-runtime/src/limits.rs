@@ -74,8 +74,8 @@ pub(crate) const MAX_REF_BYTES: usize = 4096;
 
 /// Most input characters an error keeps of one quoted value.
 ///
-/// Longer input keeps its first and last halves around an elision marker; each kept character
-/// may then take up to nine characters escaped (`\u{e007f}`).
+/// Longer input keeps its first and last halves around an elision marker. Each character it
+/// keeps takes at most nine bytes escaped (`\u{e007f}`), so a quoted value stays under 4.6 KiB.
 pub(crate) const MAX_QUOTED_CHARS: usize = 512;
 
 // Head and tail take half of the cap each.

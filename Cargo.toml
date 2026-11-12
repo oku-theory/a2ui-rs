@@ -23,6 +23,7 @@ serde_yaml_ng = "0.10"
 snafu = "0.9"
 speculoos = "0.13"
 toml = "1"
+trybuild = "1"
 unicode-ident = "1"
 
 [workspace.lints.rust]
