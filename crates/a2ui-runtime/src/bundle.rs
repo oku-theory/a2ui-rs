@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 use snafu::ensure;
 
 use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
-use crate::quoted::Quoted;
+use crate::quoted::{Quoted, reason};
 
 /// The `common_types.json` URIs a v1.0 catalog may reference.
 const COMMON_TYPES_URIS: [&str; 3] = [
@@ -269,7 +269,7 @@ pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Erro
         let checked = match value {
             Value::String(reference) if key == "$ref" => check_ref(reference, path),
             _ if key == "$ref" => Err(MalformedCatalogSnafu {
-                reason: format!("$ref at {} must be a string", Quoted::new(&pointer(path))),
+                reason: reason!["$ref at ", Quoted::new(&pointer(path)), " must be a string"],
             }
             .build()
             .into()),
@@ -304,20 +304,24 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
     ensure!(
         fragment.is_some_and(is_pointer_fragment),
         MalformedCatalogSnafu {
-            reason: format!(
-                "$ref '{}' at {} has a fragment that is neither empty nor a JSON Pointer",
+            reason: reason![
+                "$ref '",
                 Quoted::new(reference),
-                Quoted::new(&pointer(path))
-            ),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " has a fragment that is neither empty nor a JSON Pointer",
+            ],
         }
     );
     let Some(target) = pointer_of(reference) else {
         return MalformedCatalogSnafu {
-            reason: format!(
-                "$ref '{}' at {} has a fragment that is not UTF-8",
+            reason: reason![
+                "$ref '",
                 Quoted::new(reference),
-                Quoted::new(&pointer(path))
-            ),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " has a fragment that is not UTF-8",
+            ],
         }
         .fail()
         .map_err(Into::into);
@@ -325,23 +329,27 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
     ensure!(
         is_kept_target(reference, &target),
         MalformedCatalogSnafu {
-            reason: format!(
-                "$ref '{}' at {} names no definition, entry or theme, which are the only parts \
-                 of the catalog the validation schema keeps",
+            reason: reason![
+                "$ref '",
                 Quoted::new(reference),
-                Quoted::new(&pointer(path))
-            ),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " names no definition, entry or theme, which are the only parts of the catalog \
+                 the validation schema keeps",
+            ],
         }
     );
     ensure!(
         !is_inside_entry(&target),
         MalformedCatalogSnafu {
-            reason: format!(
-                "$ref '{}' at {} points inside a component or function, which the validation \
-                 schema flattens; reference it whole or move the schema to $defs",
+            reason: reason![
+                "$ref '",
                 Quoted::new(reference),
-                Quoted::new(&pointer(path))
-            ),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " points inside a component or function, which the validation schema flattens; \
+                 reference it whole or move the schema to $defs",
+            ],
         }
     );
     Ok(())

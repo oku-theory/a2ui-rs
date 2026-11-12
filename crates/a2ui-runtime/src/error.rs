@@ -1,7 +1,7 @@
 //! Errors raised by the runtime, each tagged with a conformance category.
 //!
-//! Input a message quotes is held as [`Quoted`] (escaped, capped) or, inside runtime wording,
-//! [`Reason`] (escaped), from the moment the error is built.
+//! Input a message quotes is held as [`Quoted`] (escaped, capped) from the moment the error is
+//! built, alone or as a piece of runtime wording, a [`Reason`] that only `reason!` composes.
 
 use snafu::{Backtrace, Snafu};
 

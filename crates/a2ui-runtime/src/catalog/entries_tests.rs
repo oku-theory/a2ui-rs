@@ -105,8 +105,14 @@ fn function_def_omitted_callers_are_renderer_only() {
 }
 
 #[rstest]
-#[case(json!({"functions": {"f": {"allowedCallers": "everyone"}}}), "unknown allowedCallers")]
-#[case(json!({"functions": {"f": {"requiresUserActivation": "yes"}}}), "must be a boolean")]
+#[case(
+    json!({"functions": {"f": {"allowedCallers": "everyone"}}}),
+    "Malformed catalog: function 'f' has an unknown allowedCallers"
+)]
+#[case(
+    json!({"functions": {"f": {"requiresUserActivation": "yes"}}}),
+    "Malformed catalog: requiresUserActivation of function 'f' must be a boolean"
+)]
 #[case(json!({"functions": {"f": 3}}), "function 'f' must be a schema object")]
 #[case(
     json!({"components": {"A": {"allowedParents": "Row"}}}),
@@ -166,4 +172,11 @@ fn component_def_metadata_is_exposed() {
     }}}));
     let catalog = load(document).unwrap();
     assert_that!(catalog.component("Text").unwrap().metadata()).is_equal_to(Some(&metadata));
+}
+
+#[test]
+fn entry_invalid_identifier_without_owner_has_no_context() {
+    let extra = json!({"components": {"My-Component": {"type": "object"}}});
+    assert_that!(catalog_error(load(v10(extra))))
+        .is_equal_to("Invalid UAX #31 component identifier: 'My-Component'".to_owned());
 }

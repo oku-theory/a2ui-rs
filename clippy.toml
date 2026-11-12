@@ -1,2 +1,6 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+disallowed-methods = [
+    { path = "std::boxed::Box::leak", reason = "a leaked &'static str would pass as fixed error wording (t-1590)" },
+    { path = "std::string::String::leak", reason = "a leaked &'static str would pass as fixed error wording (t-1590)" },
+]

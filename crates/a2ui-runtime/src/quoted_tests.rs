@@ -81,14 +81,70 @@ fn quoted_debug_is_the_escaped_text_as_a_string_literal() {
 }
 
 #[test]
-fn reason_long_text_is_escaped_but_never_capped() {
-    let text = format!("{}\n", "w".repeat(4 * MAX_QUOTED_CHARS));
-    let expected = format!("{}\\n", "w".repeat(4 * MAX_QUOTED_CHARS));
-    assert_that!(Reason::new(&text).to_string()).is_equal_to(expected);
+fn reason_quoted_piece_is_joined_as_escaped_once() {
+    let reason = reason![
+        "$ref '",
+        Quoted::new("#/\u{1b}"),
+        "' at ",
+        Quoted::new("/x")
+    ];
+    assert_that!(reason.to_string()).is_equal_to("$ref '#/\\u{1b}' at /x".to_owned());
 }
 
 #[test]
-fn reason_holding_quoted_text_is_unchanged_by_escaping_again() {
-    let reason = format!("$ref '{}' does not resolve", Quoted::new("#/\u{1b}"));
-    assert_that!(Reason::new(&reason).to_string()).is_equal_to(reason);
+fn reason_long_input_piece_is_capped_and_the_wording_kept() {
+    let half = MAX_QUOTED_CHARS / 2;
+    let input = "M".repeat(4 * MAX_QUOTED_CHARS);
+    let reason = reason!["$ref '", Quoted::new(&input), "' does not resolve"];
+    let expected = format!(
+        "$ref '{}{}{}' does not resolve",
+        "M".repeat(half),
+        elision_marker(4 * MAX_QUOTED_CHARS - 2 * half),
+        "M".repeat(half)
+    );
+    assert_that!(reason.to_string()).is_equal_to(expected);
+}
+
+/// Fixed wording longer than [`MAX_QUOTED_CHARS`] (640 characters).
+const LONG_WORDING: &str = concat!(
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+    "0123456789012345678901234567890123456789012345678901234567890123",
+);
+
+#[test]
+fn reason_long_fixed_text_is_never_capped() {
+    let reason = reason![LONG_WORDING, Quoted::new("x"), LONG_WORDING];
+    assert_that!(reason.to_string()).is_equal_to(format!("{LONG_WORDING}x{LONG_WORDING}"));
+}
+
+#[test]
+fn reason_fixed_text_with_a_control_is_escaped() {
+    let reason = Reason::from("a\u{1b}b\n");
+    assert_that!(reason.to_string()).is_equal_to("a\\u{1b}b\\n".to_owned());
+}
+
+/// Resolves to `()` when `T` is not a [`Piece`]; ambiguous, so a compile error, when it is.
+trait NotAPiece<Marker> {
+    /// Names the implementation the compiler picked.
+    fn check() {}
+}
+
+impl<T: ?Sized> NotAPiece<()> for T {}
+
+impl<T: ?Sized + Piece> NotAPiece<u8> for T {}
+
+#[test]
+fn piece_unbounded_text_types_are_not_pieces() {
+    <String as NotAPiece<_>>::check();
+    <Reason as NotAPiece<_>>::check();
+    <&String as NotAPiece<_>>::check();
+    <Box<str> as NotAPiece<_>>::check();
 }

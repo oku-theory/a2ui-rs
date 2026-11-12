@@ -11,7 +11,7 @@ use crate::error::{
 };
 use crate::ident::is_identifier;
 use crate::limits::{MAX_JSON_DEPTH, deeper_than};
-use crate::quoted::Quoted;
+use crate::quoted::{Quoted, reason};
 use crate::schema::{validate_common_type, validate_component_metadata};
 use crate::validator::check;
 
@@ -82,7 +82,7 @@ impl Catalog {
                 ("id" | "catalogId", Some(value)) => ensure!(
                     value.is_string(),
                     ComponentShapeSnafu {
-                        reason: format!("{key} must be a string")
+                        reason: reason![key, " must be a string"]
                     }
                 ),
                 ("metadata", Some(value)) => validate_component_metadata(&value)?,
@@ -145,13 +145,13 @@ impl<'a, L: CatalogLookup + ?Sized> Walk<'a, L> {
             .get("catalogId")
             .map(|id| {
                 id.as_str().with_context(|| CallShapeSnafu {
-                    reason: format!("catalogId of '{}' must be a string", Quoted::new(name)),
+                    reason: reason!["catalogId of '", Quoted::new(name), "' must be a string"],
                 })
             })
             .transpose()?;
         if let Some(args) = call.get("args") {
             let args = args.as_object().with_context(|| CallShapeSnafu {
-                reason: format!("args of '{}' must be an object", Quoted::new(name)),
+                reason: reason!["args of '", Quoted::new(name), "' must be an object"],
             })?;
             args.keys()
                 .try_for_each(|argument| identifier("argument", argument))?;

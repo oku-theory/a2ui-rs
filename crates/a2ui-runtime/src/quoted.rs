@@ -3,7 +3,8 @@
 //! Every text field of an error is caller or catalog input, or holds some. Hosts log, show and
 //! hand messages back to agents, so input is escaped where it could forge, reorder or hide text,
 //! and capped so that one large value cannot make a large error. Both happen when the error is
-//! built, so `Display`, `Debug` and memory are bounded alike.
+//! built, so `Display`, `Debug` and memory are bounded alike. Runtime wording is a [`Reason`],
+//! which only [`reason!`] fills with input, and only through `Quoted`.
 
 use std::fmt;
 
@@ -16,12 +17,57 @@ use crate::limits::MAX_QUOTED_CHARS;
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Quoted(String);
 
-/// Runtime wording around [`Quoted`] pieces, escaped but never capped.
+/// Runtime wording around [`Quoted`] pieces, never capped.
 ///
-/// Build it with `format!` from fixed text and `Quoted` input, so its length is bounded by
-/// theirs and capping can never cut the wording a reader or the conformance suite matches.
+/// Only [`reason!`] builds one with input in it, from a fixed list of [`Piece`]s: fixed text
+/// (`&'static str`: literals, never text read from a document) and `Quoted` input. A `String`,
+/// a borrowed `&str` or a `Reason` is not a piece, and only this module can make one, so the
+/// compiler guarantees that any input a reason holds went through `Quoted`'s cap, and that its
+/// length is bounded by its call site's pieces. Capping never cuts the wording a reader or the
+/// conformance suite matches.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Reason(String);
+
+/// One piece of a [`Reason`]: fixed text or [`Quoted`] input.
+///
+/// It is sealed: only this module implements it, and only for types whose text is bounded.
+/// Never implement it for `String`, a borrowed `&str` or `Reason`, or the cap is lost.
+pub(crate) trait Piece: sealed::Sealed {
+    /// Appends this piece's text to `out`.
+    fn push_onto(&self, out: &mut String);
+}
+
+impl Piece for &'static str {
+    fn push_onto(&self, out: &mut String) {
+        self.chars().for_each(|c| push_escaped(out, c));
+    }
+}
+
+impl Piece for Quoted {
+    fn push_onto(&self, out: &mut String) {
+        out.push_str(&self.0);
+    }
+}
+
+/// Keeps [`Piece`] implementable in this module only.
+mod sealed {
+    /// The supertrait other modules cannot name, so cannot implement.
+    pub trait Sealed {}
+
+    impl Sealed for &'static str {}
+    impl Sealed for super::Quoted {}
+}
+
+/// A [`Reason`] joining fixed text and [`Quoted`] input, in order.
+///
+/// `reason!["$ref '", Quoted::new(reference), "' does not resolve"]`; each piece must be a
+/// [`Piece`], so input that skips `Quoted` does not compile.
+macro_rules! reason {
+    ($($piece:expr),+ $(,)?) => {
+        $crate::quoted::Reason::of(&[$(&$piece as &dyn $crate::quoted::Piece),+])
+    };
+}
+pub(crate) use reason;
 
 impl Quoted {
     /// Escapes `text` and caps it at [`MAX_QUOTED_CHARS`] input characters.
@@ -45,10 +91,12 @@ impl Quoted {
 }
 
 impl Reason {
-    /// Escapes `text` without capping it.
-    pub(crate) fn new(text: &str) -> Self {
-        let mut out = String::with_capacity(text.len());
-        text.chars().for_each(|c| push_escaped(&mut out, c));
+    /// Joins `pieces` in order; [`reason!`] calls it with a list fixed at its call site.
+    ///
+    /// The array length is a constant, so even a repeated `[piece; N]` stays bounded.
+    pub(crate) fn of<const N: usize>(pieces: &[&dyn Piece; N]) -> Self {
+        let mut out = String::new();
+        pieces.iter().for_each(|piece| piece.push_onto(&mut out));
         Self(out)
     }
 }
@@ -71,15 +119,9 @@ impl From<String> for Quoted {
     }
 }
 
-impl From<&str> for Reason {
-    fn from(text: &str) -> Self {
-        Self::new(text)
-    }
-}
-
-impl From<String> for Reason {
-    fn from(text: String) -> Self {
-        Self::new(&text)
+impl From<&'static str> for Reason {
+    fn from(text: &'static str) -> Self {
+        Self::of(&[&text])
     }
 }
 

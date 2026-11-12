@@ -19,6 +19,7 @@ use crate::limits::{
     MAX_CATALOG_BYTES, MAX_CATALOG_ENTRIES, MAX_CATALOG_NODES, MAX_JSON_DEPTH, MAX_KEY_BYTES,
     MAX_REF_BYTES, Oversize, deeper_than, oversize,
 };
+use crate::quoted::reason;
 use crate::schema::common_type_defs;
 
 /// The version a catalog targets when it declares none (`catalog_definition.json` default).
@@ -152,12 +153,12 @@ impl Catalog {
     }
 }
 
-fn text<'a>(document: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, Error> {
+fn text<'a>(document: &'a Map<String, Value>, key: &'static str) -> Result<Option<&'a str>, Error> {
     match document.get(key) {
         None => Ok(None),
         Some(Value::String(text)) => Ok(Some(text)),
         Some(_) => Err(MalformedCatalogSnafu {
-            reason: format!("`{key}` must be a string"),
+            reason: reason!["`", key, "` must be a string"],
         }
         .build()
         .into()),
@@ -173,13 +174,13 @@ fn is_supported_version(version: &str) -> bool {
 
 fn section<'a>(
     document: &'a Map<String, Value>,
-    key: &str,
+    key: &'static str,
 ) -> Result<Option<&'a Map<String, Value>>, Error> {
     match document.get(key) {
         None => Ok(None),
         Some(Value::Object(map)) => Ok(Some(map)),
         Some(_) => Err(MalformedCatalogSnafu {
-            reason: format!("`{key}` must be an object"),
+            reason: reason!["`", key, "` must be an object"],
         }
         .build()
         .into()),

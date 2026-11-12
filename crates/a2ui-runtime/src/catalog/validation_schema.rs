@@ -16,7 +16,7 @@ use crate::bundle::{
     localize_refs, node_at, pointer, pointer_of, rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
-use crate::quoted::Quoted;
+use crate::quoted::{Quoted, reason};
 use crate::validator::DRAFT_2020_12;
 
 /// Keywords whose value maps names to subschemas.
@@ -144,28 +144,44 @@ fn check_refs_name_schemas(
         return Ok(());
     };
     // An authored place is the author's; a runtime-written one is the validation schema's.
-    let (reference, place, in_schema) = match authored(&path, reference, theme, defs) {
+    let (reference, at, of_schema, in_schema) = match authored(&path, reference, theme, defs) {
         Some((authored_at, authored_ref)) => (
             Quoted::new(authored_ref),
-            format!("at {}", Quoted::new(&authored_at)),
+            Quoted::new(&authored_at),
+            "",
             " in the validation schema",
         ),
         None => (
             Quoted::new(reference),
-            format!(
-                "at {} of the validation schema",
-                Quoted::new(&pointer(&path))
-            ),
+            Quoted::new(&pointer(&path)),
+            " of the validation schema",
             "",
         ),
     };
-    let outcome = match found {
-        NotASchema::Missing => format!("does not resolve{in_schema}"),
-        NotASchema::Value(kind) => {
-            format!("names {kind}{in_schema}, not a schema (an object or a boolean)")
+    let reason = match found {
+        NotASchema::Missing => {
+            reason![
+                "$ref '",
+                reference,
+                "' at ",
+                at,
+                of_schema,
+                " does not resolve",
+                in_schema
+            ]
         }
+        NotASchema::Value(kind) => reason![
+            "$ref '",
+            reference,
+            "' at ",
+            at,
+            of_schema,
+            " names ",
+            kind,
+            in_schema,
+            ", not a schema (an object or a boolean)",
+        ],
     };
-    let reason = format!("$ref '{reference}' {place} {outcome}");
     Err(MalformedCatalogSnafu { reason }.build().into())
 }
 

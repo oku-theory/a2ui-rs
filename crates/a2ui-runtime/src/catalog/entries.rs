@@ -13,7 +13,7 @@ use crate::error::{
     UserActivationSnafu,
 };
 use crate::ident::is_identifier;
-use crate::quoted::Quoted;
+use crate::quoted::{Quoted, Reason, reason};
 use crate::schema::validate_component_metadata;
 
 /// A checked component definition, before its shape and validator exist.
@@ -94,19 +94,21 @@ impl FunctionAttrs {
                 .as_str()
                 .and_then(AllowedCallers::from_catalog_str)
                 .with_context(|| MalformedCatalogSnafu {
-                    reason: format!(
-                        "function '{}' has an unknown allowedCallers",
-                        Quoted::new(name)
-                    ),
+                    reason: reason![
+                        "function '",
+                        Quoted::new(name),
+                        "' has an unknown allowedCallers",
+                    ],
                 })?,
         };
         let requires_user_activation = match map.get("requiresUserActivation") {
             None => false,
             Some(value) => value.as_bool().with_context(|| MalformedCatalogSnafu {
-                reason: format!(
-                    "requiresUserActivation of function '{}' must be a boolean",
-                    Quoted::new(name)
-                ),
+                reason: reason![
+                    "requiresUserActivation of function '",
+                    Quoted::new(name),
+                    "' must be a boolean",
+                ],
             })?,
         };
         ensure!(
@@ -158,23 +160,27 @@ fn check_identifier(
         InvalidIdentifierSnafu {
             kind,
             name,
-            context: owner
-                .map(|(owner_kind, owner)| format!(" in {owner_kind} '{}'", Quoted::new(owner)))
-                .unwrap_or_default(),
+            context: owner.map_or(Reason::from(""), |(owner_kind, owner)| {
+                reason![" in ", owner_kind, " '", Quoted::new(owner), "'"]
+            }),
         }
     );
     Ok(())
 }
 
-fn entry<'a>(kind: &str, name: &str, schema: &'a Value) -> Result<&'a Map<String, Value>, Error> {
+fn entry<'a>(
+    kind: &'static str,
+    name: &str,
+    schema: &'a Value,
+) -> Result<&'a Map<String, Value>, Error> {
     Ok(schema.as_object().with_context(|| MalformedCatalogSnafu {
-        reason: format!("{kind} '{}' must be a schema object", Quoted::new(name)),
+        reason: reason![kind, " '", Quoted::new(name), "' must be a schema object"],
     })?)
 }
 
 fn names_list(
     map: &Map<String, Value>,
-    key: &str,
+    key: &'static str,
     component: &str,
 ) -> Result<Option<Vec<String>>, Error> {
     let Some(value) = map.get(key) else {
@@ -189,10 +195,13 @@ fn names_list(
                 .collect::<Option<Vec<_>>>()
         })
         .with_context(|| MalformedCatalogSnafu {
-            reason: format!(
-                "`{key}` of component '{}' must be a list of names",
-                Quoted::new(component)
-            ),
+            reason: reason![
+                "`",
+                key,
+                "` of component '",
+                Quoted::new(component),
+                "' must be a list of names",
+            ],
         })?;
     Ok(Some(names))
 }

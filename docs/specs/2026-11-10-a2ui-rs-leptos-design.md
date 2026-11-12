@@ -97,8 +97,9 @@ A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRI
 application localizes from the code. Input an error quotes (paths, names, `$ref`s, schema
 messages) is escaped and capped when the error is built: controls, format characters (`Cf`: bidi,
 zero-width, tags) and line separators become Rust escapes, and a value past 512 input characters
-keeps its head and tail around an elision marker. Runtime wording around such values is escaped
-but never capped, so the runtime's own fixed text always survives; a third-party message quoted
+keeps its head and tail around an elision marker. Runtime wording around such values is never
+capped, so the runtime's own fixed text always survives; it is composed only from literals and
+capped values, which the compiler checks (no `String` reaches it). A third-party message quoted
 whole (a `jsonschema` violation) can lose wording from its middle. Quotes and backslashes are
 kept, so literal `\n` text reads like an escape: that misleads within one line, never forges one.
 
