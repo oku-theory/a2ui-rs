@@ -337,6 +337,8 @@ impl<'a> Walk<'a> {
     fn resolve(&mut self, reference: &'a String) -> Result<&'a Value, Expansion> {
         let unresolved = || Expansion::Unresolved(reference.clone());
         let pointer = pointer_of(reference).ok_or_else(unresolved)?;
+        // Load rule 4 refused undefined `~` escapes, so `entry_of` and the lenient
+        // `Value::pointer` below decode every token alike: the entry charged holds the target.
         let (section, name) = entry_of(&pointer).ok_or_else(unresolved)?;
         let target = self.root.pointer(&pointer).ok_or_else(unresolved)?;
         let entry = self

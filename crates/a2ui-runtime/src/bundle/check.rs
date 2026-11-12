@@ -6,6 +6,7 @@ use snafu::ensure;
 use super::walk::{Segment, find_member_in, pointer};
 use super::{COMMON_TYPES_URIS, ENTRY_SECTIONS, is_pointer_fragment, is_supported_ref, pointer_of};
 use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
+use crate::pointer::{BAD_ESCAPE, is_escaped_pointer};
 use crate::quoted::{Quoted, reason};
 
 /// The keywords the reference check reads when they hold a scalar.
@@ -27,10 +28,11 @@ const NESTED: &str = "only the catalog's top level may declare it";
 ///
 /// A key holding an object or array is walked whatever its name, so a property named `$ref`
 /// holding a schema is a property. A scalar under a keyword is checked: `$ref` must be a
-/// supported string with an empty or JSON Pointer fragment, anchors and dynamic references are
-/// refused, and `$id` and `$schema` may only sit at the top level. A pointer must name the
-/// theme or a `$defs`, component or function entry (common types: a `$defs` entry), or a node
-/// in one, since the validation schema keeps nothing else. A pointer below a component
+/// supported string with an empty or JSON Pointer fragment whose `~` escapes are RFC 6901's
+/// (so every walk decodes its tokens alike, `serde_json`'s lenient lookup included), anchors
+/// and dynamic references are refused, and `$id` and `$schema` may only sit at the top level.
+/// A pointer must name the theme or a `$defs`, component or function entry (common types: a
+/// `$defs` entry), or a node in one, since the validation schema keeps nothing else. A pointer below a component
 /// or function entry (`#/components/A/properties`) is refused: the validation schema rewrites
 /// those entries, so it would dangle there. The walk does not tell schemas from data, so a
 /// `const` or `default` holding such a key is refused too. A numeric `$anchor` or `$id` is left
@@ -89,6 +91,21 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
         .fail()
         .map_err(Into::into);
     };
+    // Every token, not only the entry's: `limits` looks the whole pointer up with
+    // `serde_json`'s lenient `Value::pointer`, which must decode it as `entry_of` does.
+    ensure!(
+        is_escaped_pointer(&target),
+        MalformedCatalogSnafu {
+            reason: reason![
+                "$ref '",
+                Quoted::new(reference),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " has a JSON Pointer where ",
+                BAD_ESCAPE,
+            ],
+        }
+    );
     ensure!(
         is_kept_target(reference, &target),
         MalformedCatalogSnafu {

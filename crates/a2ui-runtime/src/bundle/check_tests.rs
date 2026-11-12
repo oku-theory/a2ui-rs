@@ -194,3 +194,29 @@ fn check_references_unsupported_ref_in_data_is_refused(
     let expected = format!("Unsupported external $ref 'other.json#/a' at /$defs/X{below}");
     assert_that!(reference_error(document)).contains(expected);
 }
+
+#[rstest]
+#[case::unknown_escape("#/$defs/a~2b")]
+#[case::trailing_tilde("catalog.json#/$defs/a~")]
+#[case::section_token("#/$def~s/A")]
+#[case::below_the_entry("#/$defs/A/properties/x~2")]
+#[case::percent_encoded_tilde("#/$defs/a%7E2b")]
+fn check_references_pointer_with_a_bad_escape_is_catalog_error(#[case] reference: &str) {
+    let document = json!({"$defs": {"x": {"$ref": reference}}});
+    assert_that!(reference_error(document)).contains(format!(
+        "$ref '{reference}' at /$defs/x/$ref has a JSON Pointer where '~' must be followed by \
+         '0' or '1'"
+    ));
+}
+
+#[test]
+fn check_references_percent_encoded_escape_digit_is_decoded_first() {
+    let document = json!({"$defs": {"a/b": {}, "x": {"$ref": "#/$defs/a~%31b"}}});
+    assert_that!(references(document)).is_ok();
+}
+
+#[test]
+fn check_references_pointer_with_both_escapes_passes() {
+    let document = json!({"$defs": {"a/b~c": {}, "x": {"$ref": "#/$defs/a~1b~0c"}}});
+    assert_that!(references(document)).is_ok();
+}

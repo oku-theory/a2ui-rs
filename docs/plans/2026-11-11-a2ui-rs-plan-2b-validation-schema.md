@@ -162,6 +162,15 @@ upstream's reading would be unsafe:
     `examples`, and none of the 995 `$ref`s under `vendor/a2ui` sits in data. What a bad
     `$ref` names is `NotASchema`: `Missing`, or one variant per JSON type that is not a schema.
     It carries no wording; `validation_schema` owns the message.
+16. **RFC 6901 escapes only (t-1595):** `crate::pointer` holds the crate's one reference-token
+    codec, `escape_token` and `unescape_token` (`None` when a `~` is not followed by `0` or `1`,
+    RFC 6901 §3-4); `Pointer`, `bundle`'s `$ref` paths, `entry_of` and `whole_def_name` use it,
+    and `bundle`'s lenient unescape is gone. Load rule 4 now refuses a `$ref` whose decoded
+    pointer has such an escape in any token: `limits::resolve` pairs the strict `entry_of` with
+    `serde_json`'s lenient `Value::pointer`, which must decode the whole pointer alike so the
+    entry charged holds the target. Upstream has no such rule; RFC 6901 calls those pointers
+    invalid. Percent-decoding comes first, so `%7E2` is refused too. None of the 995 `$ref`s
+    under `vendor/a2ui` holds a `~`, and a test pins that every common-type `$ref` is escaped.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

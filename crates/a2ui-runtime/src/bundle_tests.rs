@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::*;
+use crate::pointer::is_escaped_pointer;
 
 #[rstest]
 #[case("#/$defs/Weight", true)]
@@ -115,6 +116,7 @@ fn pointer_of_encoded_percent_sign_is_decoded() {
 #[case("", None)]
 #[case("/theme/x", None)]
 #[case("/$defs", None)]
+#[case("/$defs/a~2b", None)]
 fn entry_of_pointer_names_its_entry(#[case] pointer: &str, #[case] expected: Option<(&str, &str)>) {
     let entry = entry_of(pointer);
     let entry = entry
@@ -203,6 +205,7 @@ fn function_call_envelope_closes_the_call_over_function_common() {
 #[case::below_the_entry("#/$defs/Weight/description", None)]
 #[case::other_section("#/components/Weight", None)]
 #[case::section_only("#/$defs", None)]
+#[case::bad_escape_in_the_name("#/$defs/a~2b", None)]
 fn whole_def_name_names_only_a_whole_entry(#[case] reference: &str, #[case] name: Option<&str>) {
     assert_that!(whole_def_name(reference)).is_equal_to(name.map(str::to_owned));
 }
@@ -218,4 +221,15 @@ fn def_names_lists_only_defs_entries() {
     let mut names = Vec::new();
     def_names(&node, &mut names);
     assert_that!(names).is_equal_to(vec!["A".to_owned(), "D".to_owned()]);
+}
+
+#[test]
+fn common_types_every_ref_pointer_is_rfc_6901_escaped() {
+    let mut pointers = Vec::new();
+    for definition in crate::schema::common_type_defs().unwrap().values() {
+        for_each_ref(definition, &mut |reference| {
+            pointers.extend(pointer_of(reference))
+        });
+    }
+    assert_that!(pointers.iter().all(|pointer| is_escaped_pointer(pointer))).is_true();
 }

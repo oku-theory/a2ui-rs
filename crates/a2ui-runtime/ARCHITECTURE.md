@@ -7,9 +7,9 @@ It builds for `wasm32-unknown-unknown`.
 
 - `error`: one opaque `Error` (Snafu, backtrace per variant), `category()` its category; stable
   English; `quoted`: input escaped and capped, `reason!` wording from fixed text and capped input.
-- `pointer`: `Pointer`, an absolute RFC 6901 pointer with empty segments dropped, `~0`/`~1`
-  unescaped and `__proto__`/`constructor`/`prototype` refused; list indices are canonical digits
-  up to `MAX_LIST_INDEX` (10 000).
+- `pointer`: the crate's one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`,
+  absolute, empty segments dropped, `__proto__`/`constructor`/`prototype` refused; list indices
+  are canonical digits up to `MAX_LIST_INDEX` (10 000).
 - `data`: `DataModel`, one JSON document per surface; stored `null` reads as absent and `set`
   of `null` deletes. `set` creates missing containers and validates the whole path first; each
   change returns a `Write` (path, previous value) whose `changes(watched)` compares values.
@@ -23,9 +23,8 @@ It builds for `wasm32-unknown-unknown`.
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached validators; `FunctionCall` takes any function but `@index`).
-- `ident`: UAX #31 `is_identifier` (`_` allowed first), shared by parser and catalogs.
-- `validator`: `jsonschema` 2020-12, `regex` engine, offline; build errors `CatalogError`,
-  the first violation a `ValidationError`.
+- `ident`: UAX #31 `is_identifier` (`_` first allowed). `validator`: `jsonschema` 2020-12,
+  `regex` engine, offline; build errors `CatalogError`, the first violation a `ValidationError`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, string
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries
   its unions list and the authored document (`to_json`), compiles each entry against a bundle
@@ -37,8 +36,9 @@ It builds for `wasm32-unknown-unknown`.
   catalogs only for identifiers. `derive`: a new-id catalog from a `Derivation` (source's version,
   theme, `$defs`; duplicate names rejected, changed unions regenerated). Submodules `load`,
   `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
-- `bundle`: `local_ref`s, common types; `check`: v1.0 `$ref` rules (self, `catalog.json`,
-  `common_types.json`; no anchors, dynamic refs, nested `$id`, entry interiors); `walk`, `target`.
+- `bundle` (`walk`, `target`): `local_ref`s, common types; `check`: v1.0 `$ref` rules (self,
+  `catalog.json`, `common_types.json`, RFC 6901 escapes; no anchors, dynamic refs, nested `$id`,
+  entry interiors).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
   4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
   reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound

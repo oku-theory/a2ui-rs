@@ -5,6 +5,8 @@
 
 use serde_json::{Map, Value};
 
+use crate::pointer::escape_token;
+
 /// One step of the path from a document root to a node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Segment<'a> {
@@ -118,7 +120,7 @@ pub(crate) fn node_at<'a>(root: &'a Value, path: &[Segment<'_>]) -> Option<&'a V
 pub(crate) fn pointer(path: &[Segment<'_>]) -> String {
     path.iter()
         .map(|segment| match segment {
-            Segment::Key(key) => format!("/{}", key.replace('~', "~0").replace('/', "~1")),
+            Segment::Key(key) => format!("/{}", escape_token(key)),
             Segment::Index(index) => format!("/{index}"),
         })
         .collect()

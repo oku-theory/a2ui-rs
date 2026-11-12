@@ -10,6 +10,8 @@ use std::borrow::Cow;
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 use serde_json::{Map, Value, json};
 
+use crate::pointer::unescape_token;
+
 mod check;
 mod target;
 mod walk;
@@ -97,17 +99,13 @@ fn is_pointer_fragment(fragment: &str) -> bool {
 /// The section and decoded name of the entry a JSON Pointer falls in.
 ///
 /// `/components/Card/properties/child` falls in `("components", "Card")`. `None` when the
-/// pointer names no node inside a `$defs`, `components` or `functions` entry.
+/// pointer names no node inside a `$defs`, `components` or `functions` entry, or when the
+/// entry's token has a `~` escape RFC 6901 does not define (load rule 4 refuses those).
 pub(crate) fn entry_of(pointer: &str) -> Option<(&'static str, String)> {
     let (section, rest) = pointer.strip_prefix('/')?.split_once('/')?;
     let section = ENTRY_SECTIONS.into_iter().find(|known| *known == section)?;
     let token = rest.split_once('/').map_or(rest, |(token, _)| token);
-    Some((section, unescape(token)))
-}
-
-/// A JSON Pointer reference token with `~1` and `~0` unescaped (RFC 6901, section 4).
-fn unescape(token: &str) -> String {
-    token.replace("~1", "/").replace("~0", "~")
+    Some((section, unescape_token(token)?.into_owned()))
 }
 
 /// `reference` as a local, percent-encoded `$ref`; any other one is returned unchanged.
@@ -162,7 +160,10 @@ fn def_name(reference: &str) -> Option<String> {
 pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
     let pointer = pointer_of(reference)?;
     let token = pointer.strip_prefix("/$defs/")?;
-    (!token.contains('/')).then(|| unescape(token))
+    if token.contains('/') {
+        return None;
+    }
+    unescape_token(token).map(Cow::into_owned)
 }
 
 /// A `FunctionCall` checking only the envelope: `@call`, `catalogId`, `args`, nothing else.
