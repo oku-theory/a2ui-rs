@@ -4,7 +4,7 @@ use speculoos::prelude::*;
 
 use super::super::test_support::{catalog_error, load, load_on_a_small_stack, mixin_copies, v10};
 use crate::Catalog;
-use crate::bundle::localize_refs;
+use crate::bundle::{Segment, localize_refs};
 use crate::limits::{MAX_CATALOG_EXPANSION, oversize};
 use crate::schema::common_type_defs;
 
@@ -538,26 +538,82 @@ fn from_json_theme_ref_to_own_def_loads() {
 
 #[rstest]
 #[case::theme_node(
-    "/$defs/theme/properties/b/$ref",
+    &["$defs", "theme", "properties", "b", "$ref"],
+    "#/x",
     true,
     Some(("/theme/properties/b/$ref", "#/x"))
 )]
-#[case::defs_theme_without_theme("/$defs/theme/$ref", false, Some(("/$defs/theme/$ref", "#/z")))]
-#[case::def_node("/$defs/a~1b/$ref", true, Some(("/$defs/a~1b/$ref", "#/y")))]
-#[case::common_type("/$defs/DynamicString/$ref", true, None)]
-#[case::component("/components/A/$ref", true, None)]
-#[case::not_a_ref_string("/$defs/theme/properties", true, None)]
-fn authored_validation_schema_place_is_authored_place_or_none(
-    #[case] at: &str,
+#[case::theme_node_retargeted(
+    &["$defs", "theme", "properties", "c", "$ref"],
+    "#/$defs/theme/properties/b",
+    true,
+    Some(("/theme/properties/c/$ref", "catalog.json#/theme/properties/b"))
+)]
+#[case::defs_theme_without_theme(
+    &["$defs", "theme", "$ref"],
+    "#/z",
+    false,
+    Some(("/$defs/theme/$ref", "#/z"))
+)]
+#[case::def_node(&["$defs", "a/b", "$ref"], "#/y", true, Some(("/$defs/a~1b/$ref", "#/y")))]
+#[case::def_node_localized(
+    &["$defs", "u", "$ref"],
+    "#/$defs/Missing_%E2%84%93",
+    false,
+    Some(("/$defs/u/$ref", "catalog.json#/$defs/Missing_ℓ"))
+)]
+#[case::def_node_retargeted(
+    &["$defs", "v", "$ref"],
+    "#/$defs/theme/properties/b",
+    true,
+    Some(("/$defs/v/$ref", "catalog.json#/theme/properties/b"))
+)]
+#[case::theme_node_in_an_array(
+    &["$defs", "theme", "allOf", "1", "$ref"],
+    "#/w",
+    true,
+    Some(("/theme/allOf/1/$ref", "#/w"))
+)]
+#[case::theme_ref_not_retargeted(
+    &["$defs", "theme", "properties", "c", "$ref"],
+    "catalog.json#/theme/properties/b",
+    true,
+    None
+)]
+#[case::other_ref_at_the_authored_place(&["$defs", "a/b", "$ref"], "#/other", true, None)]
+#[case::common_type(&["$defs", "DynamicString", "$ref"], "#/y", true, None)]
+#[case::component(&["components", "A", "$ref"], "#/y", true, None)]
+#[case::not_a_ref_string(&["$defs", "theme", "properties"], "#/x", true, None)]
+fn authored_validation_schema_ref_is_authored_place_and_ref_or_none(
+    #[case] keys: &[&str],
+    #[case] written: &str,
     #[case] with_theme: bool,
     #[case] expected: Option<(&str, &str)>,
 ) {
-    let theme = json!({"properties": {"b": {"$ref": "#/x"}}});
+    let theme = json!({
+        "properties": {
+            "b": {"$ref": "#/x"},
+            "c": {"$ref": "catalog.json#/theme/properties/b"}
+        },
+        "allOf": [{}, {"$ref": "#/w"}]
+    });
     let defs = Map::from_iter([
         ("a/b".to_owned(), json!({"$ref": "#/y"})),
         ("theme".to_owned(), json!({"$ref": "#/z"})),
+        (
+            "u".to_owned(),
+            json!({"$ref": "catalog.json#/$defs/Missing_ℓ"}),
+        ),
+        (
+            "v".to_owned(),
+            json!({"$ref": "catalog.json#/theme/properties/b"}),
+        ),
     ]);
-    let found = super::authored(at, with_theme.then_some(&theme), Some(&defs));
+    let path: Vec<Segment<'_>> = keys
+        .iter()
+        .map(|key| key.parse().map_or(Segment::Key(key), Segment::Index))
+        .collect();
+    let found = super::authored(&path, written, with_theme.then_some(&theme), Some(&defs));
     let found = found
         .as_ref()
         .map(|(place, reference)| (place.as_str(), *reference));

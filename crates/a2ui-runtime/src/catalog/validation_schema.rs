@@ -12,8 +12,8 @@ use serde_json::{Map, Value};
 use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
-    NotASchema, add_common_types, def_names, first_not_a_schema, local_ref, localize_refs,
-    pointer_of, rewrite_refs, whole_def_name,
+    NotASchema, Segment, add_common_types, def_names, first_not_a_schema, local_ref, localize_ref,
+    localize_refs, node_at, pointer, pointer_of, rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::quoted::Quoted;
@@ -140,11 +140,11 @@ fn check_refs_name_schemas(
     theme: Option<&Value>,
     defs: Option<&Map<String, Value>>,
 ) -> Result<(), Error> {
-    let Some((reference, at, found)) = first_not_a_schema(schema) else {
+    let Some((reference, path, found)) = first_not_a_schema(schema) else {
         return Ok(());
     };
     // An authored place is the author's; a runtime-written one is the validation schema's.
-    let (reference, place, in_schema) = match authored(&at, theme, defs) {
+    let (reference, place, in_schema) = match authored(&path, reference, theme, defs) {
         Some((authored_at, authored_ref)) => (
             Quoted::new(authored_ref),
             format!("at {}", Quoted::new(&authored_at)),
@@ -152,7 +152,10 @@ fn check_refs_name_schemas(
         ),
         None => (
             Quoted::new(reference),
-            format!("at {} of the validation schema", Quoted::new(&at)),
+            format!(
+                "at {} of the validation schema",
+                Quoted::new(&pointer(&path))
+            ),
             "",
         ),
     };
@@ -166,27 +169,41 @@ fn check_refs_name_schemas(
     Err(MalformedCatalogSnafu { reason }.build().into())
 }
 
-/// The authored place and `$ref` of the validation schema's `$ref` at `at`, if authored.
+/// The authored place and `$ref` behind the validation schema's `written` `$ref` at `path`.
 ///
 /// The theme moves to `/$defs/theme` and a definition stays at `/$defs/<name>`; both are copied
-/// with every node at its path (localizing and describing only rewrite or add values).
+/// with every node at its path (localizing and describing only rewrite or add values). The
+/// authored node is taken only when building it again gives `written`: localized, then pointed
+/// at `#/$defs/theme` when there is a theme. `None`: no authored `$ref` rebuilds to it, so
+/// the runtime wrote it.
 fn authored<'a>(
-    at: &str,
+    path: &[Segment<'_>],
+    written: &str,
     theme: Option<&'a Value>,
     defs: Option<&'a Map<String, Value>>,
 ) -> Option<(String, &'a str)> {
-    let rest = at.strip_prefix("/$defs/")?;
-    let (token, below) = rest
-        .find('/')
-        .map_or((rest, ""), |slash| rest.split_at(slash));
-    let (place, node) = match theme {
-        Some(theme) if token == "theme" => (format!("/theme{below}"), theme.pointer(below)?),
-        _ => {
-            let name = token.replace("~1", "/").replace("~0", "~");
-            (at.to_owned(), defs?.get(&name)?.pointer(below)?)
-        }
+    let [Segment::Key("$defs"), Segment::Key(name), below @ ..] = path else {
+        return None;
     };
-    node.as_str().map(|reference| (place, reference))
+    let (node, in_theme) = match theme {
+        Some(theme) if *name == "theme" => (theme, true),
+        _ => (defs?.get(*name)?, false),
+    };
+    let reference = node_at(node, below)?.as_str()?;
+    let rebuilt = localize_ref(reference);
+    let rebuilt = match theme {
+        Some(_) => theme_target(&rebuilt).unwrap_or(rebuilt),
+        None => rebuilt,
+    };
+    if rebuilt != written {
+        return None;
+    }
+    let place = if in_theme {
+        format!("/theme{}", pointer(below))
+    } else {
+        pointer(path)
+    };
+    Some((place, reference))
 }
 
 /// The theme as upstream writes it in `$defs`: localized, described, open unless it says.
@@ -211,17 +228,23 @@ fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
 /// `theme_def` only adds keys, so every node of the authored theme keeps its path there. Load
 /// rule 11 keeps such refs out of components, functions and the definitions they reach, so only
 /// `$defs` (the theme itself, definitions no entry reaches) can hold one. Like
-/// [`localize_refs`], it rewrites every `$ref` string, data included.
+/// [`localize_refs`], it rewrites every `$ref` string, data included. [`authored`] rebuilds
+/// refs in this same order (localize, then retarget): a new `$defs` rewrite belongs there too.
 fn retarget_theme(node: &mut Value) {
     rewrite_refs(node, &mut |reference| {
-        if let Some(rest) = pointer_of(reference)
-            .as_deref()
-            .and_then(|pointer| pointer.strip_prefix("/theme"))
-            .filter(|rest| rest.is_empty() || rest.starts_with('/'))
-        {
-            *reference = local_ref(&format!("/$defs/theme{rest}"));
+        if let Some(target) = theme_target(reference) {
+            *reference = target;
         }
     });
+}
+
+/// The `$ref` to the same node under `#/$defs/theme`, for a `$ref` into `#/theme`.
+fn theme_target(reference: &str) -> Option<String> {
+    pointer_of(reference)
+        .as_deref()
+        .and_then(|pointer| pointer.strip_prefix("/theme"))
+        .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+        .map(|rest| local_ref(&format!("/$defs/theme{rest}")))
 }
 
 /// Gives each whole-entry `$ref` to a common type that type's description, unless it has one.

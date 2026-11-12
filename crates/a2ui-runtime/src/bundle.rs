@@ -60,8 +60,7 @@ pub(crate) fn localize_refs(node: &mut Value) {
 ///
 /// `visit` gets the member's key, its value and its path; a member holding an object or array
 /// is walked whatever its key, and an array item or the root is never visited, having no key.
-/// Object members come in map order and array items in index order, and `pointer(path)`
-/// spells a path within this module. It recurses: callers pass a document that load rule 1
+/// Object members come in map order and array items in index order. It recurses: callers pass a document that load rule 1
 /// bounded to `MAX_JSON_DEPTH` levels, or one built from it. [`find_ref`] walks with it, and
 /// [`check_references`] with its descent from a map (`find_member_in`).
 fn find_member<'a, T>(
@@ -208,13 +207,13 @@ pub(crate) enum NotASchema {
     Value(&'static str),
 }
 
-/// The first `$ref` string under `root` that names no schema of it, with its JSON Pointer.
+/// The first `$ref` under `root` naming no schema of it, with its path.
 ///
 /// A schema is an object or a boolean (JSON Schema 2020-12, 4.3.1); one in a data position
 /// still passes. It only looks pointers up, never follows one, so its cost is linear in `root`
-/// whatever the `$ref`s chain. The pointer is built only for the `$ref` found. It walks with
-/// [`find_ref`].
-pub(crate) fn first_not_a_schema(root: &Value) -> Option<(&str, String, NotASchema)> {
+/// whatever the `$ref`s chain. The path holds the keys as they are, never escaped, and is
+/// copied only for the `$ref` found. It walks with [`find_ref`].
+pub(crate) fn first_not_a_schema(root: &Value) -> Option<(&str, Vec<Segment<'_>>, NotASchema)> {
     find_ref(root, &mut |reference, path| {
         let found = match resolve(root, reference) {
             None => NotASchema::Missing,
@@ -224,7 +223,7 @@ pub(crate) fn first_not_a_schema(root: &Value) -> Option<(&str, String, NotASche
             Some(Value::Array(_)) => NotASchema::Value("an array"),
             Some(Value::Null) => NotASchema::Value("null"),
         };
-        Some((reference, pointer(path), found))
+        Some((reference, path.to_vec(), found))
     })
 }
 
@@ -236,7 +235,12 @@ pub(crate) fn entry_of(pointer: &str) -> Option<(&'static str, String)> {
     let (section, rest) = pointer.strip_prefix('/')?.split_once('/')?;
     let section = ENTRY_SECTIONS.into_iter().find(|known| *known == section)?;
     let token = rest.split_once('/').map_or(rest, |(token, _)| token);
-    Some((section, token.replace("~1", "/").replace("~0", "~")))
+    Some((section, unescape(token)))
+}
+
+/// A JSON Pointer reference token with `~1` and `~0` unescaped (RFC 6901, section 4).
+fn unescape(token: &str) -> String {
+    token.replace("~1", "/").replace("~0", "~")
 }
 
 /// `reference` as a local, percent-encoded `$ref`; any other one is returned unchanged.
@@ -280,6 +284,7 @@ pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Erro
 }
 
 /// One step of the path from a document root to a node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Segment<'a> {
     /// An object member, by its unescaped key.
     Key(&'a str),
@@ -401,8 +406,16 @@ fn check_keyword(key: &str, value: &Value, path: &[Segment<'_>]) -> Result<(), E
     .into())
 }
 
+/// The node of `root` at `path`, if every step names one.
+pub(crate) fn node_at<'a>(root: &'a Value, path: &[Segment<'_>]) -> Option<&'a Value> {
+    path.iter().try_fold(root, |node, segment| match segment {
+        Segment::Key(key) => node.as_object()?.get(*key),
+        Segment::Index(index) => node.as_array()?.get(*index),
+    })
+}
+
 /// The JSON Pointer of `path`, each key escaped.
-fn pointer(path: &[Segment<'_>]) -> String {
+pub(crate) fn pointer(path: &[Segment<'_>]) -> String {
     path.iter()
         .map(|segment| match segment {
             Segment::Key(key) => format!("/{}", key.replace('~', "~0").replace('/', "~1")),
@@ -458,7 +471,7 @@ fn def_name(reference: &str) -> Option<String> {
 pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
     let pointer = pointer_of(reference)?;
     let token = pointer.strip_prefix("/$defs/")?;
-    (!token.contains('/')).then(|| token.replace("~1", "/").replace("~0", "~"))
+    (!token.contains('/')).then(|| unescape(token))
 }
 
 /// A `FunctionCall` checking only the envelope: `@call`, `catalogId`, `args`, nothing else.

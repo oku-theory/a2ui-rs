@@ -506,3 +506,29 @@ fn check_references_array_under_ref_key_is_walked() {
     let document = json!({"$defs": {"x": {"$ref": [{"$ref": "x.json#/a"}]}}});
     assert_that!(reference_error(document)).contains("at /$defs/x/$ref/0/$ref");
 }
+
+#[rstest]
+#[case::key_and_index(vec![Segment::Key("a/b"), Segment::Index(1)], Some(json!(2)))]
+#[case::root(vec![], Some(json!({"a/b": [1, 2]})))]
+#[case::missing_key(vec![Segment::Key("x")], None)]
+#[case::index_past_the_end(vec![Segment::Key("a/b"), Segment::Index(2)], None)]
+#[case::key_into_an_array(vec![Segment::Key("a/b"), Segment::Key("0")], None)]
+fn node_at_path_names_its_node(#[case] path: Vec<Segment<'_>>, #[case] expected: Option<Value>) {
+    let root = json!({"a/b": [1, 2]});
+    assert_that!(node_at(&root, &path).cloned()).is_equal_to(expected);
+}
+
+#[test]
+fn first_not_a_schema_path_holds_raw_keys() {
+    let root = json!({"$defs": {"a/b": {"$ref": "#/$defs/Missing"}}});
+    let path = vec![
+        Segment::Key("$defs"),
+        Segment::Key("a/b"),
+        Segment::Key("$ref"),
+    ];
+    assert_that!(first_not_a_schema(&root)).is_equal_to(Some((
+        "#/$defs/Missing",
+        path,
+        NotASchema::Missing,
+    )));
+}
