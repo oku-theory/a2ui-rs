@@ -249,6 +249,11 @@ fn validation_schema_bundles_only_reached_common_types(#[case] name: &str, #[cas
     json!({"x": {"$ref": "#/$defs/M"}}),
     true
 )]
+#[case::named_only_by_data(
+    json!({"M": {"properties": {"m": {}}}}),
+    json!({"x": {"default": {"$ref": "#/$defs/M"}}}),
+    true
+)]
 fn validation_schema_merged_mixin_pruned_unless_named(
     #[case] defs: Value,
     #[case] properties: Value,
@@ -259,6 +264,14 @@ fn validation_schema_merged_mixin_pruned_unless_named(
         "components": {"A": {"allOf": [{"$ref": "#/$defs/M"}], "properties": properties}}
     }));
     assert_that!(result["$defs"].get("M").is_some()).is_equal_to(kept);
+}
+
+#[test]
+fn validation_schema_common_type_named_only_by_data_is_bundled() {
+    let result = schema(json!({"components": {"A": {"properties": {
+        "x": {"default": {"$ref": "common_types.json#/$defs/CheckRule"}}
+    }}}}));
+    assert_that!(result["$defs"].get("CheckRule").is_some()).is_true();
 }
 
 /// `anyFunction`, not `anyComponent`: naming `anyComponent` cycles if the union lists it.
@@ -709,15 +722,25 @@ fn from_json_ref_to_an_object_or_boolean_node_keeps_it(
     assert_that!(kept).is_ok_containing(json!({"$ref": reference}));
 }
 
-#[test]
-fn from_json_data_ref_to_a_string_is_catalog_error_like_any_ref() {
+#[rstest]
+#[case::default_data("default", json!({"$ref": "#/$defs/X/title"}), "/default/$ref")]
+#[case::examples_data("examples", json!([{"$ref": "#/$defs/X/title"}]), "/examples/0/$ref")]
+#[case::const_data("const", json!({"$ref": "#/$defs/X/title"}), "/const/$ref")]
+#[case::enum_data("enum", json!([{"$ref": "#/$defs/X/title"}]), "/enum/0/$ref")]
+fn from_json_data_ref_to_a_string_is_catalog_error_like_any_ref(
+    #[case] keyword: &str,
+    #[case] data: Value,
+    #[case] below: &str,
+) {
     let document = v10(json!({
-        "$defs": {"X": {"title": "T"}, "Unreached": {"default": {"$ref": "#/$defs/X/title"}}},
+        "$defs": {"X": {"title": "T"}, "Unreached": {keyword: data}},
         "components": {"A": {}}
     }));
-    let expected = "Malformed catalog: $ref '#/$defs/X/title' at /$defs/Unreached/default/$ref \
-                    names a string in the validation schema, not a schema (an object or a boolean)";
-    assert_that!(catalog_error(load(document))).is_equal_to(expected.to_owned());
+    let expected = format!(
+        "Malformed catalog: $ref '#/$defs/X/title' at /$defs/Unreached{below} names a string \
+         in the validation schema, not a schema (an object or a boolean)"
+    );
+    assert_that!(catalog_error(load(document))).is_equal_to(expected);
 }
 
 #[test]
@@ -740,4 +763,21 @@ fn check_refs_name_schemas_runtime_written_ref_to_a_string_is_named_as_the_schem
     let expected = "Malformed catalog: $ref '#/$defs/X/title' at /components/A/$ref of the \
                     validation schema names a string, not a schema (an object or a boolean)";
     assert_that!(message).is_equal_to(expected.to_owned());
+}
+
+#[rstest]
+#[case::examples_data("examples", json!([{"$ref": "#/$defs/Missing"}]), "/examples/0/$ref")]
+#[case::const_data("const", json!({"$ref": "#/$defs/Missing"}), "/const/$ref")]
+#[case::enum_data("enum", json!([{"$ref": "#/$defs/Missing"}]), "/enum/0/$ref")]
+fn from_json_dangling_ref_in_data_is_catalog_error_like_any_ref(
+    #[case] keyword: &str,
+    #[case] data: Value,
+    #[case] below: &str,
+) {
+    let document = v10(json!({"$defs": {"X": {keyword: data}}, "components": {"A": {}}}));
+    let expected = format!(
+        "Malformed catalog: $ref '#/$defs/Missing' at /$defs/X{below} does not resolve in the \
+         validation schema"
+    );
+    assert_that!(catalog_error(load(document))).is_equal_to(expected);
 }

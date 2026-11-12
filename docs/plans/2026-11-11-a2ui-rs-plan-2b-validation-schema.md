@@ -144,6 +144,24 @@ upstream's reading would be unsafe:
     passes: telling schema positions from the rest is a compiler's job and no v1.0 catalog needs
     it; the guarantee is "every `$ref` names an object or a boolean", not "the schema compiles".
     None of the 995 `$ref`s under `vendor/a2ui` is affected.
+15. **`$ref` inside data (t-1591):** the load walks that check, rewrite and collect `$ref`s
+    read every `$ref` string, data included: rule 4, the resolve and target checks of
+    Decision 14, localizing and theme retargeting, bundling and pruning (Decision 7). Only
+    describing common-type `$ref`s (Decision 6) tells data apart and skips it, since what it
+    adds is a `description` key, which would turn into data. In JSON Schema 2020-12, `default`,
+    `examples`, `const` and `enum` hold instances (validation vocabulary §6.1.2, §6.1.3, §9.2,
+    §9.5), and only keywords known to take subschemas hold schemas (core §9.4.2), so a
+    `{"$ref": …}` there is data, not a reference. A v1.0 catalog is stricter on purpose: its
+    data obeys the `$ref` rules too, so a `$ref` there that is unsupported, dangling or names no
+    schema is refused, and a valid one is rewritten like any other (`catalog.json#/$defs/X`
+    becomes `#/$defs/X`, `#/theme` becomes `#/$defs/theme`). The checks only refuse more, but
+    the rewrite changes a `const` or `enum` value holding such an object; data that must keep
+    its meaning writes such a `$ref` in the local form the rewrite leaves alone (`#/$defs/X`).
+    Telling data from schema in every walk needs the compiler's keyword table, a second copy
+    that could drift and let a `$ref` dangle unseen. The runtime never reads `default` or
+    `examples`, and none of the 995 `$ref`s under `vendor/a2ui` sits in data. What a bad
+    `$ref` names is `NotASchema`: `Missing`, or one variant per JSON type that is not a schema.
+    It carries no wording; `validation_schema` owns the message.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

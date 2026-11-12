@@ -158,19 +158,24 @@ fn check_refs_name_schemas(
             "",
         ),
     };
-    let reason = match found {
-        NotASchema::Missing => {
-            reason![
-                "$ref '",
-                reference,
-                "' at ",
-                at,
-                of_schema,
-                " does not resolve",
-                in_schema
-            ]
-        }
-        NotASchema::Value(kind) => reason![
+    let kind = match found {
+        NotASchema::Missing => None,
+        NotASchema::String => Some("a string"),
+        NotASchema::Number => Some("a number"),
+        NotASchema::Array => Some("an array"),
+        NotASchema::Null => Some("null"),
+    };
+    let reason = match kind {
+        None => reason![
+            "$ref '",
+            reference,
+            "' at ",
+            at,
+            of_schema,
+            " does not resolve",
+            in_schema
+        ],
+        Some(kind) => reason![
             "$ref '",
             reference,
             "' at ",

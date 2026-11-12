@@ -61,6 +61,24 @@ fn localize_refs_rewrites_every_ref_string() {
     assert_that!(node).is_equal_to(json!({"a": {"$ref": "#/$defs/X"}, "b": [{"$ref": "#/c"}]}));
 }
 
+#[rstest]
+#[case::const_data("const", json!({"$ref": "catalog.json#/$defs/X"}), json!({"$ref": "#/$defs/X"}))]
+#[case::enum_data(
+    "enum",
+    json!([{"$ref": "catalog.json#/$defs/X"}]),
+    json!([{"$ref": "#/$defs/X"}])
+)]
+#[case::local_form_kept("const", json!({"$ref": "#/$defs/X"}), json!({"$ref": "#/$defs/X"}))]
+fn localize_refs_ref_in_data_is_rewritten_like_any_ref(
+    #[case] keyword: &str,
+    #[case] data: Value,
+    #[case] expected: Value,
+) {
+    let mut node = json!({keyword: data});
+    localize_refs(&mut node);
+    assert_that!(node).is_equal_to(json!({keyword: expected}));
+}
+
 #[test]
 fn localize_refs_property_named_ref_holding_a_schema_is_walked() {
     let mut node = json!({"properties": {"$ref": {"$ref": "common_types.json#/$defs/X"}}});
@@ -531,4 +549,31 @@ fn first_not_a_schema_path_holds_raw_keys() {
         path,
         NotASchema::Missing,
     )));
+}
+
+#[rstest]
+#[case::missing(json!({}), NotASchema::Missing)]
+#[case::string(json!({"t": "T"}), NotASchema::String)]
+#[case::number(json!({"t": 1}), NotASchema::Number)]
+#[case::array(json!({"t": []}), NotASchema::Array)]
+#[case::null(json!({"t": null}), NotASchema::Null)]
+fn first_not_a_schema_target_kind_is_reported(#[case] target: Value, #[case] expected: NotASchema) {
+    let root = json!({"$defs": {"X": target, "R": {"$ref": "#/$defs/X/t"}}});
+    let found = first_not_a_schema(&root).map(|(_, _, found)| found);
+    assert_that!(found).is_equal_to(Some(expected));
+}
+
+#[rstest]
+#[case::default_data("default", json!({"$ref": "other.json#/a"}), "/default/$ref")]
+#[case::examples_data("examples", json!([{"$ref": "other.json#/a"}]), "/examples/0/$ref")]
+#[case::const_data("const", json!({"$ref": "other.json#/a"}), "/const/$ref")]
+#[case::enum_data("enum", json!([{"$ref": "other.json#/a"}]), "/enum/0/$ref")]
+fn check_references_unsupported_ref_in_data_is_refused(
+    #[case] keyword: &str,
+    #[case] data: Value,
+    #[case] below: &str,
+) {
+    let document = json!({"$defs": {"X": {keyword: data}}});
+    let expected = format!("Unsupported external $ref 'other.json#/a' at /$defs/X{below}");
+    assert_that!(reference_error(document)).contains(expected);
 }
