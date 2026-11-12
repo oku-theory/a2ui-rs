@@ -374,3 +374,7 @@ mod tests;
 #[cfg(test)]
 #[path = "validation_schema_depth_tests.rs"]
 mod depth_tests;
+
+#[cfg(test)]
+#[path = "validation_schema_ref_tests.rs"]
+mod ref_tests;

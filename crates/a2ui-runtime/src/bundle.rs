@@ -3,15 +3,20 @@
 //! A v1.0 catalog may reference itself (`#…`, `catalog.json#…`) and `common_types.json` (by a
 //! relative or the published absolute URI). Localizing rewrites those to `#` fragments,
 //! percent-encoded as URI references require (a raw `ℓ` makes the schema build fail).
+//! Submodules: `walk` (the `$ref` walks), `check` (load rule 4), `target` (what a `$ref` names).
 
 use std::borrow::Cow;
 
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 use serde_json::{Map, Value, json};
-use snafu::ensure;
 
-use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
-use crate::quoted::{Quoted, reason};
+mod check;
+mod target;
+mod walk;
+
+pub(crate) use check::check_references;
+pub(crate) use target::{NotASchema, first_not_a_schema, resolve};
+pub(crate) use walk::{Segment, for_each_ref, node_at, pointer, rewrite_refs};
 
 /// The `common_types.json` URIs a v1.0 catalog may reference.
 const COMMON_TYPES_URIS: [&str; 3] = [
@@ -56,97 +61,6 @@ pub(crate) fn localize_refs(node: &mut Value) {
     rewrite_refs(node, &mut |reference| *reference = localize_ref(reference));
 }
 
-/// Calls `visit` on each scalar object member under `node`, until one returns `Some`.
-///
-/// `visit` gets the member's key, its value and its path; a member holding an object or array
-/// is walked whatever its key, and an array item or the root is never visited, having no key.
-/// Object members come in map order and array items in index order. It recurses: callers pass a document that load rule 1
-/// bounded to `MAX_JSON_DEPTH` levels, or one built from it. [`find_ref`] walks with it, and
-/// [`check_references`] with its descent from a map (`find_member_in`).
-fn find_member<'a, T>(
-    node: &'a Value,
-    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
-) -> Option<T> {
-    find_member_under(node, &mut Vec::new(), visit)
-}
-
-fn find_member_under<'a, T>(
-    node: &'a Value,
-    path: &mut Vec<Segment<'a>>,
-    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
-) -> Option<T> {
-    match node {
-        Value::Object(map) => find_member_in(map, path, visit),
-        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
-            path.push(Segment::Index(index));
-            let found = find_member_under(item, path, visit);
-            path.pop();
-            found
-        }),
-        _ => None,
-    }
-}
-
-/// [`find_member`]'s descent from a map, for a root that is one (load rule 4's document).
-fn find_member_in<'a, T>(
-    map: &'a Map<String, Value>,
-    path: &mut Vec<Segment<'a>>,
-    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
-) -> Option<T> {
-    map.iter().find_map(|(key, value)| {
-        path.push(Segment::Key(key));
-        let found = match value {
-            Value::Object(_) | Value::Array(_) => find_member_under(value, path, visit),
-            _ => visit(key, value, path),
-        };
-        path.pop();
-        found
-    })
-}
-
-/// Calls `visit` on each `$ref` string and its path, until one returns `Some`.
-///
-/// It walks with [`find_member`], so a property named `$ref` holding a schema is a property,
-/// and every `$ref` string is visited, data included, since the walk does not tell schemas
-/// from data. A `$ref` that is not a string is skipped (load rule 4 refuses it).
-pub(crate) fn find_ref<'a, T>(
-    node: &'a Value,
-    visit: &mut impl FnMut(&'a str, &[Segment<'a>]) -> Option<T>,
-) -> Option<T> {
-    find_member(node, &mut |key, value, path| match value {
-        Value::String(reference) if key == "$ref" => visit(reference, path),
-        _ => None,
-    })
-}
-
-/// Calls `visit` on every `$ref` string under `node`, as [`find_ref`] visits them.
-pub(crate) fn for_each_ref<'a>(node: &'a Value, visit: &mut impl FnMut(&'a str)) {
-    find_ref(node, &mut |reference, _| {
-        visit(reference);
-        None::<()>
-    });
-}
-
-/// Calls `rewrite` on each `$ref` string under `node`, as [`find_ref`] visits them.
-///
-/// It recurses under the same depth bound as [`find_ref`].
-pub(crate) fn rewrite_refs(node: &mut Value, rewrite: &mut impl FnMut(&mut String)) {
-    match node {
-        Value::Object(map) => {
-            for (key, value) in map.iter_mut() {
-                match value {
-                    Value::String(reference) if key == "$ref" => rewrite(reference),
-                    _ => rewrite_refs(value, rewrite),
-                }
-            }
-        }
-        Value::Array(items) => items
-            .iter_mut()
-            .for_each(|item| rewrite_refs(item, rewrite)),
-        _ => {}
-    }
-}
-
 /// An `anyFunction` for checking a call with no catalog in scope: any function but `@index`.
 pub(crate) fn any_function_envelope() -> Value {
     json!({
@@ -158,22 +72,8 @@ pub(crate) fn any_function_envelope() -> Value {
     })
 }
 
+/// The entry sections of a catalog: definitions, components and functions.
 const ENTRY_SECTIONS: [&str; 3] = ["$defs", "components", "functions"];
-
-/// The keywords the reference check reads when they hold a scalar.
-const KEYWORDS: [&str; 7] = [
-    "$anchor",
-    "$dynamicAnchor",
-    "$recursiveAnchor",
-    "$dynamicRef",
-    "$recursiveRef",
-    "$id",
-    "$schema",
-];
-
-const ANCHORS: &str = "anchors are not supported; use a JSON Pointer";
-const DYNAMIC: &str = "dynamic references are not supported; use $ref";
-const NESTED: &str = "only the catalog's top level may declare it";
 
 /// The decoded JSON Pointer a supported `$ref` names, such as `/$defs/Child`.
 ///
@@ -189,50 +89,9 @@ pub(crate) fn pointer_of(reference: &str) -> Option<String> {
         .map(Cow::into_owned)
 }
 
+/// Whether `fragment` is empty or a JSON Pointer, the only fragments v1.0 supports.
 fn is_pointer_fragment(fragment: &str) -> bool {
     fragment.is_empty() || fragment.starts_with('/')
-}
-
-/// The node of `root` a supported `$ref` names, decoding its fragment.
-pub(crate) fn resolve<'a>(root: &'a Value, reference: &str) -> Option<&'a Value> {
-    root.pointer(&pointer_of(reference)?)
-}
-
-/// What a `$ref` naming no schema resolves to: nothing, or a non-schema value.
-///
-/// It carries no wording; `catalog::validation_schema` words the message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum NotASchema {
-    /// No node: the `$ref` does not resolve.
-    Missing,
-    /// A string node.
-    String,
-    /// A number node.
-    Number,
-    /// An array node.
-    Array,
-    /// A `null` node.
-    Null,
-}
-
-/// The first `$ref` under `root` naming no schema of it, with its path.
-///
-/// A schema is an object or a boolean (JSON Schema 2020-12, 4.3.1): a target that is one
-/// passes, even in a data position. It only looks pointers up, never follows one, so its cost is linear in `root`
-/// whatever the `$ref`s chain. The path holds the keys as they are, never escaped, and is
-/// copied only for the `$ref` found. It walks with [`find_ref`].
-pub(crate) fn first_not_a_schema(root: &Value) -> Option<(&str, Vec<Segment<'_>>, NotASchema)> {
-    find_ref(root, &mut |reference, path| {
-        let found = match resolve(root, reference) {
-            None => NotASchema::Missing,
-            Some(Value::Object(_) | Value::Bool(_)) => return None,
-            Some(Value::String(_)) => NotASchema::String,
-            Some(Value::Number(_)) => NotASchema::Number,
-            Some(Value::Array(_)) => NotASchema::Array,
-            Some(Value::Null) => NotASchema::Null,
-        };
-        Some((reference, path.to_vec(), found))
-    })
 }
 
 /// The section and decoded name of the entry a JSON Pointer falls in.
@@ -254,190 +113,6 @@ fn unescape(token: &str) -> String {
 /// `reference` as a local, percent-encoded `$ref`; any other one is returned unchanged.
 pub(crate) fn localize_ref(reference: &str) -> String {
     pointer_of(reference).map_or_else(|| reference.to_owned(), |pointer| local_ref(&pointer))
-}
-
-/// Checks the reference keywords of a catalog document (load rule 4).
-///
-/// A key holding an object or array is walked whatever its name, so a property named `$ref`
-/// holding a schema is a property. A scalar under a keyword is checked: `$ref` must be a
-/// supported string with an empty or JSON Pointer fragment, anchors and dynamic references are
-/// refused, and `$id` and `$schema` may only sit at the top level. A pointer must name the
-/// theme or a `$defs`, component or function entry (common types: a `$defs` entry), or a node
-/// in one, since the validation schema keeps nothing else. A pointer below a component
-/// or function entry (`#/components/A/properties`) is refused: the validation schema rewrites
-/// those entries, so it would dangle there. The walk does not tell schemas from data, so a
-/// `const` or `default` holding such a key is refused too. A numeric `$anchor` or `$id` is left
-/// to the schema build, whose meta-schema check rejects it.
-///
-/// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
-/// so they are refused like `#/title`. Pointers are built only for an error. The document is at
-/// most `MAX_JSON_DEPTH` deep; it walks with [`find_member`]'s descent, which recurses.
-pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Error> {
-    let first_error = find_member_in(document, &mut Vec::new(), &mut |key, value, path| {
-        let checked = match value {
-            Value::String(reference) if key == "$ref" => check_ref(reference, path),
-            _ if key == "$ref" => Err(MalformedCatalogSnafu {
-                reason: reason!["$ref at ", Quoted::new(&pointer(path)), " must be a string"],
-            }
-            .build()
-            .into()),
-            _ => check_keyword(key, value, path),
-        };
-        checked.err()
-    });
-    match first_error {
-        Some(error) => Err(error),
-        None => Ok(()),
-    }
-}
-
-/// One step of the path from a document root to a node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Segment<'a> {
-    /// An object member, by its unescaped key.
-    Key(&'a str),
-    /// An array item, by its index.
-    Index(usize),
-}
-
-fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
-    ensure!(
-        is_supported_ref(reference),
-        ExternalRefSnafu {
-            reference,
-            pointer: pointer(path),
-        }
-    );
-    let fragment = reference.split_once('#').map(|(_, fragment)| fragment);
-    ensure!(
-        fragment.is_some_and(is_pointer_fragment),
-        MalformedCatalogSnafu {
-            reason: reason![
-                "$ref '",
-                Quoted::new(reference),
-                "' at ",
-                Quoted::new(&pointer(path)),
-                " has a fragment that is neither empty nor a JSON Pointer",
-            ],
-        }
-    );
-    let Some(target) = pointer_of(reference) else {
-        return MalformedCatalogSnafu {
-            reason: reason![
-                "$ref '",
-                Quoted::new(reference),
-                "' at ",
-                Quoted::new(&pointer(path)),
-                " has a fragment that is not UTF-8",
-            ],
-        }
-        .fail()
-        .map_err(Into::into);
-    };
-    ensure!(
-        is_kept_target(reference, &target),
-        MalformedCatalogSnafu {
-            reason: reason![
-                "$ref '",
-                Quoted::new(reference),
-                "' at ",
-                Quoted::new(&pointer(path)),
-                " names no definition, entry or theme, which are the only parts of the catalog \
-                 the validation schema keeps",
-            ],
-        }
-    );
-    ensure!(
-        !is_inside_entry(&target),
-        MalformedCatalogSnafu {
-            reason: reason![
-                "$ref '",
-                Quoted::new(reference),
-                "' at ",
-                Quoted::new(&pointer(path)),
-                " points inside a component or function, which the validation schema flattens; \
-                 reference it whole or move the schema to $defs",
-            ],
-        }
-    );
-    Ok(())
-}
-
-/// Whether a supported `reference` to `pointer` names a node the validation schema keeps.
-///
-/// A common types reference must name a `$defs` entry or a node in one. A catalog reference
-/// must name the theme, or a `$defs`, component or function entry or a node in one. The whole
-/// document (`#`), a bare section (`#/$defs`) and any other top-level key (`#/title`) are not
-/// kept as they are, so a `$ref` to them would dangle or change meaning there.
-fn is_kept_target(reference: &str, pointer: &str) -> bool {
-    let from_common_types = reference
-        .split_once('#')
-        .is_some_and(|(document, _)| COMMON_TYPES_URIS.contains(&document));
-    let Some((section, rest)) = pointer
-        .strip_prefix('/')
-        .map(|tokens| tokens.split_once('/').unwrap_or((tokens, "")))
-    else {
-        return false;
-    };
-    if from_common_types {
-        return section == "$defs" && !rest.is_empty();
-    }
-    section == "theme" || (ENTRY_SECTIONS.contains(&section) && !rest.is_empty())
-}
-
-/// Whether `pointer` names a node below a component or function, such as `/components/A/x`.
-///
-/// The validation schema rewrites those entries (flattened components, closed function
-/// `args`), so no stable node is left for such a pointer; `$defs` entries are copied as is.
-fn is_inside_entry(pointer: &str) -> bool {
-    pointer
-        .strip_prefix("/components/")
-        .or_else(|| pointer.strip_prefix("/functions/"))
-        .is_some_and(|rest| rest.contains('/'))
-}
-
-/// `key` as one of the static [`KEYWORDS`], when it is one.
-fn keyword(key: &str) -> Option<&'static str> {
-    KEYWORDS.into_iter().find(|keyword| *keyword == key)
-}
-
-fn check_keyword(key: &str, value: &Value, path: &[Segment<'_>]) -> Result<(), Error> {
-    let Some(name) = keyword(key) else {
-        return Ok(());
-    };
-    let reason = match (name, value) {
-        ("$anchor" | "$dynamicAnchor", Value::String(_)) | ("$recursiveAnchor", Value::Bool(_)) => {
-            ANCHORS
-        }
-        ("$dynamicRef" | "$recursiveRef", Value::String(_)) => DYNAMIC,
-        ("$id" | "$schema", Value::String(_)) if path.len() > 1 => NESTED,
-        _ => return Ok(()),
-    };
-    Err(ForbiddenKeywordSnafu {
-        keyword: name,
-        pointer: pointer(path),
-        reason,
-    }
-    .build()
-    .into())
-}
-
-/// The node of `root` at `path`, if every step names one.
-pub(crate) fn node_at<'a>(root: &'a Value, path: &[Segment<'_>]) -> Option<&'a Value> {
-    path.iter().try_fold(root, |node, segment| match segment {
-        Segment::Key(key) => node.as_object()?.get(*key),
-        Segment::Index(index) => node.as_array()?.get(*index),
-    })
-}
-
-/// The JSON Pointer of `path`, each key escaped.
-pub(crate) fn pointer(path: &[Segment<'_>]) -> String {
-    path.iter()
-        .map(|segment| match segment {
-            Segment::Key(key) => format!("/{}", key.replace('~', "~0").replace('/', "~1")),
-            Segment::Index(index) => format!("/{index}"),
-        })
-        .collect()
 }
 
 /// Copies into `defs` each common type that `roots`, or a copied type, names as `#/$defs/<name>`.
