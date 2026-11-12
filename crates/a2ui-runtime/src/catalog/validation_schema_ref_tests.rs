@@ -310,8 +310,11 @@ fn from_json_kept_component_ref_to_a_string_fails_its_compile() {
         "$defs": {"X": {"title": "T"}},
         "components": {"A": {"properties": {"p": {"$ref": "#/$defs/X/title"}}}}
     }));
-    let expected = "Schema does not compile: \"T\" is not of types \"boolean\", \"object\"";
-    assert_that!(catalog_error(load(document))).is_equal_to(expected.to_owned());
+    // Past our prefix the wording is jsonschema's, which a dependency bump may change; it
+    // must still quote, in JSON, the string the `$ref` names.
+    let message = catalog_error(load(document));
+    assert_that!(message).starts_with("Schema does not compile: ");
+    assert_that!(message).contains("\"T\"");
 }
 
 #[test]
@@ -344,34 +347,31 @@ fn from_json_dangling_ref_in_data_is_catalog_error_like_any_ref(
 }
 
 #[rstest]
-#[case::localized("catalog.json#/$defs/X", false, "#/$defs/X")]
-#[case::percent_encoded("#/$defs/µ", false, "#/$defs/%C2%B5")]
-#[case::common_type("common_types.json#/$defs/Weight", true, "#/$defs/Weight")]
-#[case::theme_node("catalog.json#/theme/properties/b", true, "#/$defs/theme/properties/b")]
-#[case::whole_theme("#/theme", true, "#/$defs/theme")]
-#[case::theme_absent("#/theme/properties/b", false, "#/theme/properties/b")]
-#[case::longer_than_theme("#/themes", true, "#/themes")]
-#[case::unsupported("other.json#/a", true, "other.json#/a")]
-fn written_ref_authored_ref_is_the_validation_schema_ref(
-    #[case] authored: &str,
-    #[case] with_theme: bool,
-    #[case] expected: &str,
-) {
-    assert_that!(super::written_ref(authored, with_theme)).is_equal_to(expected.to_owned());
+#[case::def(json!({"$defs": {"Y": {}, "X": {"const": {"$ref": "#/$defs/Y"}}}}), "/$defs/X/const")]
+#[case::theme_node(
+    json!({
+        "theme": {"properties": {"a": {}}},
+        "$defs": {"X": {"enum": [{"$ref": "#/$defs/theme/properties/a"}]}}
+    }),
+    "/$defs/X/enum/0"
+)]
+#[case::component(
+    json!({
+        "$defs": {"Y": {}},
+        "components": {"A": {"properties": {"p": {"default": {"$ref": "#/$defs/Y"}}}}}
+    }),
+    "/components/A/properties/p/default"
+)]
+fn from_json_local_data_ref_keeps_its_value(#[case] document: Value, #[case] at: &str) {
+    let authored = document.pointer(at).cloned();
+    let catalog = load(v10(document)).unwrap();
+    assert_that!(catalog.validation_schema().pointer(at).cloned()).is_equal_to(authored);
 }
 
-#[rstest]
-#[case::theme_with_space("catalog.json#/theme/a b")]
-#[case::encoded("#/$defs/%C2%B5")]
-#[case::literal_percent("#/$defs/a%2541")]
-#[case::bad_escape("#/$defs/%zz")]
-#[case::non_utf8("#/$defs/%E9")]
-#[case::anchor("catalog.json#Name")]
-#[case::encoded_theme_node("#/theme/%C2%B5")]
-fn written_ref_is_idempotent_on_what_it_writes(
-    #[case] authored: &str,
-    #[values(false, true)] with_theme: bool,
-) {
-    let once = super::written_ref(authored, with_theme);
-    assert_that!(super::written_ref(&once, with_theme)).is_equal_to(once);
+#[test]
+fn from_json_data_ref_the_runtime_would_rewrite_is_catalog_error() {
+    let document =
+        v10(json!({"$defs": {"Y": {}, "X": {"const": {"$ref": "catalog.json#/$defs/Y"}}}}));
+    assert_that!(catalog_error(load(document)))
+        .ends_with("is data, which the runtime would rewrite; write it '#/$defs/Y'");
 }

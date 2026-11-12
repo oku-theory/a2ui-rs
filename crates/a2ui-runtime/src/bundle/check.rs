@@ -3,8 +3,12 @@
 use serde_json::{Map, Value};
 use snafu::ensure;
 
-use super::walk::{Segment, find_member_in, pointer};
-use super::{COMMON_TYPES_URIS, ENTRY_SECTIONS, is_pointer_fragment, is_supported_ref, pointer_of};
+use super::position::find_data;
+use super::walk::{Segment, find_member_in, find_ref, pointer};
+use super::{
+    COMMON_TYPES_URIS, ENTRY_SECTIONS, is_pointer_fragment, is_supported_ref, pointer_of,
+    written_ref,
+};
 use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
 use crate::pointer::{BAD_ESCAPE, is_escaped_pointer};
 use crate::quoted::{Quoted, reason};
@@ -32,11 +36,12 @@ const NESTED: &str = "only the catalog's top level may declare it";
 /// (so every walk decodes its tokens alike, `serde_json`'s lenient lookup included), anchors
 /// and dynamic references are refused, and `$id` and `$schema` may only sit at the top level.
 /// A pointer must name the theme or a `$defs`, component or function entry (common types: a
-/// `$defs` entry), or a node in one, since the validation schema keeps nothing else. A pointer below a component
-/// or function entry (`#/components/A/properties`) is refused: the validation schema rewrites
-/// those entries, so it would dangle there. The walk does not tell schemas from data, so a
-/// `const` or `default` holding such a key is refused too. A numeric `$anchor` or `$id` is left
-/// to the schema build, whose meta-schema check rejects it.
+/// `$defs` entry), or a node in one, since the validation schema keeps nothing else. A pointer
+/// below a component or function entry (`#/components/A/properties`) is refused: the
+/// validation schema rewrites those entries, so it would dangle there. The walk does not tell
+/// schemas from data, so a `const` or `default` holding such a key is refused too; a `$ref` in
+/// data must also be written as the validation schema writes it. A numeric `$anchor` or `$id`
+/// is left to the schema build, whose meta-schema check rejects it.
 ///
 /// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
 /// so they are refused like `#/title`. Pointers are built only for an error. The document is at
@@ -54,6 +59,59 @@ pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Erro
         };
         checked.err()
     });
+    first_error.map_or_else(|| check_data_refs(document), Err)
+}
+
+/// Refuses a `$ref` in data that the runtime would rewrite.
+///
+/// Plan 2b, Decision 19. The theme and every `$defs`, component and function entry are
+/// schemas, whose data [`find_data`] finds. To the validator a `$ref` there is part of a value,
+/// which `const` and `enum` compare, so it must already be written as the runtime writes it:
+/// [`written_ref`] in the theme and `$defs`, which the validation schema copies, and
+/// [`localize_ref`](super::localize_ref) in components and functions, which are compiled from
+/// their bundle and never see the theme.
+fn check_data_refs(document: &Map<String, Value>) -> Result<(), Error> {
+    let with_theme = document.contains_key("theme");
+    let theme = document
+        .get_key_value("theme")
+        .map(|(key, theme)| (vec![Segment::Key(key)], theme, with_theme));
+    let entries = ENTRY_SECTIONS
+        .into_iter()
+        .filter_map(|section| document.get_key_value(section))
+        .filter_map(|(section, entries)| Some((section, entries.as_object()?)))
+        .flat_map(|(section, entries)| {
+            let retargeted = with_theme && section == "$defs";
+            entries.iter().map(move |(name, entry)| {
+                let path = vec![Segment::Key(section), Segment::Key(name)];
+                (path, entry, retargeted)
+            })
+        });
+    let first_error = theme
+        .into_iter()
+        .chain(entries)
+        .find_map(|(mut path, root, retargeted)| {
+            find_data(root, &mut path, &mut |data, at| {
+                find_ref(data, &mut |reference, below| {
+                    let written = written_ref(reference, retargeted);
+                    (written != reference).then(|| {
+                        let path: Vec<_> = at.iter().chain(below).copied().collect();
+                        MalformedCatalogSnafu {
+                            reason: reason![
+                                "$ref '",
+                                Quoted::new(reference),
+                                "' at ",
+                                Quoted::new(&pointer(&path)),
+                                " is data, which the runtime would rewrite; write it '",
+                                Quoted::new(&written),
+                                "'",
+                            ],
+                        }
+                        .build()
+                        .into()
+                    })
+                })
+            })
+        });
     first_error.map_or(Ok(()), Err)
 }
 

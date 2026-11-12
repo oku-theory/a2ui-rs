@@ -161,10 +161,10 @@ fn validation_schema_sub_pointer_common_ref_gets_no_description() {
 }
 
 #[rstest]
-#[case::const_data("const", json!({"$ref": "common_types.json#/$defs/DynamicString"}))]
-#[case::enum_data("enum", json!([{"$ref": "common_types.json#/$defs/DynamicString"}]))]
-#[case::default_data("default", json!({"$ref": "common_types.json#/$defs/DynamicString"}))]
-#[case::examples_data("examples", json!([{"$ref": "common_types.json#/$defs/DynamicString"}]))]
+#[case::const_data("const", json!({"$ref": "#/$defs/DynamicString"}))]
+#[case::enum_data("enum", json!([{"$ref": "#/$defs/DynamicString"}]))]
+#[case::default_data("default", json!({"$ref": "#/$defs/DynamicString"}))]
+#[case::examples_data("examples", json!([{"$ref": "#/$defs/DynamicString"}]))]
 fn validation_schema_ref_inside_data_is_not_described(#[case] keyword: &str, #[case] data: Value) {
     let result = label(json!({keyword: data}));
     assert_that!(result[keyword].to_string().contains("description")).is_false();
@@ -269,7 +269,7 @@ fn validation_schema_merged_mixin_pruned_unless_named(
 #[test]
 fn validation_schema_common_type_named_only_by_data_is_bundled() {
     let result = schema(json!({"components": {"A": {"properties": {
-        "x": {"default": {"$ref": "common_types.json#/$defs/CheckRule"}}
+        "x": {"default": {"$ref": "#/$defs/CheckRule"}}
     }}}}));
     assert_that!(result["$defs"].get("CheckRule").is_some()).is_true();
 }

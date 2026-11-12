@@ -12,37 +12,12 @@ use serde_json::{Map, Value};
 use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
-    NotASchema, Segment, add_common_types, def_names, first_not_a_schema, local_ref, localize_ref,
-    node_at, pointer, pointer_of, rewrite_refs, whole_def_name,
+    NotASchema, SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE, Segment, add_common_types, def_names,
+    first_not_a_schema, node_at, pointer, rewrite_refs, whole_def_name, written_ref,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::quoted::{Quoted, reason};
 use crate::validator::DRAFT_2020_12;
-
-/// Keywords whose value maps names to subschemas.
-const SCHEMA_MAPS: [&str; 4] = [
-    "properties",
-    "patternProperties",
-    "$defs",
-    "dependentSchemas",
-];
-
-/// Keywords whose value is a list of subschemas.
-const SCHEMA_LISTS: [&str; 4] = ["allOf", "anyOf", "oneOf", "prefixItems"];
-
-/// Keywords whose value is one subschema.
-const SCHEMA_ONE: [&str; 10] = [
-    "items",
-    "not",
-    "if",
-    "then",
-    "else",
-    "additionalProperties",
-    "unevaluatedProperties",
-    "unevaluatedItems",
-    "contains",
-    "propertyNames",
-];
 
 /// What the catalog document adds to the checked bundle's validation schema.
 pub(super) struct Header<'a> {
@@ -244,35 +219,10 @@ fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
     theme
 }
 
-/// The `$ref` the validation schema holds for `reference`, authored in `$defs` or the theme.
-///
-/// Localized, then pointed at the same node under `#/$defs/theme` when the catalog has a
-/// theme (`theme_def` only adds keys, so every theme node keeps its path there). `build`
-/// writes every `$defs` and theme `$ref` with it, data included as Decision 15 rules, and
-/// [`authored`] rebuilds with it, so a new rewrite of those `$ref`s belongs here, once. It is
-/// idempotent, so the bundle's own localizing of definitions changes nothing.
-fn written_ref(reference: &str, with_theme: bool) -> String {
-    let local = localize_ref(reference);
-    if with_theme && let Some(target) = theme_target(&local) {
-        target
-    } else {
-        local
-    }
-}
-
-/// The `$ref` to the same node under `#/$defs/theme`, for a `$ref` into `#/theme`.
-fn theme_target(reference: &str) -> Option<String> {
-    pointer_of(reference)
-        .as_deref()
-        .and_then(|pointer| pointer.strip_prefix("/theme"))
-        .filter(|rest| rest.is_empty() || rest.starts_with('/'))
-        .map(|rest| local_ref(&format!("/$defs/theme{rest}")))
-}
-
 /// Gives each whole-entry `$ref` to a common type that type's description, unless it has one.
 ///
-/// It walks schema positions only, never `const`, `enum`, `default` or `examples` data; the
-/// draft-7 forms (`dependencies`, an array `items`) are not schema positions here.
+/// It walks schema positions only (`bundle`'s tables), never `const`, `enum`, `default` or
+/// `examples` data.
 fn describe(node: &mut Value, common: &Map<String, Value>) {
     let Value::Object(map) = node else {
         return;

@@ -155,8 +155,8 @@ upstream's reading would be unsafe:
     data obeys the `$ref` rules too, so a `$ref` there that is unsupported, dangling or names no
     schema is refused, and a valid one is rewritten like any other (`catalog.json#/$defs/X`
     becomes `#/$defs/X`, `#/theme` becomes `#/$defs/theme`). The checks only refuse more, but
-    the rewrite changes a `const` or `enum` value holding such an object; data that must keep
-    its meaning writes such a `$ref` in the local form the rewrite leaves alone (`#/$defs/X`).
+    the rewrite would change a `const` or `enum` value holding such an object, so Decision 19
+    refuses a `$ref` in data unless it is written in the form the rewrite leaves alone.
     Telling data from schema in every walk needs the compiler's keyword table, a second copy
     that could drift and let a `$ref` dangle unseen. The runtime never reads `default` or
     `examples`, and none of the 995 `$ref`s under `vendor/a2ui` sits in data. What a bad
@@ -178,7 +178,7 @@ upstream's reading would be unsafe:
     only scalar members to its visitor (t-1593): every load rule today reads a scalar keyword,
     so widening it now would only make each visitor skip containers. A rule on a keyword
     holding an object or array (`$vocabulary`) widens that one body then.
-    `validation_schema::written_ref` (localize, then point `#/theme` at `#/$defs/theme`) is the
+    `bundle::written_ref` (localize, then point `#/theme` at `#/$defs/theme`) is the
     one rewrite `build` applies to every `$defs` and theme `$ref`, and the one `authored`
     rebuilds with, so a new rewrite cannot reach one only. Collecting pointers with `find_ref`
     and writing through `Value::pointer_mut` was set aside: its `None` could only be a bug,
@@ -198,6 +198,20 @@ upstream's reading would be unsafe:
     variant per message: rule 4 and the validation schema have dozens of wordings that share
     pieces, and `Quoted` already caps every input. A capped `Quoted` takes at most nine bytes
     per kept character (`\u{e007f}`, checked over every `char`) plus the elision marker.
+19. **No rewritten `$ref` in data (t-1602, amends 15):** load rule 4 refuses a `$ref` in
+    `const`, `enum`, `default` or `examples` data when the runtime would rewrite it, and names
+    the form to write: `bundle::written_ref` in the theme and `$defs` entries, which the
+    validation schema copies (`catalog.json#/theme` becomes `#/$defs/theme`), and
+    `localize_ref` in components and functions, which are compiled from their bundle and never
+    see the theme. A rewrite there would change the value the validator compares, and refusing
+    it keeps every walk reading `$ref`s alike. Refusing is always safe, since the local form
+    means the same as schema or as data, so finding data fails toward finding too much
+    (`bundle::position`): it walks every node, and a data keyword is data wherever it sits
+    except as a name under `properties`, `patternProperties`, `$defs` or `dependentSchemas`. A
+    node outside a schema position may still be one, through a `$ref` to it (`#/$defs/X/x`) or
+    a keyword the tables miss (jsonschema applies draft-7 `dependencies` under 2020-12). No
+    vendored catalog holds a `$ref` in data. The keyword tables stay `describe`'s (Decision 6),
+    in `bundle::position`.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

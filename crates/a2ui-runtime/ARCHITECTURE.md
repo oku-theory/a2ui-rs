@@ -36,9 +36,9 @@ It builds for `wasm32-unknown-unknown`.
   catalogs only for identifiers. `derive`: a new-id catalog from a `Derivation` (source's version,
   theme, `$defs`; duplicate names rejected, changed unions regenerated). Submodules `load`,
   `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
-- `bundle` (`walk`, `target`): `local_ref`s, common types; `check`: v1.0 `$ref` rules (self,
-  `catalog.json`, `common_types.json`, RFC 6901 escapes; no anchors, dynamic refs, nested `$id`,
-  entry interiors).
+- `bundle` (`walk`, `target`, `position`): `local_ref`s, common types; `check`: v1.0 `$ref`
+  rules (self, `catalog.json`, `common_types.json`, RFC 6901 escapes, local data `$ref`s; no
+  anchors, dynamic refs, nested `$id`, entry interiors).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
   4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
   reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound

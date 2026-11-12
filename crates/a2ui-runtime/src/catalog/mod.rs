@@ -215,7 +215,9 @@ impl Catalog {
     /// It may hold definitions no load cap budgeted: compile it only under your own limits. Load
     /// refuses a `$ref` inside a component or function, which flattening rewrites, and one that
     /// names neither the theme nor a `$defs`, component or function entry (`#`, `#/title`); a
-    /// `$ref` into `#/theme` is pointed at the same node under `#/$defs/theme`. Every `$ref` it
+    /// `$ref` into `#/theme` is pointed at the same node under `#/$defs/theme`. A `$ref` in
+    /// `const`, `enum`, `default` or `examples` data must already be written so, since data
+    /// keeps its value: load refuses `catalog.json#/$defs/X` there. Every `$ref` it
     /// holds names a schema of it, an object or a boolean: load refuses one, from the theme or an
     /// unreached definition too, naming a missing definition, an absent theme, a dropped
     /// component or a value such as `#/$defs/X/title`. An object or boolean that is not a schema

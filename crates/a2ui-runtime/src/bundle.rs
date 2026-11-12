@@ -3,7 +3,8 @@
 //! A v1.0 catalog may reference itself (`#…`, `catalog.json#…`) and `common_types.json` (by a
 //! relative or the published absolute URI). Localizing rewrites those to `#` fragments,
 //! percent-encoded as URI references require (a raw `ℓ` makes the schema build fail).
-//! Submodules: `walk` (the `$ref` walks), `check` (load rule 4), `target` (what a `$ref` names).
+//! Submodules: `walk` (the `$ref` walks), `check` (load rule 4), `target` (what a `$ref` names),
+//! `position` (which keywords hold schemas, and which data).
 
 use std::borrow::Cow;
 
@@ -13,10 +14,12 @@ use serde_json::{Map, Value, json};
 use crate::pointer::unescape_token;
 
 mod check;
+mod position;
 mod target;
 mod walk;
 
 pub(crate) use check::check_references;
+pub(crate) use position::{SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE};
 pub(crate) use target::{NotASchema, first_not_a_schema, resolve};
 pub(crate) use walk::{Segment, for_each_ref, node_at, pointer, rewrite_refs};
 
@@ -111,6 +114,32 @@ pub(crate) fn entry_of(pointer: &str) -> Option<(&'static str, String)> {
 /// `reference` as a local, percent-encoded `$ref`; any other one is returned unchanged.
 pub(crate) fn localize_ref(reference: &str) -> String {
     pointer_of(reference).map_or_else(|| reference.to_owned(), |pointer| local_ref(&pointer))
+}
+
+/// The `$ref` the validation schema holds for `reference`, authored in `$defs` or the theme.
+///
+/// Localized, then pointed at the same node under `#/$defs/theme` when the catalog has a
+/// theme (`theme_def` only adds keys, so every theme node keeps its path there). The
+/// validation schema's `build` writes every `$defs` and theme `$ref` with it, `authored`
+/// rebuilds with it, and load rule 4 refuses a `$ref` in their data it would change (plan 2b,
+/// Decision 19), so a new rewrite of those `$ref`s belongs here, once. It is idempotent, so the bundle's own
+/// localizing of definitions changes nothing.
+pub(crate) fn written_ref(reference: &str, with_theme: bool) -> String {
+    let local = localize_ref(reference);
+    if with_theme && let Some(target) = theme_target(&local) {
+        target
+    } else {
+        local
+    }
+}
+
+/// The `$ref` to the same node under `#/$defs/theme`, for a `$ref` into `#/theme`.
+fn theme_target(reference: &str) -> Option<String> {
+    pointer_of(reference)
+        .as_deref()
+        .and_then(|pointer| pointer.strip_prefix("/theme"))
+        .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+        .map(|rest| local_ref(&format!("/$defs/theme{rest}")))
 }
 
 /// Copies into `defs` each common type that `roots`, or a copied type, names as `#/$defs/<name>`.

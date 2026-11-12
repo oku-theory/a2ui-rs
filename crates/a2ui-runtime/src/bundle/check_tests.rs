@@ -220,3 +220,66 @@ fn check_references_pointer_with_both_escapes_passes() {
     let document = json!({"$defs": {"a/b~c": {}, "x": {"$ref": "#/$defs/a~1b~0c"}}});
     assert_that!(references(document)).is_ok();
 }
+
+#[rstest]
+#[case::const_catalog_ref("const", json!({"$ref": "catalog.json#/$defs/X"}), "/const/$ref")]
+#[case::enum_common_type(
+    "enum",
+    json!([{"$ref": "common_types.json#/$defs/DynamicString"}]),
+    "/enum/0/$ref"
+)]
+#[case::default_theme_ref("default", json!({"$ref": "#/theme"}), "/default/$ref")]
+#[case::examples_unencoded(
+    "examples",
+    json!([{"a": {"$ref": "#/$defs/µ"}}]),
+    "/examples/0/a/$ref"
+)]
+fn check_references_data_ref_the_rewrite_would_change_is_catalog_error(
+    #[case] keyword: &str,
+    #[case] data: Value,
+    #[case] below: &str,
+) {
+    let document = json!({"theme": {}, "$defs": {"X": {"properties": {"p": {keyword: data}}}}});
+    assert_that!(reference_error(document)).contains(format!(
+        "at /$defs/X/properties/p{below} is data, which the runtime would rewrite"
+    ));
+}
+
+#[test]
+fn check_references_data_ref_names_the_form_to_write() {
+    let document = json!({"theme": {}, "$defs": {"X": {"const": {"$ref": "catalog.json#/theme"}}}});
+    assert_that!(reference_error(document)).ends_with(
+        "Malformed catalog: $ref 'catalog.json#/theme' at /$defs/X/const/$ref is data, which \
+         the runtime would rewrite; write it '#/$defs/theme'",
+    );
+}
+
+#[rstest]
+#[case::theme(json!({"theme": {"properties": {"p": {"const": {"$ref": "catalog.json#/theme"}}}}}))]
+#[case::component(json!({"components": {"A": {"enum": [{"$ref": "catalog.json#/$defs/X"}]}}}))]
+#[case::function(json!({"functions": {"f": {"default": {"$ref": "catalog.json#/$defs/X"}}}}))]
+#[case::outside_a_schema_position(
+    json!({"$defs": {"X": {"x-note": {"const": {"$ref": "catalog.json#/$defs/X"}}}}})
+)]
+#[case::draft_7_dependencies(
+    json!({"$defs": {"X": {"dependencies": {"a": {"enum": [{"$ref": "catalog.json#/$defs/X"}]}}}}})
+)]
+fn check_references_data_ref_in_any_entry_is_catalog_error(#[case] document: Value) {
+    assert_that!(reference_error(document)).contains("is data, which the runtime would rewrite");
+}
+
+#[rstest]
+#[case::local_form(json!({"theme": {}, "$defs": {"X": {"const": {"$ref": "#/$defs/X"}}}}))]
+#[case::theme_ref_without_a_theme(json!({"$defs": {"X": {"const": {"$ref": "#/theme/a"}}}}))]
+#[case::retargeted_theme_ref(
+    json!({"theme": {}, "$defs": {"X": {"enum": [{"$ref": "#/$defs/theme"}]}}})
+)]
+#[case::property_named_const(
+    json!({"$defs": {"X": {"properties": {"const": {"$ref": "catalog.json#/$defs/X"}}}}})
+)]
+#[case::component_theme_ref(
+    json!({"theme": {}, "components": {"A": {"const": {"$ref": "#/theme"}}}})
+)]
+fn check_references_data_ref_the_rewrite_keeps_passes(#[case] document: Value) {
+    assert_that!(references(document)).is_ok();
+}
