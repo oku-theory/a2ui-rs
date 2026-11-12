@@ -13,7 +13,7 @@ use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
     NotASchema, Segment, add_common_types, def_names, first_not_a_schema, local_ref, localize_ref,
-    localize_refs, node_at, pointer, pointer_of, rewrite_refs, whole_def_name,
+    node_at, pointer, pointer_of, rewrite_refs, whole_def_name,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::quoted::{Quoted, reason};
@@ -100,7 +100,12 @@ pub(super) fn build(
         .collect();
     if let Some(theme) = header.theme {
         defs.insert("theme".to_owned(), theme_def(theme, common));
-        defs.values_mut().for_each(retarget_theme);
+    }
+    let with_theme = header.theme.is_some();
+    for definition in defs.values_mut() {
+        rewrite_refs(definition, &mut |reference| {
+            *reference = written_ref(reference, with_theme);
+        });
     }
     prune(&mut defs, &merged, &components, &functions);
     let mut reached = Map::new();
@@ -211,12 +216,7 @@ fn authored<'a>(
         _ => (defs?.get(*name)?, false),
     };
     let reference = node_at(node, below)?.as_str()?;
-    let rebuilt = localize_ref(reference);
-    let rebuilt = match theme {
-        Some(_) => theme_target(&rebuilt).unwrap_or(rebuilt),
-        None => rebuilt,
-    };
-    if rebuilt != written {
+    if written_ref(reference, theme.is_some()) != written {
         return None;
     }
     let place = if in_theme {
@@ -227,13 +227,13 @@ fn authored<'a>(
     Some((place, reference))
 }
 
-/// The theme as upstream writes it in `$defs`: localized, described, open unless it says.
+/// The theme as upstream writes it in `$defs`: described, open unless it says.
 ///
 /// An object schema with neither `additionalProperties` nor `unevaluatedProperties` gets
-/// `additionalProperties: true`; any other theme is copied as it is.
+/// `additionalProperties: true`; any other theme is copied as it is. `build` then writes its
+/// `$ref`s with [`written_ref`], as every definition's.
 fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
     let mut theme = theme.clone();
-    localize_refs(&mut theme);
     describe(&mut theme, common);
     if let Value::Object(map) = &mut theme
         && !map.contains_key("additionalProperties")
@@ -244,19 +244,20 @@ fn theme_def(theme: &Value, common: &Map<String, Value>) -> Value {
     theme
 }
 
-/// Points each `$ref` into `#/theme` at the same node under `#/$defs/theme`.
+/// The `$ref` the validation schema holds for `reference`, authored in `$defs` or the theme.
 ///
-/// `theme_def` only adds keys, so every node of the authored theme keeps its path there. Load
-/// rule 11 keeps such refs out of components, functions and the definitions they reach, so only
-/// `$defs` (the theme itself, definitions no entry reaches) can hold one. Like
-/// [`localize_refs`], it rewrites every `$ref` string, data included. [`authored`] rebuilds
-/// refs in this same order (localize, then retarget): a new `$defs` rewrite belongs there too.
-fn retarget_theme(node: &mut Value) {
-    rewrite_refs(node, &mut |reference| {
-        if let Some(target) = theme_target(reference) {
-            *reference = target;
-        }
-    });
+/// Localized, then pointed at the same node under `#/$defs/theme` when the catalog has a
+/// theme (`theme_def` only adds keys, so every theme node keeps its path there). `build`
+/// writes every `$defs` and theme `$ref` with it, data included as Decision 15 rules, and
+/// [`authored`] rebuilds with it, so a new rewrite of those `$ref`s belongs here, once. It is
+/// idempotent, so the bundle's own localizing of definitions changes nothing.
+fn written_ref(reference: &str, with_theme: bool) -> String {
+    let local = localize_ref(reference);
+    if with_theme && let Some(target) = theme_target(&local) {
+        target
+    } else {
+        local
+    }
 }
 
 /// The `$ref` to the same node under `#/$defs/theme`, for a `$ref` into `#/theme`.

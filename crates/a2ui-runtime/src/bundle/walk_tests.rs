@@ -136,3 +136,39 @@ fn node_at_path_names_its_node(#[case] path: Vec<Segment<'_>>, #[case] expected:
     let root = json!({"a/b": [1, 2]});
     assert_that!(node_at(&root, &path).cloned()).is_equal_to(expected);
 }
+
+/// The `$ref` strings `find_ref_mut` visits under `node`, each with its JSON Pointer.
+fn visited_mut(node: &Value) -> Vec<(String, String)> {
+    let mut node = node.clone();
+    let mut seen = Vec::new();
+    find_ref_mut(&mut node, &mut |reference, path| {
+        seen.push((reference.clone(), pointer(path)));
+        None::<()>
+    });
+    seen
+}
+
+#[rstest]
+#[case::flat(json!({"$ref": "#/a", "b": {"$ref": "#/b"}}))]
+#[case::property_named_ref(json!({"properties": {"$ref": {"$ref": "#/a"}}}))]
+#[case::nested_arrays(json!([[{"$ref": "#/a"}], {"default": {"$ref": "#/b"}}]))]
+#[case::non_string_refs(json!({"n": {"$ref": 5}, "z": {"$ref": null}, "b": {"$ref": true}}))]
+#[case::array_under_ref(json!({"$ref": [{"$ref": "#/a"}, "#/b"]}))]
+#[case::object_under_ref(json!({"$ref": {"$ref": "#/a"}}))]
+#[case::ref_named_scalars_elsewhere(json!({"enum": ["#/a"], "x": "#/b", "$id": "#/c"}))]
+#[case::escaped_keys(json!({"a/b": {"c~d": [{"$ref": "#/a"}]}}))]
+#[case::root_scalar(json!("#/a"))]
+fn find_ref_mut_visits_what_find_ref_visits_at_the_same_paths(#[case] node: Value) {
+    assert_that!(visited_mut(&node)).is_equal_to(visited(&node));
+}
+
+#[test]
+fn find_ref_mut_stops_at_the_first_some() {
+    let mut node = json!({"a": {"$ref": "#/x"}, "b": {"$ref": "#/y"}});
+    let mut calls = 0;
+    let found = find_ref_mut(&mut node, &mut |reference, _| {
+        calls += 1;
+        Some(reference.clone())
+    });
+    assert_that!((found, calls)).is_equal_to((Some("#/x".to_owned()), 1));
+}

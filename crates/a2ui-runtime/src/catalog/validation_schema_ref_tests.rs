@@ -342,3 +342,36 @@ fn from_json_dangling_ref_in_data_is_catalog_error_like_any_ref(
     );
     assert_that!(catalog_error(load(document))).is_equal_to(expected);
 }
+
+#[rstest]
+#[case::localized("catalog.json#/$defs/X", false, "#/$defs/X")]
+#[case::percent_encoded("#/$defs/µ", false, "#/$defs/%C2%B5")]
+#[case::common_type("common_types.json#/$defs/Weight", true, "#/$defs/Weight")]
+#[case::theme_node("catalog.json#/theme/properties/b", true, "#/$defs/theme/properties/b")]
+#[case::whole_theme("#/theme", true, "#/$defs/theme")]
+#[case::theme_absent("#/theme/properties/b", false, "#/theme/properties/b")]
+#[case::longer_than_theme("#/themes", true, "#/themes")]
+#[case::unsupported("other.json#/a", true, "other.json#/a")]
+fn written_ref_authored_ref_is_the_validation_schema_ref(
+    #[case] authored: &str,
+    #[case] with_theme: bool,
+    #[case] expected: &str,
+) {
+    assert_that!(super::written_ref(authored, with_theme)).is_equal_to(expected.to_owned());
+}
+
+#[rstest]
+#[case::theme_with_space("catalog.json#/theme/a b")]
+#[case::encoded("#/$defs/%C2%B5")]
+#[case::literal_percent("#/$defs/a%2541")]
+#[case::bad_escape("#/$defs/%zz")]
+#[case::non_utf8("#/$defs/%E9")]
+#[case::anchor("catalog.json#Name")]
+#[case::encoded_theme_node("#/theme/%C2%B5")]
+fn written_ref_is_idempotent_on_what_it_writes(
+    #[case] authored: &str,
+    #[values(false, true)] with_theme: bool,
+) {
+    let once = super::written_ref(authored, with_theme);
+    assert_that!(super::written_ref(&once, with_theme)).is_equal_to(once);
+}

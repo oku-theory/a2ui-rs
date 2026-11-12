@@ -30,39 +30,62 @@ fn find_member<'a, T>(
     find_member_under(node, &mut Vec::new(), visit)
 }
 
-/// [`find_member`]'s descent from any node, with the path to it so far.
-fn find_member_under<'a, T>(
-    node: &'a Value,
-    path: &mut Vec<Segment<'a>>,
-    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
-) -> Option<T> {
-    match node {
-        Value::Object(map) => find_member_in(map, path, visit),
-        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
-            path.push(Segment::Index(index));
-            let found = find_member_under(item, path, visit);
-            path.pop();
-            found
-        }),
-        _ => None,
-    }
+/// Defines a member descent over shared or `mut` values from one body (Decision 17).
+///
+/// [`find_member`] and [`find_member_mut`] walk the same members in the same order, with the
+/// same paths: [`find_ref`] and [`find_ref_mut`] (so [`rewrite_refs`]) cannot drift apart.
+macro_rules! member_descent {
+    ($under:ident, $in_map:ident, $in_map_vis:vis, $iter:ident $(, $mutability:tt)?) => {
+        /// The descent from any node, with the path to it so far.
+        fn $under<'a, T>(
+            node: &'a $($mutability)? Value,
+            path: &mut Vec<Segment<'a>>,
+            visit: &mut impl FnMut(&'a str, &'a $($mutability)? Value, &[Segment<'a>]) -> Option<T>,
+        ) -> Option<T> {
+            match node {
+                Value::Object(map) => $in_map(map, path, visit),
+                Value::Array(items) => items.$iter().enumerate().find_map(|(index, item)| {
+                    path.push(Segment::Index(index));
+                    let found = $under(item, path, visit);
+                    path.pop();
+                    found
+                }),
+                _ => None,
+            }
+        }
+
+        /// The descent from a map, with the path to it so far.
+        $in_map_vis fn $in_map<'a, T>(
+            map: &'a $($mutability)? Map<String, Value>,
+            path: &mut Vec<Segment<'a>>,
+            visit: &mut impl FnMut(&'a str, &'a $($mutability)? Value, &[Segment<'a>]) -> Option<T>,
+        ) -> Option<T> {
+            map.$iter().find_map(|(key, value)| {
+                path.push(Segment::Key(key));
+                let found = match value {
+                    Value::Object(_) | Value::Array(_) => $under(value, path, visit),
+                    _ => visit(key, value, path),
+                };
+                path.pop();
+                found
+            })
+        }
+    };
 }
 
-/// [`find_member`]'s descent from a map, for a root that is one (load rule 4's document).
-pub(super) fn find_member_in<'a, T>(
-    map: &'a Map<String, Value>,
-    path: &mut Vec<Segment<'a>>,
-    visit: &mut impl FnMut(&'a str, &'a Value, &[Segment<'a>]) -> Option<T>,
+member_descent!(find_member_under, find_member_in, pub(super), iter);
+// The empty visibility keeps the `mut` descent private to this module.
+member_descent!(find_member_under_mut, find_member_in_mut, , iter_mut, mut);
+
+/// [`find_member`] over a `mut` value: `visit` may change in place each scalar it gets.
+///
+/// A visitor must keep a scalar a scalar: a container put in its place is never walked, and
+/// could pass the depth that load rule 1 checked.
+fn find_member_mut<'a, T>(
+    node: &'a mut Value,
+    visit: &mut impl FnMut(&'a str, &'a mut Value, &[Segment<'a>]) -> Option<T>,
 ) -> Option<T> {
-    map.iter().find_map(|(key, value)| {
-        path.push(Segment::Key(key));
-        let found = match value {
-            Value::Object(_) | Value::Array(_) => find_member_under(value, path, visit),
-            _ => visit(key, value, path),
-        };
-        path.pop();
-        found
-    })
+    find_member_under_mut(node, &mut Vec::new(), visit)
 }
 
 /// Calls `visit` on each `$ref` string and its path, until one returns `Some`.
@@ -80,6 +103,17 @@ pub(super) fn find_ref<'a, T>(
     })
 }
 
+/// [`find_ref`] over a `mut` value: `visit` may rewrite each `$ref` string it gets.
+fn find_ref_mut<'a, T>(
+    node: &'a mut Value,
+    visit: &mut impl FnMut(&'a mut String, &[Segment<'a>]) -> Option<T>,
+) -> Option<T> {
+    find_member_mut(node, &mut |key, value, path| match value {
+        Value::String(reference) if key == "$ref" => visit(reference, path),
+        _ => None,
+    })
+}
+
 /// Calls `visit` on every `$ref` string under `node`, as [`find_ref`] visits them.
 pub(crate) fn for_each_ref<'a>(node: &'a Value, visit: &mut impl FnMut(&'a str)) {
     find_ref(node, &mut |reference, _| {
@@ -90,22 +124,12 @@ pub(crate) fn for_each_ref<'a>(node: &'a Value, visit: &mut impl FnMut(&'a str))
 
 /// Calls `rewrite` on each `$ref` string under `node`, as [`find_ref`] visits them.
 ///
-/// It recurses under the same depth bound as [`find_ref`].
+/// It walks with [`find_ref_mut`], under the same depth bound as [`find_ref`].
 pub(crate) fn rewrite_refs(node: &mut Value, rewrite: &mut impl FnMut(&mut String)) {
-    match node {
-        Value::Object(map) => {
-            for (key, value) in map.iter_mut() {
-                match value {
-                    Value::String(reference) if key == "$ref" => rewrite(reference),
-                    _ => rewrite_refs(value, rewrite),
-                }
-            }
-        }
-        Value::Array(items) => items
-            .iter_mut()
-            .for_each(|item| rewrite_refs(item, rewrite)),
-        _ => {}
-    }
+    find_ref_mut(node, &mut |reference, _| {
+        rewrite(reference);
+        None::<()>
+    });
 }
 
 /// The node of `root` at `path`, if every step names one.
