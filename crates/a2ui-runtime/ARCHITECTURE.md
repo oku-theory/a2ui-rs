@@ -5,8 +5,8 @@ It builds for `wasm32-unknown-unknown`.
 
 ## Modules
 
-- `error`: one opaque `Error` (Snafu, backtrace per variant), `category()` its category; stable
-  English; `quoted`: input escaped and capped, `reason!` wording from fixed text and capped input.
+- `error`: one opaque `Error` (Snafu, backtrace per variant), `category()`; stable English.
+- `quoted`: `Quoted` input, escaped and capped; `reason!` joins fixed text and `Quoted` only.
 - `pointer`: the crate's one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`,
   absolute, empty segments dropped, `__proto__`/`constructor`/`prototype` refused; list indices
   are canonical digits up to `MAX_LIST_INDEX` (10 000).
@@ -15,8 +15,7 @@ It builds for `wasm32-unknown-unknown`.
   change returns a `Write` (path, previous value) whose `changes(watched)` compares values.
 - `subscribe`: `Watchers<K>`, observers keyed by `K` on pointers; `notified(write, model)` lists
   the keys whose value changed (exact path, ancestors, descendants).
-- `context`: `resolve_path(path, scope)`; `""`/`"."` is the scope, `/…` is absolute, anything
-  else is appended to the scope.
+- `context`: `resolve_path(path, scope)`; `""`/`"."` is the scope, `/…` absolute, else appended.
 - `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
   with named arguments); `\${` is literal text. Limits: 10 000 characters, 1 000 parts, nesting
   100 (interpolations and call arguments together). Grammar notes: Plan 1, Task 7.
@@ -36,9 +35,10 @@ It builds for `wasm32-unknown-unknown`.
   catalogs only for identifiers. `derive`: a new-id catalog from a `Derivation` (source's version,
   theme, `$defs`; duplicate names rejected, changed unions regenerated). Submodules `load`,
   `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
-- `bundle` (`walk`, `target`, `position`): `local_ref`s, common types; `check`: v1.0 `$ref`
-  rules (self, `catalog.json`, `common_types.json`, RFC 6901 escapes, local data `$ref`s; no
-  anchors, dynamic refs, nested `$id`, entry interiors).
+- `bundle`: `local_ref`s, common types, `written_ref`; `walk`: the `$ref` walks, which read and
+  rewrite data too; `target`; `position`: which keywords hold schemas, and where data sits;
+  `check`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`, RFC 6901 escapes, data
+  `$ref`s as the runtime writes them; no anchors, dynamic refs, nested `$id`, entry interiors).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
   4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
   reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound

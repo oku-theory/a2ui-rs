@@ -122,8 +122,8 @@ pub(crate) fn localize_ref(reference: &str) -> String {
 /// theme (`theme_def` only adds keys, so every theme node keeps its path there). The
 /// validation schema's `build` writes every `$defs` and theme `$ref` with it, `authored`
 /// rebuilds with it, and load rule 4 refuses a `$ref` in their data it would change (plan 2b,
-/// Decision 19), so a new rewrite of those `$ref`s belongs here, once. It is idempotent, so the bundle's own
-/// localizing of definitions changes nothing.
+/// Decision 19), so a new rewrite of those `$ref`s belongs here, once. It is idempotent, so
+/// the bundle's own localizing of definitions changes nothing.
 pub(crate) fn written_ref(reference: &str, with_theme: bool) -> String {
     let local = localize_ref(reference);
     if with_theme && let Some(target) = theme_target(&local) {
