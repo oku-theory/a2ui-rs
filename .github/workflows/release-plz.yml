@@ -15,7 +15,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
       - uses: release-plz/action@v0.5.148
         with:
           command: release
@@ -38,7 +39,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
       - uses: release-plz/action@v0.5.148
         with:
           command: release-pr

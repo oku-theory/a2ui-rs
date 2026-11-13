@@ -198,9 +198,9 @@ upstream's reading would be unsafe:
 18. **Composed wording stays `reason!` (t-1597, t-1598, t-1599, t-1600, t-1601):** trybuild
     cases (`tests/ui/*.rs`, which include `src/quoted.rs` with a stub `limits`) pin the compile
     errors of a `String`, a borrowed `&str` and a `Reason` piece. Their `.stderr` files hold
-    rustc's wording on the floating stable toolchain: a release that rewords them turns `just
-    test` red, and the fix is `TRYBUILD=overwrite` after re-reading that each still fails on
-    the `Piece` bound or a `'static` borrow. `Reason::of` stays callable directly: its sealed
+    the wording of the pinned rustc (Decision 20): a bump that rewords them turns `just test`
+    red, and the fix is `TRYBUILD=overwrite` after re-reading that each still fails on the
+    `Piece` bound or a `'static` borrow. `Reason::of` stays callable directly: its sealed
     `Piece` bound and constant `N` give it the macro's guarantees, so hiding it would guard
     nothing. No `Fixed` literal newtype: the macro would have to build it from any `&'static
     str` expression, which moves the gap without closing it; the std leaks (`Box`, `String`,
@@ -222,6 +222,21 @@ upstream's reading would be unsafe:
     a keyword the tables miss (jsonschema applies draft-7 `dependencies` under 2020-12). No
     vendored catalog holds a `$ref` in data. The keyword tables stay `describe`'s (Decision 6),
     in `bundle::position`.
+
+20. **Pinned toolchain, cached CI (t-1612, t-1613):** `rust-toolchain.toml` pins rustc 1.99.0
+    with rustfmt, clippy and the `wasm32-unknown-unknown` target, for local runs and CI alike.
+    Two gates read the compiler's exact output: trybuild's `tests/ui/*.stderr` (Decision 18)
+    and `clippy -D warnings`, whose lint set grows each release; on a floating `stable` either
+    turns CI red with no code change, and a local run on another version disagrees with CI.
+    The wasm build needs its target installed, which the file now says once. A bump is its own
+    `build(toolchain)` commit: new channel, `TRYBUILD=overwrite`, new lints fixed. The pin
+    applies in this repository only; `rust-version = "1.88"` stays the declared MSRV for users,
+    unchecked by CI as before. Every workflow, release-plz's included, installs the file's
+    toolchain (`rustup toolchain install`), since the file overrides any other in the checkout.
+    CI caches with `Swatinem/rust-cache`, saved even after a red run, which keeps dependency
+    artifacts under `target/`, including trybuild's own build in `target/tests/trybuild` (~400
+    s cold); the key holds the rustc version, so a bump starts cold. A separate trybuild job
+    was set aside: a second job and cache to keep for no gain over one warm cache.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

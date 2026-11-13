@@ -5,10 +5,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # Installs what rust-toolchain.toml pins: the compiler, rustfmt, clippy, the wasm target
+      # (rustup 1.28 or later reads the file when given no toolchain).
+      - run: rustup toolchain install
+      # Caches the registry and dependency artifacts, including trybuild's own build under
+      # target/tests/trybuild (~400 s cold). The key holds the rustc version, so a toolchain
+      # bump starts from an empty cache.
+      - uses: Swatinem/rust-cache@v2
         with:
-          components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
+          # A red first run (a reworded .stderr) still warms the cache for the fix.
+          cache-on-failure: true
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,just,cargo-deny,cargo-audit
