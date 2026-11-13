@@ -1,5 +1,8 @@
 name: ci
 on: [push, pull_request]
+# Builds run third-party build scripts: the token only reads.
+permissions:
+  contents: read
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -19,3 +22,27 @@ jobs:
         with:
           tool: cargo-nextest,just,cargo-deny,cargo-audit
       - run: just ci
+  # The declared MSRV (`rust-version`) for users, apart from the pinned compiler above:
+  # RUSTUP_TOOLCHAIN overrides rust-toolchain.toml for every rustup proxy in this job.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,just
+      # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
+      - run: |
+          version="$(just msrv-version)"
+          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+      # Installed before rust-cache, which reads its rustc for the key; just msrv's install is then
+      # a no-op.
+      - run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: just msrv

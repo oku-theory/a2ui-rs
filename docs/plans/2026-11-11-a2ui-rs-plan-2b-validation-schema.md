@@ -225,18 +225,25 @@ upstream's reading would be unsafe:
 
 20. **Pinned toolchain, cached CI (t-1612, t-1613):** `rust-toolchain.toml` pins rustc 1.99.0
     with rustfmt, clippy and the `wasm32-unknown-unknown` target, for local runs and CI alike.
-    Two gates read the compiler's exact output: trybuild's `tests/ui/*.stderr` (Decision 18)
-    and `clippy -D warnings`, whose lint set grows each release; on a floating `stable` either
-    turns CI red with no code change, and a local run on another version disagrees with CI.
-    The wasm build needs its target installed, which the file now says once. A bump is its own
+    Two gates read the compiler's exact output: trybuild's `tests/ui/*.stderr` (Decision 18) and
+    `clippy -D warnings`, whose lint set grows each release; on a floating `stable` either turns
+    CI red with no code change, and a local run on another version disagrees with CI. The wasm
+    build needs its target installed, which the file now says once. A bump is its own
     `build(toolchain)` commit: new channel, `TRYBUILD=overwrite`, new lints fixed. The pin
     applies in this repository only; `rust-version = "1.88"` stays the declared MSRV for users,
-    unchecked by CI as before. Every workflow, release-plz's included, installs the file's
-    toolchain (`rustup toolchain install`), since the file overrides any other in the checkout.
-    CI caches with `Swatinem/rust-cache`, saved even after a red run, which keeps dependency
-    artifacts under `target/`, including trybuild's own build in `target/tests/trybuild` (~400
-    s cold); the key holds the rustc version, so a bump starts cold. A separate trybuild job
-    was set aside: a second job and cache to keep for no gain over one warm cache.
+    and CI's `msrv` job checks it (t-1615): `just msrv` reads the version from Cargo.toml and
+    sets `RUSTUP_TOOLCHAIN`, which overrides the file, then builds the workspace (wasm build
+    included) and runs every test but trybuild's, whose `.stderr` files hold the pinned
+    compiler's wording, all `--locked`. It proves our `Cargo.lock` (MSRV-aware with resolver 3),
+    not what a user resolves; no clippy there, since the pinned clippy's `incompatible_msrv`
+    already reads `rust-version`. If a dev-dependency ever needs a newer rustc, narrow the job
+    to the published crates' libraries rather than raise `rust-version`. Every other job,
+    release-plz's included, installs the file's toolchain (`rustup toolchain install`), since
+    the file overrides any other in the checkout. CI caches with `Swatinem/rust-cache`, saved
+    even after a red run, which keeps dependency artifacts under `target/`, including trybuild's
+    own build in `target/tests/trybuild` (~400 s cold); the key holds the rustc version, so a
+    bump starts cold. A separate trybuild job was set aside: a second job and cache to keep for
+    no gain over one warm cache.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

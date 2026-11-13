@@ -9,6 +9,7 @@ crate, read its `ARCHITECTURE.md`. Design: `docs/specs/`; plans: `docs/plans/`.
 just check   # fmt --check, clippy -D warnings, wasm build of a2ui-runtime
 just test    # nextest, conformance suites included
 just ci      # check + test + audit
+just msrv    # build and test on rust-version, overriding the pinned toolchain
 just conformance-manifest <dir>   # executed-case manifest for upstream's comparer
 ```
 

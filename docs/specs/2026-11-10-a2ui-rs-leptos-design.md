@@ -171,7 +171,8 @@ Dependencies: `leptos` 0.8 (CSR), `web-sys` (Modal focus only).
   `examples/gallery` (Trunk) shows every basic component from the upstream fixtures.
 - CI (GitHub Actions = `just ci`): fmt, clippy `-D warnings`, nextest, `cargo build --target
   wasm32-unknown-unknown` for `a2ui-runtime` and `a2ui-leptos`, headless wasm tests, `cargo audit`,
-  `cargo deny` (licenses). Releases through release-plz, workspace at 0.1.0.
+  `cargo deny` (licenses); `just msrv` builds and tests on `rust-version` (plan 2b, Decision
+  20). Releases through release-plz, workspace at 0.1.0.
 
 ## 5. AGENTS.md carried over
 

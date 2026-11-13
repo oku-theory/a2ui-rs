@@ -1,6 +1,7 @@
-# The one compiler every check runs on, locally and in CI: trybuild's tests/ui/*.stderr and
-# `clippy -D warnings` both depend on its exact version (plan 2b, Decision 20). Bump it in a
-# commit of its own that refreshes the .stderr files (TRYBUILD=overwrite) and fixes new lints.
+# The compiler every check runs on, locally and in CI, but `just msrv`, which checks
+# rust-version: trybuild's tests/ui/*.stderr and `clippy -D warnings` both depend on its exact
+# version (plan 2b, Decision 20). Bump it in a commit of its own that refreshes the .stderr files
+# (TRYBUILD=overwrite) and fixes new lints.
 [toolchain]
 channel = "1.99.0"
 components = ["rustfmt", "clippy"]
