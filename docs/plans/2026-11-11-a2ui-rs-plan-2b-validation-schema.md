@@ -171,12 +171,14 @@ upstream's reading would be unsafe:
     entry charged holds the target. Upstream has no such rule; RFC 6901 calls those pointers
     invalid. Percent-decoding comes first, so `%7E2` is refused too. None of the 995 `$ref`s
     under `vendor/a2ui` holds a `~`, and a test pins that every common-type `$ref` is escaped.
-17. **One descent, one rewrite order (t-1592, t-1593, t-1596, t-1603):** `bundle::walk`
-    generates its shared and `mut` member descents from one macro body, so `find_ref` and
-    `find_ref_mut` (behind `rewrite_refs`) visit the same `$ref`s, in the same order, at the
-    same paths; a table test pins the `$ref` filter the two add on top. The descent still hands
-    only scalar members to its visitor (t-1593): every load rule today reads a scalar keyword,
-    so widening it now would only make each visitor skip containers. A rule on a keyword
+17. **One descent, one rewrite order (t-1592, t-1593, t-1596, t-1603, t-1611):**
+    `bundle::walk` generates its shared and `mut` member descents, and the `$ref` filter on
+    top of each (a string under `REF_KEY`, the one name of the keyword), from one macro body,
+    so `find_ref` and `find_ref_mut` (behind `rewrite_refs`) visit the same `$ref`s, in the
+    same order, at the same paths; a table test pins that the two agree. Every other walk
+    and lookup of the keyword reads `REF_KEY` too. The descent still hands only scalar
+    members to its visitor (t-1593): every load rule today reads a scalar keyword, so
+    widening it now would only make each visitor skip containers. A rule on a keyword
     holding an object or array (`$vocabulary`) widens that one body then.
     `bundle::written_ref` (localize, then point `#/theme` at `#/$defs/theme`) is the
     one rewrite `build` applies to every `$defs` and theme `$ref`, and the one `authored`

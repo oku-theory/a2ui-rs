@@ -12,8 +12,8 @@ use serde_json::{Map, Value};
 use super::compile::Checked;
 use super::flatten::flattened;
 use crate::bundle::{
-    NotASchema, SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE, Segment, add_common_types, def_names,
-    first_not_a_schema, node_at, pointer, rewrite_refs, whole_def_name, written_ref,
+    NotASchema, REF_KEY, SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE, Segment, add_common_types,
+    def_names, first_not_a_schema, node_at, pointer, rewrite_refs, whole_def_name, written_ref,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
 use crate::quoted::{Quoted, reason};
@@ -247,7 +247,7 @@ fn describe(node: &mut Value, common: &Map<String, Value>) {
         return;
     }
     let description = map
-        .get("$ref")
+        .get(REF_KEY)
         .and_then(Value::as_str)
         .and_then(whole_def_name)
         .and_then(|name| common.get(&name)?.get("description"))
@@ -272,7 +272,7 @@ fn close_args(schema: &mut Value) {
     let Some(Value::Object(args)) = properties.get_mut("args") else {
         return;
     };
-    if args.get("type").and_then(Value::as_str) != Some("object") || args.contains_key("$ref") {
+    if args.get("type").and_then(Value::as_str) != Some("object") || args.contains_key(REF_KEY) {
         return;
     }
     let open = args.remove("additionalProperties");

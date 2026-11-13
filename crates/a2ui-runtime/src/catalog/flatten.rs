@@ -18,7 +18,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::bundle::{local_ref, whole_def_name};
+use crate::bundle::{REF_KEY, local_ref, whole_def_name};
 
 /// Properties the protocol owns: flattening writes `id` and `component` and drops `catalogId`.
 ///
@@ -184,7 +184,7 @@ fn collect<'a>(
             out.residual.push(member.clone());
             continue;
         }
-        if member.get("$ref").is_none() {
+        if member.get(REF_KEY).is_none() {
             collect(member, defs, common, local, false, out);
             continue;
         }
@@ -251,7 +251,7 @@ fn mixin_target<'a>(member: &Value, defs: &'a Map<String, Value>) -> Option<(Str
     if member.len() != 1 {
         return None;
     }
-    let name = whole_def_name(member.get("$ref")?.as_str()?)?;
+    let name = whole_def_name(member.get(REF_KEY)?.as_str()?)?;
     if UNIONS.contains(&name.as_str()) {
         return None;
     }

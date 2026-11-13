@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 use snafu::ensure;
 
 use super::position::find_data;
-use super::walk::{Segment, find_member_in, find_ref, pointer};
+use super::walk::{REF_KEY, Segment, find_member_in, find_ref, pointer};
 use super::{
     COMMON_TYPES_URIS, ENTRY_SECTIONS, is_pointer_fragment, is_supported_ref, pointer_of,
     written_ref,
@@ -49,8 +49,8 @@ const NESTED: &str = "only the catalog's top level may declare it";
 pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Error> {
     let first_error = find_member_in(document, &mut Vec::new(), &mut |key, value, path| {
         let checked = match value {
-            Value::String(reference) if key == "$ref" => check_ref(reference, path),
-            _ if key == "$ref" => Err(MalformedCatalogSnafu {
+            Value::String(reference) if key == REF_KEY => check_ref(reference, path),
+            _ if key == REF_KEY => Err(MalformedCatalogSnafu {
                 reason: reason!["$ref at ", Quoted::new(&pointer(path)), " must be a string"],
             }
             .build()

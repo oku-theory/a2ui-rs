@@ -21,7 +21,7 @@ mod walk;
 pub(crate) use check::check_references;
 pub(crate) use position::{SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE};
 pub(crate) use target::{NotASchema, first_not_a_schema, resolve};
-pub(crate) use walk::{Segment, for_each_ref, node_at, pointer, rewrite_refs};
+pub(crate) use walk::{REF_KEY, Segment, for_each_ref, node_at, pointer, rewrite_refs};
 
 /// The `common_types.json` URIs a v1.0 catalog may reference.
 const COMMON_TYPES_URIS: [&str; 3] = [

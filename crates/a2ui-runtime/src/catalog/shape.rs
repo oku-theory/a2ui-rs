@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use crate::bundle::resolve;
+use crate::bundle::{REF_KEY, resolve};
 
 /// The property and required names of a component schema.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -33,7 +33,7 @@ impl ComponentShape {
                     .into_iter()
                     .flatten(),
             );
-            if let Some(reference) = node.get("$ref").and_then(Value::as_str)
+            if let Some(reference) = node.get(REF_KEY).and_then(Value::as_str)
                 && seen.insert(reference)
                 && let Some(target) = resolve(root, reference)
             {

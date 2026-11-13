@@ -5,7 +5,7 @@ use std::ptr;
 
 use serde_json::Value;
 
-use crate::bundle::{entry_of, pointer_of};
+use crate::bundle::{REF_KEY, entry_of, pointer_of};
 
 /// Deepest nesting of arrays and objects accepted in a catalog or a validated value.
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
@@ -120,7 +120,7 @@ pub(crate) fn oversize(value: &Value, max_nodes: usize) -> Option<Oversize> {
                         return Some(Oversize::Key);
                     }
                     if let Value::String(reference) = child
-                        && key == "$ref"
+                        && key == REF_KEY
                         && reference.len() > MAX_REF_BYTES
                     {
                         return Some(Oversize::Ref);
@@ -297,7 +297,7 @@ impl<'a> Walk<'a> {
                     self.count_patterns(key, child);
                     self.push(key, child, depth + 1)?;
                     if let Value::String(reference) = child
-                        && key == "$ref"
+                        && key == REF_KEY
                     {
                         self.follow(reference, depth + 1)?;
                     }
