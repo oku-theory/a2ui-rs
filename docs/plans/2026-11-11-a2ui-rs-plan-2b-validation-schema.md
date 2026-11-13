@@ -249,8 +249,8 @@ upstream's reading would be unsafe:
     (`rustup toolchain install`), since the file overrides any other in the checkout. CI caches
     with `Swatinem/rust-cache`, saved even after a red run, which keeps dependency artifacts
     under `target/`, including trybuild's own build in `target/tests/trybuild` (~400 s cold;
-    unconfirmed until two pushed runs, t-1622); the key holds the rustc version, so a bump
-    starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
+    unconfirmed until two runs on one pull request or on `main`, t-1622); the key holds the
+    rustc version, so a bump starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
     gain over one warm cache.
 21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with
     the release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that
@@ -266,7 +266,16 @@ upstream's reading would be unsafe:
     `github-actions` manager is enabled (`pinDigests` pins any action added by tag): one
     grouped `ci(deps)` pull request before 06:00 UTC on Mondays, releases at least a week old,
     never automerged, once the app is installed (t-1622). The config was checked against
-    Renovate's published JSON schema only.
+    Renovate's published JSON schema only. `ci.yml` runs on pushes to `main`, on pull requests
+    and on demand (t-1623), so a branch with a pull request runs once, not once per event. A
+    newer push to a pull request cancels its older run; every other run has its own
+    concurrency group (`run_id`), since a group keeps only one pending run and would drop a
+    queued push to `main`. A pull-request run restores its own cache, else `main`'s, so the
+    trybuild build is warm only once a run on `main` saved it; a cancelled run saves none, so
+    pushing again within a cold run of a toolchain bump starts the next one cold too. A
+    `merge_group` trigger is there for a merge queue, should one be enabled. A branch without a pull request
+    runs only on demand (`gh workflow run ci.yml --ref <branch>`). Release-plz's pull request,
+    opened with `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
 
 ## The algorithm (reference for Tasks 1 and 2)
 

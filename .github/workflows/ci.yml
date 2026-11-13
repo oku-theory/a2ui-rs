@@ -1,5 +1,17 @@
 name: ci
-on: [push, pull_request]
+# Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
+# Renovate's included, runs once, through its pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+# A new push to a pull request cancels its older run. Any other run has a group of its own,
+# since a group keeps one pending run only: every push to main runs to the end.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # Builds run third-party build scripts: the token only reads.
 permissions:
   contents: read
