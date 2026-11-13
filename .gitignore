@@ -1,1 +1,3 @@
 /target
+# Copies `just msrv-compile-fail` makes and removes; a killed run leaves one.
+/crates/a2ui-runtime/tests/ui-msrv.*/

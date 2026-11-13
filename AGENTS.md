@@ -7,7 +7,7 @@ crate, read its `ARCHITECTURE.md`. Design: `docs/specs/`; plans: `docs/plans/`.
 
 ```bash
 just check   # fmt --check, clippy -D warnings, deps, pinned actions, wasm build
-just test    # nextest, conformance suites included
+just test    # nextest, conformance suites included, then doctests
 just ci      # check + test + audit
 just msrv    # build and test on rust-version, overriding the pinned toolchain
 just conformance-manifest <dir>   # executed-case manifest for upstream's comparer

@@ -240,8 +240,18 @@ upstream's reading would be unsafe:
     a lock past the MSRV. The pin applies in this repository only; `rust-version = "1.88"` stays
     the declared MSRV for users, and CI's `msrv` job checks it (t-1615): `just msrv` reads the
     version from Cargo.toml and sets `RUSTUP_TOOLCHAIN`, which overrides the file, then builds
-    the workspace (wasm build included) and runs every test but trybuild's, whose `.stderr`
-    files hold the pinned compiler's wording, all `--locked`. It proves our `Cargo.lock`
+    the workspace (wasm build included) and runs every test, all `--locked`, doctests too
+    (t-1620: none exist yet, and nextest would skip them silently, so `just test` runs
+    `cargo test --doc` as well). trybuild's `.stderr` files hold the pinned compiler's
+    wording, so on the MSRV `just msrv-compile-fail` copies `tests/ui` beside it
+    (`A2UI_TRYBUILD_CASES` points the test there), cases only, and runs it with
+    `TRYBUILD=overwrite`, which still fails a case that compiles and writes each `.stderr` in
+    the copy, so a case it skipped has none. Each written file must then hold the tracked
+    file's `error[E…]` codes and case lines, duplicates counted; a case without a `.stderr` or
+    without a code fails. The wording is checked on the pin only; a second, MSRV-worded
+    `.stderr` set would need its own copy of each case, not worth it for three cases.
+    `CARGO_TARGET_DIR` is made absolute there, since trybuild resolves it from the test's
+    crate directory. `just msrv` proves our `Cargo.lock`
     (MSRV-aware with resolver 3), not what a user resolves; no clippy there, since the pinned
     clippy's `incompatible_msrv` already reads `rust-version`. If a dev-dependency ever needs a
     newer rustc, narrow the job to the published crates' libraries rather than raise
