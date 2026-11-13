@@ -88,3 +88,19 @@ fn validate_component_metadata_extensions_only_is_accepted() {
     let metadata = json!({"extensions": {"com_example": {"track": true}}});
     assert_that!(validate_component_metadata(&metadata)).is_ok();
 }
+
+#[rstest]
+#[case::any_function(json!({"@call": "formatDate", "args": {}}), true)]
+#[case::no_args(json!({"@call": "formatDate"}), true)]
+#[case::index(json!({"@call": "@index", "args": {}}), false)]
+#[case::args_not_an_object(json!({"@call": "formatDate", "args": []}), false)]
+#[case::not_an_object(json!("formatDate"), false)]
+#[case::no_call_left_to_function_call(json!({"args": {}}), true)]
+#[case::extra_key_left_to_function_call(json!({"@call": "f", "x": 1}), true)]
+fn any_function_envelope_accepts_any_function_but_index(
+    #[case] call: Value,
+    #[case] accepted: bool,
+) {
+    let envelope = build(&any_function_envelope()).unwrap();
+    assert_that!(envelope.is_valid(&call)).is_equal_to(accepted);
+}

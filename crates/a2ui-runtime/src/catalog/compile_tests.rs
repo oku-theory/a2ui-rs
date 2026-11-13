@@ -2,6 +2,7 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::super::test_support::{catalog_error, fan_out, load, mixin_copies, v10};
+use super::function_call_envelope;
 use crate::bundle::{for_each_ref, resolve};
 use crate::limits::MAX_SCHEMA_DEPTH;
 
@@ -292,4 +293,14 @@ fn from_json_mixin_chain_past_schema_depth_is_catalog_error() {
         "allOf": [{"$ref": "#/$defs/M0"}]
     }}}));
     assert_that!(catalog_error(load(document))).contains("levels of 'A'");
+}
+
+#[test]
+fn function_call_envelope_closes_the_call_over_function_common() {
+    assert_that!(function_call_envelope()).is_equal_to(json!({
+        "type": "object",
+        "allOf": [{"$ref": "#/$defs/FunctionCommon"}],
+        "properties": {"args": {"type": "object"}},
+        "unevaluatedProperties": false
+    }));
 }

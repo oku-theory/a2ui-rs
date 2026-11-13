@@ -9,7 +9,7 @@
 use std::borrow::Cow;
 
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::pointer::unescape_token;
 
@@ -64,17 +64,6 @@ pub(crate) fn local_ref(pointer: &str) -> String {
 /// Rewrites every `$ref` string under `node` with [`localize_ref`].
 pub(crate) fn localize_refs(node: &mut Value) {
     rewrite_refs(node, &mut |reference| *reference = localize_ref(reference));
-}
-
-/// An `anyFunction` for checking a call with no catalog in scope: any function but `@index`.
-pub(crate) fn any_function_envelope() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "@call": {"not": {"const": "@index"}},
-            "args": {"type": "object"}
-        }
-    })
 }
 
 /// The entry sections of a catalog: definitions, components and functions.
@@ -193,22 +182,6 @@ pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
         return None;
     }
     unescape_token(token).map(Cow::into_owned)
-}
-
-/// A `FunctionCall` checking only the envelope: `@call`, `catalogId`, `args`, nothing else.
-///
-/// A call may run in another catalog, so a component check cannot judge its function; the
-/// nested-call walk (Task 5) checks it against the catalog it runs in. It replaces
-/// `FunctionCall` itself, not only `anyFunction` as Task 2's `any_function_envelope` does:
-/// `FunctionCall` → `IndexSystemFunction` → `DynamicNumber` → `FunctionCall` is a cycle of the
-/// common types, which load rule 11 rejects.
-pub(crate) fn function_call_envelope() -> Value {
-    json!({
-        "type": "object",
-        "allOf": [{"$ref": local_ref("/$defs/FunctionCommon")}],
-        "properties": {"args": {"type": "object"}},
-        "unevaluatedProperties": false
-    })
 }
 
 #[cfg(test)]

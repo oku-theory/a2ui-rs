@@ -188,16 +188,6 @@ fn add_common_types_copied_refs_are_localized() {
     assert_that!(defs["A"].clone()).is_equal_to(json!({"$ref": "#/$defs/B"}));
 }
 
-#[test]
-fn function_call_envelope_closes_the_call_over_function_common() {
-    assert_that!(function_call_envelope()).is_equal_to(json!({
-        "type": "object",
-        "allOf": [{"$ref": "#/$defs/FunctionCommon"}],
-        "properties": {"args": {"type": "object"}},
-        "unevaluatedProperties": false
-    }));
-}
-
 #[rstest]
 #[case::entry("#/$defs/Weight", Some("Weight"))]
 #[case::escaped("#/$defs/a~1b~0c", Some("a/b~c"))]

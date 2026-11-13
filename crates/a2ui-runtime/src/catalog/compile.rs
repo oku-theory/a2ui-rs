@@ -4,13 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use jsonschema::Validator;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use snafu::ensure;
 
 use super::document::union;
 use super::entries::{ComponentAttrs, FunctionAttrs};
 use super::{ComponentDef, ComponentShape, FunctionDef};
-use crate::bundle::{add_common_types, function_call_envelope, local_ref, localize_refs};
+use crate::bundle::{add_common_types, local_ref, localize_refs};
 use crate::error::{CatalogLimitSnafu, Error, MalformedCatalogSnafu};
 use crate::limits::{
     Expansion, MAX_CATALOG_EXPANSION, MAX_CATALOG_PATTERNS, MAX_ENTRY_EXPANSION, MAX_SCHEMA_DEPTH,
@@ -251,6 +251,22 @@ fn validator_top(bundle: &Value) -> Value {
         *call = function_call_envelope();
     }
     top
+}
+
+/// A `FunctionCall` checking only the envelope: `@call`, `catalogId`, `args`, nothing else.
+///
+/// A call may run in another catalog, so a component check cannot judge its function;
+/// `Catalog::validate_component`'s nested-call check judges it in the catalog it runs in. It
+/// replaces `FunctionCall` itself, not only `anyFunction` as `schema::common_document` does:
+/// `FunctionCall` → `IndexSystemFunction` → `DynamicNumber` → `FunctionCall` is a cycle of the
+/// common types, which load rule 11 rejects.
+fn function_call_envelope() -> Value {
+    json!({
+        "type": "object",
+        "allOf": [{"$ref": local_ref("/$defs/FunctionCommon")}],
+        "properties": {"args": {"type": "object"}},
+        "unevaluatedProperties": false
+    })
 }
 
 /// The `(section, name)` of every entry one entry's `$ref`s land in.

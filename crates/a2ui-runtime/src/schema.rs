@@ -7,10 +7,10 @@ use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use jsonschema::Validator;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use snafu::{OptionExt, ensure};
 
-use crate::bundle::{any_function_envelope, local_ref, localize_refs};
+use crate::bundle::{local_ref, localize_refs};
 use crate::error::{EmbeddedSchemaSnafu, Error, UnknownDefinitionSnafu, ValueLimitSnafu};
 use crate::limits::{MAX_JSON_DEPTH, deeper_than};
 use crate::validator::{build, check, rooted};
@@ -74,6 +74,17 @@ pub(crate) fn common_document() -> Result<Map<String, Value>, Error> {
     defs.values_mut().for_each(localize_refs);
     defs.insert("anyFunction".to_owned(), any_function_envelope());
     Ok(Map::from_iter([("$defs".to_owned(), Value::Object(defs))]))
+}
+
+/// The `anyFunction` used with no catalog in scope: any function but `@index`.
+fn any_function_envelope() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "@call": {"not": {"const": "@index"}},
+            "args": {"type": "object"}
+        }
+    })
 }
 
 /// Builds the validators; the error is the cause only (the document's own error, or the
