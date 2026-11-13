@@ -1,12 +1,15 @@
 name: ci
 # Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
-# Renovate's included, runs once, through its pull request.
+# Renovate's included, runs once, through its pull request. Weekly on main, the msrv-resolved
+# job checks what new upstream releases change, and the ci job's audit sees new advisories.
 on:
   push:
     branches: [main]
   pull_request:
   merge_group:
   workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
 # A new push to a pull request cancels its older run. Any other run has a group of its own,
 # since a group keeps one pending run only: every push to main runs to the end.
 concurrency:
@@ -60,3 +63,20 @@ jobs:
         with:
           cache-on-failure: true
       - run: just msrv
+  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are
+  # unreviewed releases, so it runs only weekly or on demand, without a cache to restore or
+  # save, and its own job: on main a red result is mostly upstream drift, and a dependency change
+  # shows here on a dispatched run of its branch or the next weekly one.
+  msrv-resolved:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-audit
+      - run: just msrv-resolved

@@ -231,61 +231,85 @@ upstream's reading would be unsafe:
     build needs its target installed, which the file now says once. A bump is its own
     `build(toolchain)` commit: new channel, `TRYBUILD=overwrite`, new lints fixed.
     `renovate.json` (t-1616) enables Renovate's `rust-toolchain` manager (and, since Decision
-    21, `github-actions`), never `cargo`, so it never touches `rust-version` or `Cargo.lock`; once the Renovate GitHub App is installed on the
-    repository (open: t-1622), it opens that pull request before 06:00 UTC on Mondays for
-    releases at least a week old, with these steps in its body and its Dependency Dashboard as
-    the sign it runs. A person finishes and squash-merges it, since the hosted app runs no
-    commands and the `.stderr` files need re-reading. Patch releases are proposed too. Enabling
-    its `cargo` manager would resolve `Cargo.lock` for the pinned rustc; `just msrv` would catch
-    a lock past the MSRV. The pin applies in this repository only; `rust-version = "1.88"` stays
-    the declared MSRV for users, and CI's `msrv` job checks it (t-1615): `just msrv` reads the
-    version from Cargo.toml and sets `RUSTUP_TOOLCHAIN`, which overrides the file, then builds
-    the workspace (wasm build included) and runs every test, all `--locked`, doctests too
-    (t-1620: none exist yet, and nextest would skip them silently, so `just test` runs
-    `cargo test --doc` as well). trybuild's `.stderr` files hold the pinned compiler's
-    wording, so on the MSRV `just msrv-compile-fail` copies `tests/ui` beside it
-    (`A2UI_TRYBUILD_CASES` points the test there), cases only, and runs it with
-    `TRYBUILD=overwrite`, which still fails a case that compiles and writes each `.stderr` in
-    the copy, so a case it skipped has none. Each written file must then hold the tracked
-    file's `error[E…]` codes and case lines, duplicates counted; a case without a `.stderr` or
-    without a code fails. The wording is checked on the pin only; a second, MSRV-worded
-    `.stderr` set would need its own copy of each case, not worth it for three cases.
-    `CARGO_TARGET_DIR` is made absolute there, since trybuild resolves it from the test's
-    crate directory. `just msrv` proves our `Cargo.lock`
-    (MSRV-aware with resolver 3), not what a user resolves; no clippy there, since the pinned
+    21, `github-actions`), never `cargo`, so it never touches `rust-version` or `Cargo.lock`;
+    once the Renovate GitHub App is installed on the repository (open: t-1622), it opens that
+    pull request before 06:00 UTC on Mondays for releases at least a week old, with these steps
+    in its body and its Dependency Dashboard as the sign it runs. A person finishes and
+    squash-merges it, since the hosted app runs no commands and the `.stderr` files need
+    re-reading. Patch releases are proposed too. Enabling its `cargo` manager would resolve
+    `Cargo.lock` for the pinned rustc; `just msrv` would catch a lock past the MSRV. The pin
+    applies in this repository only; `rust-version = "1.88"` stays the declared MSRV for users,
+    and CI's `msrv` job checks it (t-1615): `just msrv` reads the version from Cargo.toml and
+    sets `RUSTUP_TOOLCHAIN`, which overrides the file, then builds the workspace (wasm build
+    included) and runs every test, all `--locked`, doctests too (t-1620: none exist yet, and
+    nextest would skip them silently, so `just test` runs `cargo test --doc` as well).
+    trybuild's `.stderr` files hold the pinned compiler's wording, so on the MSRV `just
+    msrv-compile-fail` copies `tests/ui` beside it (`A2UI_TRYBUILD_CASES` points the test
+    there), cases only, and runs it with `TRYBUILD=overwrite`, which still fails a case that
+    compiles and writes each `.stderr` in the copy, so a case it skipped has none. Each written
+    file must then hold the tracked file's `error[E…]` codes and case lines, duplicates counted;
+    a case without a `.stderr` or without a code fails. The wording is checked on the pin only;
+    a second, MSRV-worded `.stderr` set would need its own copy of each case, not worth it for
+    three cases. `CARGO_TARGET_DIR` is made absolute there, since trybuild resolves it from the
+    test's crate directory. `just msrv` proves our `Cargo.lock` (MSRV-aware with resolver 3).
+    `just msrv-resolved` checks what a user resolves (t-1621): a crate of its own under
+    `target/`, depending on both libraries' sources by path, with no lock, no dev-dependencies
+    and no `rust-version`, resolves afresh on the MSRV and must `cargo check` natively and for
+    wasm. As an edition 2024 crate it resolves with resolver 3, which falls back to versions
+    this rustc accepts when a crate declares its `rust-version`; it catches a crate that
+    declares none or wrongly, or a requirement no accepted version meets. A user on resolver 2
+    gets the newest versions, unchecked here, and feature unification with a user's other
+    dependencies is not modelled. Its crates are releases nobody reviewed: the lock is generated
+    first, which runs no crate's code, and `cargo audit` (yanked releases denied too) reads it
+    before any build; its builds stay in its own `target/`. A build script of a release not yet
+    advised could still read the runner's cache token and plant cache entries for `main`:
+    accepted, as a container would cost more than the weekly check is worth. So it is a recipe
+    of its own, outside `just msrv`, and in CI a job of its own run weekly (`schedule`) or on
+    demand, with no cache restored or saved; pull requests do not run it, so on `main` a red
+    result is mostly upstream drift. Its fix, in order: a newer `rust-version`, an issue to the
+    crate that misdeclares its own, or, last, a capped entry in `workspace.dependencies` that
+    a2ui-runtime references as a direct dependency, since an unreferenced entry constrains
+    nothing; that cap constrains users too, so it is temporary, with a task to remove it. A
+    dependency change is checked before its merge by dispatching the workflow on its branch
+    (AGENTS.md), since pull requests skip the job. GitHub disables a public repository's
+    schedule after 60 days without activity and mails its failures to whoever last edited the
+    cron line. The resolved versions are printed for the log. Checked by hand: a dependency
+    needing rustc 1.92 fails it. Path dependencies skip packaging, so `include` is not checked
+    (t-1629). `-Z direct-minimal-versions` was set aside: it needs nightly and checks our lower
+    bounds, not a user's newest resolution (t-1629). No clippy in `just msrv`, since the pinned
     clippy's `incompatible_msrv` already reads `rust-version`. If a dev-dependency ever needs a
-    newer rustc, narrow the job to the published crates' libraries rather than raise
+    newer rustc, narrow the `msrv` job to the published crates' libraries rather than raise
     `rust-version`. Every other job, release-plz's included, installs the file's toolchain
     (`rustup toolchain install`), since the file overrides any other in the checkout. CI caches
     with `Swatinem/rust-cache`, saved even after a red run, which keeps dependency artifacts
     under `target/`, including trybuild's own build in `target/tests/trybuild` (~400 s cold;
     unconfirmed until two runs on one pull request or on `main`, t-1622); the key holds the
-    rustc version, so a bump starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
-    gain over one warm cache.
+    rustc version, so a bump starts cold. A separate trybuild job was set aside: a second job
+    and cache to keep for no gain over one warm cache.
 21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with
     the release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that
     then runs with the job's token. `just actions-pinned`, part of `just check`, fails on any
-    `uses:` in `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it
-    finds no workflow. It checks the form offline, not that the SHA is that tag's commit: each
-    pin was checked by hand against the peeled tag when set, and Renovate keeps SHA and comment
-    together afterwards; a hand edit is unguarded until a tool such as zizmor runs in CI
-    (t-1625). Local `./` actions and `docker://` images would fail it; none exist. The tools
+    `uses:` in `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it finds
+    no workflow. It checks the form offline, not that the SHA is that tag's commit: each pin was
+    checked by hand against the peeled tag when set, and Renovate keeps SHA and comment together
+    afterwards; a hand edit is unguarded until a tool such as zizmor runs in CI (t-1625). Local
+    `./` actions and `docker://` images would fail it; none exist. The tools
     `taiki-e/install-action` installs carry no version: the manifests in its pinned commit fix
     them, so a bump of that action moves them too. `release-plz/action` pins its own nested
-    actions by SHA at the pinned commit. Renovate's
-    `github-actions` manager is enabled (`pinDigests` pins any action added by tag): one
-    grouped `ci(deps)` pull request before 06:00 UTC on Mondays, releases at least a week old,
-    never automerged, once the app is installed (t-1622). The config was checked against
-    Renovate's published JSON schema only. `ci.yml` runs on pushes to `main`, on pull requests
-    and on demand (t-1623), so a branch with a pull request runs once, not once per event. A
-    newer push to a pull request cancels its older run; every other run has its own
-    concurrency group (`run_id`), since a group keeps only one pending run and would drop a
-    queued push to `main`. A pull-request run restores its own cache, else `main`'s, so the
-    trybuild build is warm only once a run on `main` saved it; a cancelled run saves none, so
-    pushing again within a cold run of a toolchain bump starts the next one cold too. A
-    `merge_group` trigger is there for a merge queue, should one be enabled. A branch without a pull request
-    runs only on demand (`gh workflow run ci.yml --ref <branch>`). Release-plz's pull request,
-    opened with `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
+    actions by SHA at the pinned commit. Renovate's `github-actions` manager is enabled
+    (`pinDigests` pins any action added by tag): one grouped `ci(deps)` pull request before
+    06:00 UTC on Mondays, releases at least a week old, never automerged, once the app is
+    installed (t-1622). The config was checked against Renovate's published JSON schema only.
+    `ci.yml` runs on pushes to `main`, on pull requests, on demand (t-1623) and weekly on `main`
+    (t-1621), so a branch with a pull request runs once, not once per event. A newer push to a
+    pull request cancels its older run; every other run has its own concurrency group
+    (`run_id`), since a group keeps only one pending run and would drop a queued push to `main`.
+    A pull-request run restores its own cache, else `main`'s, so the trybuild build is warm only
+    once a run on `main` saved it; a cancelled run saves none, so pushing again within a cold
+    run of a toolchain bump starts the next one cold too. A `merge_group` trigger is there for a
+    merge queue, should one be enabled. A branch without a pull request runs only on demand (`gh
+    workflow run ci.yml --ref <branch>`). Release-plz's pull request, opened with
+    `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
 
 ## The algorithm (reference for Tasks 1 and 2)
 

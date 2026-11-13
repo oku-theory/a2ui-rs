@@ -71,17 +71,25 @@ msrv:
     export RUSTUP_TOOLCHAIN
     # Its own target directory, so the pinned toolchain's build stays whole and this one can go.
     export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target/msrv}"
-    rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --target wasm32-unknown-unknown
-    # A green run must mean the MSRV ran, not a silently kept pin.
-    if ! rustc -V | grep -q "^rustc $RUSTUP_TOOLCHAIN[. ]"; then
-        echo "rustc is not $RUSTUP_TOOLCHAIN: $(rustc -V)" >&2
-        exit 1
-    fi
+    just msrv-toolchain
     cargo build --workspace --all-targets --locked
     cargo build -p a2ui-runtime -p a2ui-catalog-basic --target wasm32-unknown-unknown --locked
     cargo nextest run --workspace --locked -E 'not binary(reason_compile_fail)'
     cargo test --doc --workspace --locked
     just msrv-compile-fail
+
+# Installs RUSTUP_TOOLCHAIN, set by the caller, and checks that rustc is that version.
+[private]
+msrv-toolchain:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rustup toolchain install "${RUSTUP_TOOLCHAIN:?set by the calling recipe}" --profile minimal \
+        --target wasm32-unknown-unknown
+    # A green run must mean the MSRV ran, not a silently kept pin.
+    if ! rustc -V | grep -q "^rustc $RUSTUP_TOOLCHAIN[. ]"; then
+        echo "rustc is not $RUSTUP_TOOLCHAIN: $(rustc -V)" >&2
+        exit 1
+    fi
 
 # On the toolchain in use, each trybuild case still fails with its .stderr's codes and lines.
 [private]
@@ -129,6 +137,47 @@ msrv-compile-fail:
             exit 1
         fi
     done
+
+# On the MSRV, a user's crate resolves the libraries afresh: builds unreviewed crate releases.
+msrv-resolved:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RUSTUP_TOOLCHAIN="$(just msrv-version)"
+    export RUSTUP_TOOLCHAIN
+    just msrv-toolchain
+    # Cargo.lock proves our versions only. A crate of its own, with no lock, no dev-dependencies
+    # and no rust-version, resolves the newest versions this rustc accepts (resolver 3, as in an
+    # edition 2024 crate), the way a user's does; its `[workspace]` keeps it out of ours. A
+    # killed run leaves it under the ignored target/.
+    mkdir -p target
+    user="$(mktemp -d target/msrv-user.XXXXXX)"
+    trap 'rm -rf "$user"' EXIT
+    mkdir "$user/src"
+    : > "$user/src/lib.rs"
+    cat > "$user/Cargo.toml" <<'EOF'
+    [package]
+    name = "msrv-user"
+    version = "0.0.0"
+    edition = "2024"
+    publish = false
+
+    [dependencies]
+    a2ui-runtime = { path = "../../crates/a2ui-runtime" }
+    a2ui-catalog-basic = { path = "../../crates/a2ui-catalog-basic" }
+
+    [workspace]
+    EOF
+    # Resolving runs no crate's code: known advisories, known-malicious crates included, and yanked
+    # releases stop the run before any build script does.
+    cargo generate-lockfile --manifest-path "$user/Cargo.toml"
+    cargo audit --file "$user/Cargo.lock" --deny yanked
+    # Its builds stay in the crate's own target/, gone with it, whatever the caller's setting.
+    export CARGO_TARGET_DIR="$PWD/$user/target"
+    # Every version this resolution picked, every target's and build dependencies, for the log.
+    cargo tree --manifest-path "$user/Cargo.toml" --target all -e normal,build --prefix none \
+        | sed -E 's/ \((\*|proc-macro)\)//g' | sort -u
+    cargo check --manifest-path "$user/Cargo.toml" --locked
+    cargo check --manifest-path "$user/Cargo.toml" --locked --target wasm32-unknown-unknown
 
 # Licenses and advisories.
 audit:
