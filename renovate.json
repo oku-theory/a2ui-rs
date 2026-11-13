@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Bumps the pinned compiler in rust-toolchain.toml only (plan 2b, Decision 20).",
-  "enabledManagers": ["rust-toolchain"],
+  "description": "Bumps the pinned compiler and the SHA-pinned actions (plan 2b, Decisions 20, 21).",
+  "enabledManagers": ["rust-toolchain", "github-actions"],
   "semanticCommits": "enabled",
   "timezone": "Etc/UTC",
   "dependencyDashboard": {
@@ -22,6 +22,17 @@
         "2. Fix the new `clippy -D warnings` lints, then run `just ci`. CI's cache starts cold on the new rustc.",
         "Renovate stops updating this branch once a person pushes to it: if a newer rustc ships first, close this pull request and Renovate opens a fresh one."
       ]
+    },
+    {
+      "description": "Actions stay pinned to a commit SHA, the release in a comment; one ci(deps) PR for all.",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true,
+      "groupName": "GitHub Actions",
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps",
+      "schedule": ["before 6am on monday"],
+      "minimumReleaseAge": "7 days",
+      "automerge": false
     }
   ]
 }

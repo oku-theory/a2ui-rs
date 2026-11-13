@@ -1,9 +1,31 @@
-# Formatting, lints, dependency rules and the wasm build.
+# Formatting, lints, dependency rules, pinned actions and the wasm build.
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
     just deps
+    just actions-pinned
     just wasm
+
+# Every workflow step's action is a full commit SHA, its release in a comment for Renovate.
+# Checks the form only, offline: that each SHA is its tag's commit was checked by hand (t-1619).
+actions-pinned:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    workflows=(.github/workflows/*.yml .github/workflows/*.yaml)
+    if [ "${#workflows[@]}" -eq 0 ]; then
+        echo "no workflow found under .github/workflows" >&2
+        exit 1
+    fi
+    # No `|| true` here: an unreadable file, or no `uses:` at all, fails the recipe.
+    uses="$(grep -HnE '^[[:space:]-]*uses:' "${workflows[@]}")"
+    unpinned="$(grep -vE 'uses: [^@[:space:]]+@[0-9a-f]{40} # v?[0-9]+\.[0-9]+\.[0-9]+$' \
+        <<< "$uses" || true)"
+    if [ -n "$unpinned" ]; then
+        echo "actions not pinned as owner/repo@<40-hex SHA> # vX.Y.Z:" >&2
+        echo "$unpinned" >&2
+        exit 1
+    fi
 
 # a2ui-runtime: no direct UI, async or JS dependency; wasm-bindgen only through getrandom.
 deps:

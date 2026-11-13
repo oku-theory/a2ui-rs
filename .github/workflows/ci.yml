@@ -7,18 +7,20 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # Installs what rust-toolchain.toml pins: the compiler, rustfmt, clippy, the wasm target
       # (rustup 1.28 or later reads the file when given no toolchain).
       - run: rustup toolchain install
       # Caches the registry and dependency artifacts, including trybuild's own build under
       # target/tests/trybuild (~400 s cold). The key holds the rustc version, so a toolchain
       # bump starts from an empty cache.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # A red first run (a reworded .stderr) still warms the cache for the fix.
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-nextest,just,cargo-deny,cargo-audit
       - run: just ci
@@ -27,10 +29,10 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-nextest,just
       # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
@@ -42,7 +44,7 @@ jobs:
       - run: >-
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
           --target wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-on-failure: true
       - run: just msrv

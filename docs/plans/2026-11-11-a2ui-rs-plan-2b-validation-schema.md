@@ -230,8 +230,8 @@ upstream's reading would be unsafe:
     CI red with no code change, and a local run on another version disagrees with CI. The wasm
     build needs its target installed, which the file now says once. A bump is its own
     `build(toolchain)` commit: new channel, `TRYBUILD=overwrite`, new lints fixed.
-    `renovate.json` (t-1616) enables only Renovate's `rust-toolchain` manager, so it never
-    touches `rust-version` or `Cargo.lock`; once the Renovate GitHub App is installed on the
+    `renovate.json` (t-1616) enables Renovate's `rust-toolchain` manager (and, since Decision
+    21, `github-actions`), never `cargo`, so it never touches `rust-version` or `Cargo.lock`; once the Renovate GitHub App is installed on the
     repository (open: t-1622), it opens that pull request before 06:00 UTC on Mondays for
     releases at least a week old, with these steps in its body and its Dependency Dashboard as
     the sign it runs. A person finishes and squash-merges it, since the hosted app runs no
@@ -252,6 +252,21 @@ upstream's reading would be unsafe:
     unconfirmed until two pushed runs, t-1622); the key holds the rustc version, so a bump
     starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
     gain over one warm cache.
+21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with
+    the release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that
+    then runs with the job's token. `just actions-pinned`, part of `just check`, fails on any
+    `uses:` in `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it
+    finds no workflow. It checks the form offline, not that the SHA is that tag's commit: each
+    pin was checked by hand against the peeled tag when set, and Renovate keeps SHA and comment
+    together afterwards; a hand edit is unguarded until a tool such as zizmor runs in CI
+    (t-1625). Local `./` actions and `docker://` images would fail it; none exist. The tools
+    `taiki-e/install-action` installs carry no version: the manifests in its pinned commit fix
+    them, so a bump of that action moves them too. `release-plz/action` pins its own nested
+    actions by SHA at the pinned commit. Renovate's
+    `github-actions` manager is enabled (`pinDigests` pins any action added by tag): one
+    grouped `ci(deps)` pull request before 06:00 UTC on Mondays, releases at least a week old,
+    never automerged, once the app is installed (t-1622). The config was checked against
+    Renovate's published JSON schema only.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
