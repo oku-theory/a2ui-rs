@@ -157,13 +157,6 @@ pub(crate) fn unescape_token(token: &str) -> Option<Cow<'_, str>> {
     Some(Cow::Owned(out))
 }
 
-/// Whether every token of the JSON Pointer `pointer` unescapes under RFC 6901.
-pub(crate) fn is_escaped_pointer(pointer: &str) -> bool {
-    pointer
-        .split('/')
-        .all(|token| unescape_token(token).is_some())
-}
-
 #[cfg(test)]
 #[path = "pointer_tests.rs"]
 mod tests;

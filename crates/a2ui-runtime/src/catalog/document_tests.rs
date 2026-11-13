@@ -62,11 +62,20 @@ fn union_members_referenced_entries_are_listed() {
     ]);
 }
 
+#[test]
+fn union_members_escaped_name_is_decoded() {
+    let defs = map(json!({"anyFunction": {"oneOf": [{"$ref": "#/functions/a~1b~0c"}]}}));
+    let members = union_members(&defs, "anyFunction", "functions").unwrap();
+    assert_that!(members.into_iter().collect::<Vec<_>>()).is_equal_to(vec!["a/b~c".to_owned()]);
+}
+
 #[rstest]
 #[case(json!({}))]
 #[case(json!({"anyFunction": {"not": {}}}))]
 #[case(json!({"anyFunction": {"oneOf": []}}))]
 #[case(json!({"anyFunction": {"oneOf": [{"$ref": "#/$defs/Other"}]}}))]
+#[case(json!({"anyFunction": {"oneOf": [{"$ref": "#/functions/f/properties"}]}}))]
+#[case(json!({"anyFunction": {"oneOf": [{"$ref": "#/functions/a~2b"}]}}))]
 fn union_members_no_listed_entry_is_none(#[case] defs: Value) {
     assert_that!(union_members(&map(defs), "anyFunction", "functions")).is_none();
 }

@@ -162,15 +162,23 @@ upstream's reading would be unsafe:
     `examples`, and none of the 995 `$ref`s under `vendor/a2ui` sits in data. What a bad
     `$ref` names is `NotASchema`: `Missing`, or one variant per JSON type that is not a schema.
     It carries no wording; `validation_schema` owns the message.
-16. **RFC 6901 escapes only (t-1595):** `crate::pointer` holds the crate's one reference-token
-    codec, `escape_token` and `unescape_token` (`None` when a `~` is not followed by `0` or `1`,
-    RFC 6901 §3-4); `Pointer`, `bundle`'s `$ref` paths, `entry_of` and `whole_def_name` use it,
-    and `bundle`'s lenient unescape is gone. Load rule 4 now refuses a `$ref` whose decoded
-    pointer has such an escape in any token: `limits::resolve` pairs the strict `entry_of` with
-    `serde_json`'s lenient `Value::pointer`, which must decode the whole pointer alike so the
-    entry charged holds the target. Upstream has no such rule; RFC 6901 calls those pointers
-    invalid. Percent-decoding comes first, so `%7E2` is refused too. None of the 995 `$ref`s
-    under `vendor/a2ui` holds a `~`, and a test pins that every common-type `$ref` is escaped.
+16. **RFC 6901 escapes only (t-1595, t-1609):** `crate::pointer` holds the crate's one
+    reference-token codec, `escape_token` and `unescape_token` (`None` when a `~` is not
+    followed by `0` or `1`, RFC 6901 §3-4); `Pointer` and `bundle` use it, and `bundle`'s
+    lenient unescape is gone. Load rule 4 refuses a `$ref` whose decoded pointer has such an
+    escape in any token. Upstream has no such rule; RFC 6901 calls those pointers invalid.
+    Percent-decoding comes first, so `%7E2` is refused too. Every reader of a `$ref`'s target
+    (rule 4's kept and interior checks, `limits::resolve`, `whole_def_name`, `def_names`,
+    `union_members`, `bundle::resolve`) takes it as a `bundle::RefPointer`, parsed once into
+    decoded tokens, with its own resolver in place of `serde_json`'s lenient `Value::pointer`
+    (array indices canonical digits, as there): a bad escape is unrepresentable, so no reader
+    relies on rule 4 having run first, and the entry `limits` charges holds the target by
+    construction. Rewriters (`localize_ref`, `written_ref`, `theme_target`) keep the decoded
+    string. Two readings change: `#/$defs/` names the `$defs` entry `""`, which rule 4 now keeps
+    (string splitting refused it; a missing one still fails as dangling), and a union member
+    is a whole entry, its name unescaped (`#/functions/a~1b` lists `a/b`; one below an entry
+    lists nothing). None of the 995 `$ref`s under `vendor/a2ui` holds a `~`, and a test pins
+    that every common-type `$ref` parses.
 17. **One descent, one rewrite order (t-1592, t-1593, t-1596, t-1603, t-1611):**
     `bundle::walk` generates its shared and `mut` member descents, and the `$ref` filter on
     top of each (a string under `REF_KEY`, the one name of the keyword), from one macro body,

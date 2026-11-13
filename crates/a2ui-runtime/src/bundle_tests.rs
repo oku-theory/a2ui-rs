@@ -3,7 +3,6 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::*;
-use crate::pointer::is_escaped_pointer;
 
 #[rstest]
 #[case("#/$defs/Weight", true)]
@@ -109,22 +108,6 @@ fn pointer_of_encoded_percent_sign_is_decoded() {
     assert_that!(pointer_of("#/$defs/a%25b").as_deref()).is_equal_to(Some("/$defs/a%b"));
 }
 
-#[rstest]
-#[case("/$defs/Child", Some(("$defs", "Child")))]
-#[case("/components/Card/properties/child", Some(("components", "Card")))]
-#[case("/functions/a~1b", Some(("functions", "a/b")))]
-#[case("", None)]
-#[case("/theme/x", None)]
-#[case("/$defs", None)]
-#[case("/$defs/a~2b", None)]
-fn entry_of_pointer_names_its_entry(#[case] pointer: &str, #[case] expected: Option<(&str, &str)>) {
-    let entry = entry_of(pointer);
-    let entry = entry
-        .as_ref()
-        .map(|(section, name)| (*section, name.as_str()));
-    assert_that!(entry).is_equal_to(expected);
-}
-
 #[test]
 fn add_common_types_copies_the_reachable_closure() {
     let common = json!({
@@ -196,6 +179,7 @@ fn add_common_types_copied_refs_are_localized() {
 #[case::other_section("#/components/Weight", None)]
 #[case::section_only("#/$defs", None)]
 #[case::bad_escape_in_the_name("#/$defs/a~2b", None)]
+#[case::empty_name("#/$defs/", Some(""))]
 fn whole_def_name_names_only_a_whole_entry(#[case] reference: &str, #[case] name: Option<&str>) {
     assert_that!(whole_def_name(reference)).is_equal_to(name.map(str::to_owned));
 }
@@ -221,7 +205,12 @@ fn common_types_every_ref_pointer_is_rfc_6901_escaped() {
             pointers.extend(pointer_of(reference))
         });
     }
-    assert_that!(pointers.iter().all(|pointer| is_escaped_pointer(pointer))).is_true();
+    assert_that!(
+        pointers
+            .iter()
+            .all(|pointer| RefPointer::parse(pointer).is_some())
+    )
+    .is_true();
 }
 
 #[rstest]

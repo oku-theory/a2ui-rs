@@ -375,3 +375,24 @@ fn from_json_data_ref_the_runtime_would_rewrite_is_catalog_error() {
     assert_that!(catalog_error(load(document)))
         .ends_with("is data, which the runtime would rewrite; write it '#/$defs/Y'");
 }
+
+#[test]
+fn from_json_ref_to_a_def_named_empty_loads() {
+    let document = v10(json!({
+        "$defs": {"": {"type": "string"}},
+        "theme": {"properties": {"brand": {"$ref": "#/$defs/"}}},
+        "components": {"A": {"properties": {"b": {"$ref": "#/$defs/"}}}}
+    }));
+    assert_that!(load(document)).is_ok();
+}
+
+#[test]
+fn from_json_ref_to_a_missing_def_named_empty_is_catalog_error() {
+    let document = v10(json!({
+        "theme": {"properties": {"brand": {"$ref": "#/$defs/"}}},
+        "components": {"A": {}}
+    }));
+    assert_that!(catalog_error(load(document))).ends_with(
+        "$ref '#/$defs/' at /theme/properties/brand/$ref does not resolve in the validation schema",
+    );
+}

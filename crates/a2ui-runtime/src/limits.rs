@@ -5,7 +5,7 @@ use std::ptr;
 
 use serde_json::Value;
 
-use crate::bundle::{REF_KEY, entry_of, pointer_of};
+use crate::bundle::{REF_KEY, RefPointer};
 
 /// Deepest nesting of arrays and objects accepted in a catalog or a validated value.
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
@@ -336,17 +336,16 @@ impl<'a> Walk<'a> {
     /// Resolves the `$ref` site `reference` once, charging its entry the first time it is reached.
     fn resolve(&mut self, reference: &'a String) -> Result<&'a Value, Expansion> {
         let unresolved = || Expansion::Unresolved(reference.clone());
-        let pointer = pointer_of(reference).ok_or_else(unresolved)?;
-        // Load rule 4 refused undefined `~` escapes, so `entry_of` and the lenient
-        // `Value::pointer` below decode every token alike: the entry charged holds the target.
-        let (section, name) = entry_of(&pointer).ok_or_else(unresolved)?;
-        let target = self.root.pointer(&pointer).ok_or_else(unresolved)?;
+        let pointer = RefPointer::of(reference).ok_or_else(unresolved)?;
+        // One parse gives both: the entry charged holds the target.
+        let (section, name) = pointer.entry().ok_or_else(unresolved)?;
+        let target = pointer.resolve(self.root).ok_or_else(unresolved)?;
         let entry = self
             .root
             .get(section)
-            .and_then(|entries| entries.get(name.as_str()))
+            .and_then(|entries| entries.get(name))
             .ok_or_else(unresolved)?;
-        if self.reached.insert((section, name)) {
+        if self.reached.insert((section, name.to_owned())) {
             self.size += weight_up_to(entry, self.budget.saturating_sub(self.size));
             if self.size > self.budget {
                 return Err(Expansion::TooLarge);

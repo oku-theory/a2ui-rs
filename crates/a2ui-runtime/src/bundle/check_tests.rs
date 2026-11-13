@@ -156,6 +156,8 @@ fn check_references_target_the_validation_schema_drops_is_catalog_error(#[case] 
 #[case::theme("#/theme")]
 #[case::catalog_theme("catalog.json#/theme")]
 #[case::def("catalog.json#/$defs/A")]
+#[case::def_named_empty("#/$defs/")]
+#[case::component_named_empty("#/components/")]
 #[case::absolute_common_type("https://a2ui.org/specification/v1_0/common_types.json#/$defs/Weight")]
 fn check_references_target_the_validation_schema_keeps_passes(#[case] reference: &str) {
     let document = json!({"$defs": {"x": {"$ref": reference}}});

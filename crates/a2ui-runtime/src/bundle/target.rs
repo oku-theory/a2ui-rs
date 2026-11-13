@@ -2,12 +2,12 @@
 
 use serde_json::Value;
 
-use super::pointer_of;
+use super::RefPointer;
 use super::walk::{Segment, find_ref};
 
 /// The node of `root` a supported `$ref` names, decoding its fragment.
 pub(crate) fn resolve<'a>(root: &'a Value, reference: &str) -> Option<&'a Value> {
-    root.pointer(&pointer_of(reference)?)
+    RefPointer::of(reference)?.resolve(root)
 }
 
 /// What a `$ref` naming no schema resolves to: nothing, or a non-schema value.

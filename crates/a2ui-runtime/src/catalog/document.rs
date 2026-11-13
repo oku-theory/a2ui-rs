@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::bundle::{REF_KEY, local_ref, pointer_of};
+use crate::bundle::{REF_KEY, RefPointer, local_ref};
 
 const BRANCHES: [&str; 3] = ["allOf", "anyOf", "oneOf"];
 
@@ -74,14 +74,16 @@ pub(crate) fn union_members(
     union: &str,
     section: &str,
 ) -> Option<BTreeSet<String>> {
-    let prefix = format!("/{section}/");
     let members: BTreeSet<String> = defs
         .get(union)?
         .get("oneOf")?
         .as_array()?
         .iter()
-        .filter_map(|item| pointer_of(item.get(REF_KEY)?.as_str()?))
-        .filter_map(|pointer| pointer.strip_prefix(prefix.as_str()).map(str::to_owned))
+        .filter_map(|item| RefPointer::of(item.get(REF_KEY)?.as_str()?))
+        .filter_map(|pointer| match pointer.tokens() {
+            [listed, name] if listed == section => Some(name.clone()),
+            _ => None,
+        })
         .collect();
     (!members.is_empty()).then_some(members)
 }

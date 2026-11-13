@@ -3,23 +3,24 @@
 //! A v1.0 catalog may reference itself (`#…`, `catalog.json#…`) and `common_types.json` (by a
 //! relative or the published absolute URI). Localizing rewrites those to `#` fragments,
 //! percent-encoded as URI references require (a raw `ℓ` makes the schema build fail).
-//! Submodules: `walk` (the `$ref` walks), `check` (load rule 4), `target` (what a `$ref` names),
-//! `position` (which keywords hold schemas, and which data).
+//! Submodules: `walk` (the `$ref` walks), `check` (load rule 4), `ref_pointer` (a `$ref`'s
+//! decoded tokens), `target` (what a `$ref` names), `position` (which keywords hold schemas,
+//! and which data).
 
 use std::borrow::Cow;
 
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 use serde_json::{Map, Value};
 
-use crate::pointer::unescape_token;
-
 mod check;
 mod position;
+mod ref_pointer;
 mod target;
 mod walk;
 
 pub(crate) use check::check_references;
 pub(crate) use position::{SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE};
+pub(crate) use ref_pointer::RefPointer;
 pub(crate) use target::{NotASchema, first_not_a_schema, resolve};
 pub(crate) use walk::{REF_KEY, Segment, for_each_ref, node_at, pointer, rewrite_refs};
 
@@ -88,18 +89,6 @@ fn is_pointer_fragment(fragment: &str) -> bool {
     fragment.is_empty() || fragment.starts_with('/')
 }
 
-/// The section and decoded name of the entry a JSON Pointer falls in.
-///
-/// `/components/Card/properties/child` falls in `("components", "Card")`. `None` when the
-/// pointer names no node inside a `$defs`, `components` or `functions` entry, or when the
-/// entry's token has a `~` escape RFC 6901 does not define (load rule 4 refuses those).
-pub(crate) fn entry_of(pointer: &str) -> Option<(&'static str, String)> {
-    let (section, rest) = pointer.strip_prefix('/')?.split_once('/')?;
-    let section = ENTRY_SECTIONS.into_iter().find(|known| *known == section)?;
-    let token = rest.split_once('/').map_or(rest, |(token, _)| token);
-    Some((section, unescape_token(token)?.into_owned()))
-}
-
 /// `reference` as a local, percent-encoded `$ref`; any other one is returned unchanged.
 pub(crate) fn localize_ref(reference: &str) -> String {
     pointer_of(reference).map_or_else(|| reference.to_owned(), |pointer| local_ref(&pointer))
@@ -166,9 +155,9 @@ pub(crate) fn def_names(node: &Value, out: &mut Vec<String>) {
 
 /// The `$defs` entry a local `$ref` names, decoded and unescaped.
 fn def_name(reference: &str) -> Option<String> {
-    entry_of(&pointer_of(reference)?)
-        .filter(|(section, _)| *section == "$defs")
-        .map(|(_, name)| name)
+    let pointer = RefPointer::of(reference)?;
+    let (section, name) = pointer.entry()?;
+    (section == "$defs").then(|| name.to_owned())
 }
 
 /// The `$defs` entry a local `$ref` names as a whole, decoded and unescaped.
@@ -176,12 +165,10 @@ fn def_name(reference: &str) -> Option<String> {
 /// `None` for a pointer below an entry (`#/$defs/A/properties`): only a whole entry is a mixin
 /// or a described common type, because only a whole entry's `$ref`s were followed by `expand`.
 pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
-    let pointer = pointer_of(reference)?;
-    let token = pointer.strip_prefix("/$defs/")?;
-    if token.contains('/') {
-        return None;
+    match RefPointer::of(reference)?.tokens() {
+        [section, name] if section == "$defs" => Some(name.clone()),
+        _ => None,
     }
-    unescape_token(token).map(Cow::into_owned)
 }
 
 #[cfg(test)]

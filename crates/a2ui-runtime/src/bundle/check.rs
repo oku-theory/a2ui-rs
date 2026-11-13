@@ -6,11 +6,11 @@ use snafu::ensure;
 use super::position::find_data;
 use super::walk::{REF_KEY, Segment, find_member_in, find_ref, pointer};
 use super::{
-    COMMON_TYPES_URIS, ENTRY_SECTIONS, is_pointer_fragment, is_supported_ref, pointer_of,
-    written_ref,
+    COMMON_TYPES_URIS, ENTRY_SECTIONS, RefPointer, is_pointer_fragment, is_supported_ref,
+    pointer_of, written_ref,
 };
 use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
-use crate::pointer::{BAD_ESCAPE, is_escaped_pointer};
+use crate::pointer::BAD_ESCAPE;
 use crate::quoted::{Quoted, reason};
 
 /// The keywords the reference check reads when they hold a scalar.
@@ -136,7 +136,7 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
             ],
         }
     );
-    let Some(target) = pointer_of(reference) else {
+    let Some(decoded) = pointer_of(reference) else {
         return MalformedCatalogSnafu {
             reason: reason![
                 "$ref '",
@@ -149,11 +149,9 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
         .fail()
         .map_err(Into::into);
     };
-    // Every token, not only the entry's: `limits` looks the whole pointer up with
-    // `serde_json`'s lenient `Value::pointer`, which must decode it as `entry_of` does.
-    ensure!(
-        is_escaped_pointer(&target),
-        MalformedCatalogSnafu {
+    // Every token is decoded here, once: every reader takes its tokens from a `RefPointer`.
+    let Some(target) = RefPointer::parse(&decoded) else {
+        return MalformedCatalogSnafu {
             reason: reason![
                 "$ref '",
                 Quoted::new(reference),
@@ -163,7 +161,9 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
                 BAD_ESCAPE,
             ],
         }
-    );
+        .fail()
+        .map_err(Into::into);
+    };
     ensure!(
         is_kept_target(reference, &target),
         MalformedCatalogSnafu {
@@ -199,31 +199,28 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
 /// must name the theme, or a `$defs`, component or function entry or a node in one. The whole
 /// document (`#`), a bare section (`#/$defs`) and any other top-level key (`#/title`) are not
 /// kept as they are, so a `$ref` to them would dangle or change meaning there.
-fn is_kept_target(reference: &str, pointer: &str) -> bool {
+fn is_kept_target(reference: &str, pointer: &RefPointer) -> bool {
     let from_common_types = reference
         .split_once('#')
         .is_some_and(|(document, _)| COMMON_TYPES_URIS.contains(&document));
-    let Some((section, rest)) = pointer
-        .strip_prefix('/')
-        .map(|tokens| tokens.split_once('/').unwrap_or((tokens, "")))
-    else {
+    let [section, rest @ ..] = pointer.tokens() else {
         return false;
     };
     if from_common_types {
         return section == "$defs" && !rest.is_empty();
     }
-    section == "theme" || (ENTRY_SECTIONS.contains(&section) && !rest.is_empty())
+    section == "theme" || (ENTRY_SECTIONS.contains(&section.as_str()) && !rest.is_empty())
 }
 
 /// Whether `pointer` names a node below a component or function, such as `/components/A/x`.
 ///
 /// The validation schema rewrites those entries (flattened components, closed function
 /// `args`), so no stable node is left for such a pointer; `$defs` entries are copied as is.
-fn is_inside_entry(pointer: &str) -> bool {
-    pointer
-        .strip_prefix("/components/")
-        .or_else(|| pointer.strip_prefix("/functions/"))
-        .is_some_and(|rest| rest.contains('/'))
+fn is_inside_entry(pointer: &RefPointer) -> bool {
+    matches!(
+        pointer.tokens(),
+        [section, _, _, ..] if section == "components" || section == "functions"
+    )
 }
 
 /// `key` as one of the static [`KEYWORDS`], when it is one.
