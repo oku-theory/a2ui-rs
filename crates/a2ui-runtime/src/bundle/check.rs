@@ -209,7 +209,7 @@ fn is_kept_target(reference: &str, pointer: &RefPointer) -> bool {
     if from_common_types {
         return section == "$defs" && !rest.is_empty();
     }
-    section == "theme" || (ENTRY_SECTIONS.contains(&section.as_str()) && !rest.is_empty())
+    section == "theme" || (ENTRY_SECTIONS.contains(&section.as_ref()) && !rest.is_empty())
 }
 
 /// Whether `pointer` names a node below a component or function, such as `/components/A/x`.

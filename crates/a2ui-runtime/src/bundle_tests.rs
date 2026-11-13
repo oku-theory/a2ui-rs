@@ -98,6 +98,17 @@ fn pointer_of_supported_refs_are_decoded(#[case] reference: &str, #[case] expect
     assert_that!(pointer_of(reference).as_deref()).is_equal_to(expected);
 }
 
+#[rstest]
+#[case::plain("#/$defs/a~1b", true)]
+#[case::percent_escaped("#/$defs/%C2%B5", false)]
+fn pointer_of_fragment_borrows_unless_percent_escaped(
+    #[case] reference: &str,
+    #[case] expected: bool,
+) {
+    let borrowed = matches!(pointer_of(reference), Some(Cow::Borrowed(_)));
+    assert_that!(borrowed).is_equal_to(expected);
+}
+
 #[test]
 fn local_ref_percent_sign_is_encoded() {
     assert_that!(local_ref("/$defs/a%b")).is_equal_to("#/$defs/a%25b".to_owned());
@@ -202,7 +213,7 @@ fn common_types_every_ref_pointer_is_rfc_6901_escaped() {
     let mut pointers = Vec::new();
     for definition in crate::schema::common_type_defs().unwrap().values() {
         for_each_ref(definition, &mut |reference| {
-            pointers.extend(pointer_of(reference))
+            pointers.extend(pointer_of(reference).map(Cow::into_owned))
         });
     }
     assert_that!(

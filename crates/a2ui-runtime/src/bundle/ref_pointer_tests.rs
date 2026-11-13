@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use rstest::rstest;
 use serde_json::{Value, json};
 use speculoos::prelude::*;
@@ -6,7 +8,19 @@ use super::*;
 
 /// The tokens of `reference`'s pointer, or `None` when it has none.
 fn tokens(reference: &str) -> Option<Vec<String>> {
-    RefPointer::of(reference).map(|pointer| pointer.tokens().to_vec())
+    RefPointer::of(reference).map(|pointer| {
+        pointer
+            .tokens()
+            .iter()
+            .map(|token| token.to_string())
+            .collect()
+    })
+}
+
+/// Whether token `index` of `reference`'s pointer borrows from `reference`.
+fn borrows(reference: &str, index: usize) -> bool {
+    let pointer = RefPointer::of(reference).unwrap();
+    matches!(pointer.tokens()[index], Cow::Borrowed(_))
 }
 
 #[rstest]
@@ -28,6 +42,22 @@ fn ref_pointer_of_reference_decodes_each_token_once(
 ) {
     let expected = expected.map(|tokens| tokens.into_iter().map(str::to_owned).collect());
     assert_that!(tokens(reference)).is_equal_to(expected);
+}
+
+#[rstest]
+#[case::plain("#/$defs/Child", 1, true)]
+#[case::plain_from_common_types("common_types.json#/$defs/Child", 1, true)]
+#[case::tilde_escaped("#/$defs/a~1b", 1, false)]
+#[case::tilde_zero_escaped("#/$defs/a~0b", 1, false)]
+#[case::beside_a_tilde_escape("#/$defs/a~1b", 0, true)]
+#[case::percent_escaped("#/$defs/%C2%B5", 1, false)]
+#[case::empty_token("#/", 0, true)]
+fn ref_pointer_of_token_borrows_unless_it_was_decoded(
+    #[case] reference: &str,
+    #[case] index: usize,
+    #[case] expected: bool,
+) {
+    assert_that!(borrows(reference, index)).is_equal_to(expected);
 }
 
 #[rstest]

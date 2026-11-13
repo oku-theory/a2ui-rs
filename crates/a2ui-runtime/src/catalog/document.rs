@@ -81,7 +81,7 @@ pub(crate) fn union_members(
         .iter()
         .filter_map(|item| RefPointer::of(item.get(REF_KEY)?.as_str()?))
         .filter_map(|pointer| match pointer.tokens() {
-            [listed, name] if listed == section => Some(name.clone()),
+            [listed, name] if listed == section => Some(name.to_string()),
             _ => None,
         })
         .collect();

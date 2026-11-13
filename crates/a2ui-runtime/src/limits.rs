@@ -214,7 +214,7 @@ struct Walk<'a> {
     budget: usize,
     size: usize,
     patterns: usize,
-    reached: BTreeSet<(&'static str, String)>,
+    reached: BTreeSet<(&'static str, &'a str)>,
     /// The target each `$ref` string node resolved to, keyed by the node's address, so each
     /// `$ref` site is decoded and looked up once per walk however often it is followed.
     resolved: BTreeMap<*const String, &'a Value>,
@@ -248,7 +248,11 @@ pub(crate) fn expand<'a>(root: &'a Value, node: &'a Value, budget: usize) -> Exp
         Ok(()) => Expansion::Within {
             size: walk.size,
             patterns: walk.patterns,
-            reached: walk.reached,
+            reached: walk
+                .reached
+                .into_iter()
+                .map(|(section, name)| (section, name.to_owned()))
+                .collect(),
         },
         Err(stop) => stop,
     }
@@ -340,12 +344,15 @@ impl<'a> Walk<'a> {
         // One parse gives both: the entry charged holds the target.
         let (section, name) = pointer.entry().ok_or_else(unresolved)?;
         let target = pointer.resolve(self.root).ok_or_else(unresolved)?;
-        let entry = self
+        // The name is borrowed from the catalog's own key while walking; `expand` copies it once
+        // per distinct entry, when the walk ends.
+        let (name, entry) = self
             .root
             .get(section)
-            .and_then(|entries| entries.get(name))
+            .and_then(Value::as_object)
+            .and_then(|entries| entries.get_key_value(name))
             .ok_or_else(unresolved)?;
-        if self.reached.insert((section, name.to_owned())) {
+        if self.reached.insert((section, name)) {
             self.size += weight_up_to(entry, self.budget.saturating_sub(self.size));
             if self.size > self.budget {
                 return Err(Expansion::TooLarge);

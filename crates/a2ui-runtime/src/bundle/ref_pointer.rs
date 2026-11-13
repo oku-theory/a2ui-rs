@@ -13,38 +13,56 @@ use super::{ENTRY_SECTIONS, pointer_of};
 use crate::pointer::unescape_token;
 
 /// The decoded reference tokens of a supported `$ref`'s JSON Pointer.
+///
+/// A token borrows from the `$ref` (or the pointer given to [`RefPointer::parse`]) unless it
+/// had a `~` escape, or the `$ref`'s fragment had a percent escape: then it owns its text.
 #[derive(Debug)]
-pub(crate) struct RefPointer {
-    tokens: Vec<String>,
+pub(crate) struct RefPointer<'a> {
+    tokens: Vec<Cow<'a, str>>,
 }
 
-impl RefPointer {
+impl<'a> RefPointer<'a> {
     /// The pointer a supported `$ref` names, percent-decoded, then each token unescaped.
     ///
     /// `None` when [`pointer_of`] gives none (an unsupported reference, an anchor, a fragment
     /// whose escapes are not UTF-8), or when a token has a `~` that RFC 6901 does not define.
-    pub(crate) fn of(reference: &str) -> Option<Self> {
-        Self::parse(&pointer_of(reference)?)
+    pub(crate) fn of(reference: &'a str) -> Option<Self> {
+        match pointer_of(reference)? {
+            Cow::Borrowed(pointer) => Self::parse(pointer),
+            // The decoded pointer ends with this call, so its tokens are copied out of it. The
+            // whole fragment is decoded before it is split: `%2F` decodes to a separator.
+            Cow::Owned(pointer) => RefPointer::parse(&pointer).map(RefPointer::into_owned),
+        }
+    }
+
+    /// The same tokens, each owning its text.
+    fn into_owned(self) -> RefPointer<'static> {
+        let tokens = self
+            .tokens
+            .into_iter()
+            .map(|token| Cow::Owned(token.into_owned()))
+            .collect();
+        RefPointer { tokens }
     }
 
     /// Parses a decoded JSON Pointer into reference tokens.
     ///
     /// `""` names the whole document; any other pointer starts with `/`. `None` when it does
     /// not, or when a token has an undefined `~` escape.
-    pub(crate) fn parse(pointer: &str) -> Option<Self> {
+    pub(crate) fn parse(pointer: &'a str) -> Option<Self> {
         if pointer.is_empty() {
             return Some(Self { tokens: Vec::new() });
         }
         let tokens = pointer
             .strip_prefix('/')?
             .split('/')
-            .map(|token| unescape_token(token).map(Cow::into_owned))
+            .map(unescape_token)
             .collect::<Option<_>>()?;
         Some(Self { tokens })
     }
 
     /// The decoded tokens, outermost first.
-    pub(crate) fn tokens(&self) -> &[String] {
+    pub(crate) fn tokens(&self) -> &[Cow<'a, str>] {
         &self.tokens
     }
 
@@ -57,15 +75,15 @@ impl RefPointer {
             return None;
         };
         let section = ENTRY_SECTIONS.into_iter().find(|known| known == section)?;
-        Some((section, name.as_str()))
+        Some((section, name))
     }
 
     /// The node of `root` the pointer names, as RFC 6901 and `Value::pointer` resolve it.
     ///
     /// An array index is canonical digits: no sign, no leading zero but `0` itself.
-    pub(crate) fn resolve<'a>(&self, root: &'a Value) -> Option<&'a Value> {
+    pub(crate) fn resolve<'v>(&self, root: &'v Value) -> Option<&'v Value> {
         self.tokens.iter().try_fold(root, |node, token| match node {
-            Value::Object(map) => map.get(token),
+            Value::Object(map) => map.get(token.as_ref()),
             Value::Array(items) => items.get(array_index(token)?),
             _ => None,
         })

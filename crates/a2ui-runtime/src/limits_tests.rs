@@ -246,6 +246,16 @@ fn expand_reached_entries_are_listed() {
 }
 
 #[test]
+fn expand_escaped_entry_name_is_listed_once_by_its_key() {
+    let root = json!({
+        "$defs": {"a/b": {}},
+        "x": {"allOf": [{"$ref": "#/$defs/a~1b"}, {"$ref": "#/$defs/a%7E1b"}]}
+    });
+    let expected = BTreeSet::from([("$defs", "a/b".to_owned())]);
+    assert_that!(within(expand(&root, &root["x"], 100)).2).is_equal_to(expected);
+}
+
+#[test]
 fn expand_long_string_weighs_one_node_per_64_bytes() {
     let root = json!({"description": "d".repeat(128)});
     assert_that!(within(expand(&root, &root, 100)).0).is_equal_to(4);

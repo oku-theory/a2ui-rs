@@ -73,15 +73,13 @@ const ENTRY_SECTIONS: [&str; 3] = ["$defs", "components", "functions"];
 /// The decoded JSON Pointer a supported `$ref` names, such as `/$defs/Child`.
 ///
 /// `None` for an unsupported reference, for a fragment that is neither empty nor a JSON
-/// Pointer (an anchor such as `#Name`), and for one whose escapes are not UTF-8.
-pub(crate) fn pointer_of(reference: &str) -> Option<String> {
+/// Pointer (an anchor such as `#Name`), and for one whose escapes are not UTF-8. Borrowed
+/// from `reference` unless percent-decoding changed the fragment.
+pub(crate) fn pointer_of(reference: &str) -> Option<Cow<'_, str>> {
     let (_, fragment) = reference
         .split_once('#')
         .filter(|(_, fragment)| is_supported_ref(reference) && is_pointer_fragment(fragment))?;
-    percent_decode_str(fragment)
-        .decode_utf8()
-        .ok()
-        .map(Cow::into_owned)
+    percent_decode_str(fragment).decode_utf8().ok()
 }
 
 /// Whether `fragment` is empty or a JSON Pointer, the only fragments v1.0 supports.
@@ -166,7 +164,7 @@ fn def_name(reference: &str) -> Option<String> {
 /// or a described common type, because only a whole entry's `$ref`s were followed by `expand`.
 pub(crate) fn whole_def_name(reference: &str) -> Option<String> {
     match RefPointer::of(reference)?.tokens() {
-        [section, name] if section == "$defs" => Some(name.clone()),
+        [section, name] if section == "$defs" => Some(name.to_string()),
         _ => None,
     }
 }
