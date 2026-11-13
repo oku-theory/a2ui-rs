@@ -20,7 +20,7 @@ mod walk;
 
 pub(crate) use check::check_references;
 pub(crate) use position::{SCHEMA_LISTS, SCHEMA_MAPS, SCHEMA_ONE};
-pub(crate) use ref_pointer::RefPointer;
+pub(crate) use ref_pointer::{Located, RefPointer};
 pub(crate) use target::{NotASchema, first_not_a_schema, resolve};
 pub(crate) use walk::{REF_KEY, Segment, for_each_ref, node_at, pointer, rewrite_refs};
 

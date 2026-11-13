@@ -117,3 +117,106 @@ fn ref_pointer_resolve_any_pointer_agrees_with_serde_json(#[case] reference: &st
     let decoded = pointer_of(reference).unwrap();
     assert_that!(pointer.resolve(&root)).is_equal_to(root.pointer(&decoded));
 }
+
+/// The catalog the `locate` tests resolve in.
+fn located_root() -> Value {
+    json!({
+        "$defs": {"a/b": {"x": [1, {"y": 2}]}},
+        "components": {"C": {"properties": {"a": {"type": "string"}}}},
+        "functions": {"f": {"returnType": "string"}},
+        "theme": {"t": 3}
+    })
+}
+
+/// What `locate` finds for `reference` in `root`: section, name, entry and target.
+fn located(root: &Value, reference: &str) -> Option<(&'static str, String, Value, Value)> {
+    let pointer = RefPointer::of(reference).unwrap();
+    pointer.locate(root).map(|found| {
+        (
+            found.section,
+            found.name.to_owned(),
+            found.entry.clone(),
+            found.target.clone(),
+        )
+    })
+}
+
+#[rstest]
+#[case::whole_entry("#/$defs/a~1b", "$defs", "a/b", json!({"x": [1, {"y": 2}]}))]
+#[case::inside_entry("#/$defs/a%7E1b/x/1/y", "$defs", "a/b", json!(2))]
+#[case::component_property(
+    "#/components/C/properties/a",
+    "components",
+    "C",
+    json!({"type": "string"})
+)]
+#[case::function("#/functions/f/returnType", "functions", "f", json!("string"))]
+fn ref_pointer_locate_names_entry_and_target(
+    #[case] reference: &str,
+    #[case] section: &str,
+    #[case] name: &str,
+    #[case] target: Value,
+) {
+    let root = located_root();
+    let entry = root[section][name].clone();
+    let expected = Some((section, name.to_owned(), entry, target));
+    assert_that!(located(&root, reference)).is_equal_to(expected);
+}
+
+#[rstest]
+#[case::missing_entry("#/$defs/Missing")]
+#[case::missing_node_inside("#/$defs/a~1b/z")]
+#[case::index_past_the_end("#/$defs/a~1b/x/2")]
+#[case::outside_any_entry("#/theme/t")]
+#[case::section_only("#/$defs")]
+#[case::other_section("#/functions/C")]
+#[case::whole_document("#")]
+fn ref_pointer_locate_unresolved_is_none(#[case] reference: &str) {
+    assert_that!(located(&located_root(), reference)).is_none();
+}
+
+#[rstest]
+#[case::array_section(json!({"$defs": [{}]}), "#/$defs/0")]
+#[case::array_root(json!([{"$defs": {}}]), "#/$defs/S")]
+fn ref_pointer_locate_non_object_container_is_none(#[case] root: Value, #[case] reference: &str) {
+    assert_that!(located(&root, reference)).is_none();
+}
+
+/// `locate` agrees with `entry`, `resolve` and a key lookup, the three it replaces in `limits`.
+#[rstest]
+#[case("#/$defs/a~1b")]
+#[case("#/$defs/a%7E1b/x/1/y")]
+#[case("#/$defs/a~1b/x/01")]
+#[case("#/$defs/a~1b/x/2")]
+#[case("#/$defs/Missing")]
+#[case("#/components/C/properties/a")]
+#[case("#/functions/f/returnType")]
+#[case("#/functions/C")]
+#[case("#/theme/t")]
+#[case("#/$defs")]
+#[case("#")]
+fn ref_pointer_locate_any_pointer_agrees_with_entry_and_resolve(#[case] reference: &str) {
+    let root = located_root();
+    let pointer = RefPointer::of(reference).unwrap();
+    let separate = pointer.entry().and_then(|(section, name)| {
+        let (name, entry) = root.get(section)?.as_object()?.get_key_value(name)?;
+        Some((section, name.as_str(), entry, pointer.resolve(&root)?))
+    });
+    let located = pointer
+        .locate(&root)
+        .map(|found| (found.section, found.name, found.entry, found.target));
+    assert_that!(located).is_equal_to(separate);
+}
+
+#[test]
+fn ref_pointer_locate_name_borrows_the_catalog_key() {
+    let root = located_root();
+    let pointer = RefPointer::of("#/$defs/a~1b").unwrap();
+    let name = pointer.locate(&root).map(|found| found.name.as_ptr());
+    let key = root["$defs"]
+        .as_object()
+        .and_then(|defs| defs.get_key_value("a/b"))
+        .map(|(key, _)| key);
+    assert_that!(name).is_some();
+    assert_that!(name).is_equal_to(key.map(|key| key.as_ptr()));
+}

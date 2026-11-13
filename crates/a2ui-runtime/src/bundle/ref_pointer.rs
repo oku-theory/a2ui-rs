@@ -71,23 +71,68 @@ impl<'a> RefPointer<'a> {
     /// `/components/Card/properties/child` falls in `("components", "Card")`. `None` when it
     /// names no `$defs`, `components` or `functions` entry nor a node inside one.
     pub(crate) fn entry(&self) -> Option<(&'static str, &str)> {
-        let [section, name, ..] = self.tokens.as_slice() else {
+        self.split_entry().map(|(section, name, _)| (section, name))
+    }
+
+    /// The entry's section and name, then the tokens below the entry.
+    fn split_entry(&self) -> Option<EntrySplit<'_, 'a>> {
+        let [section, name, rest @ ..] = self.tokens.as_slice() else {
             return None;
         };
         let section = ENTRY_SECTIONS.into_iter().find(|known| known == section)?;
-        Some((section, name))
+        Some((section, name.as_ref(), rest))
     }
 
     /// The node of `root` the pointer names, as RFC 6901 and `Value::pointer` resolve it.
     ///
     /// An array index is canonical digits: no sign, no leading zero but `0` itself.
     pub(crate) fn resolve<'v>(&self, root: &'v Value) -> Option<&'v Value> {
-        self.tokens.iter().try_fold(root, |node, token| match node {
-            Value::Object(map) => map.get(token.as_ref()),
-            Value::Array(items) => items.get(array_index(token)?),
-            _ => None,
+        descend(root, &self.tokens)
+    }
+
+    /// The entry the pointer falls in and the node it names.
+    ///
+    /// One descent of `root` finds both. `None` when [`RefPointer::entry`] is `None`, when
+    /// `root`'s section is not an object holding that entry, or when no node lies there. The
+    /// name is `root`'s own key, whatever escapes the `$ref` spelled it with.
+    pub(crate) fn locate<'v>(&self, root: &'v Value) -> Option<Located<'v>> {
+        let (section, name, rest) = self.split_entry()?;
+        let (name, entry) = root.get(section)?.as_object()?.get_key_value(name)?;
+        let target = descend(entry, rest)?;
+        Some(Located {
+            section,
+            name,
+            entry,
+            target,
         })
     }
+}
+
+/// An entry pointer's section, name, and the tokens below the entry.
+type EntrySplit<'p, 'a> = (&'static str, &'p str, &'p [Cow<'a, str>]);
+
+/// Where a `$ref` lands: the `$defs`, `components` or `functions` entry and the node named.
+#[derive(Debug)]
+pub(crate) struct Located<'v> {
+    /// The entry's section: `$defs`, `components` or `functions`.
+    pub(crate) section: &'static str,
+    /// The entry's name, borrowed from the section's own key.
+    pub(crate) name: &'v str,
+    /// The whole entry.
+    pub(crate) entry: &'v Value,
+    /// The node the pointer names: the entry itself or a node inside it.
+    pub(crate) target: &'v Value,
+}
+
+/// The node `tokens` name below `node`.
+///
+/// Each token is an object key or, in an array, a canonical index.
+fn descend<'v>(node: &'v Value, tokens: &[Cow<'_, str>]) -> Option<&'v Value> {
+    tokens.iter().try_fold(node, |node, token| match node {
+        Value::Object(map) => map.get(token.as_ref()),
+        Value::Array(items) => items.get(array_index(token)?),
+        _ => None,
+    })
 }
 
 /// `token` as an array index: digits only, and no leading zero unless it is `0`.

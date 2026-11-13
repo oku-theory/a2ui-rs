@@ -5,7 +5,7 @@ use std::ptr;
 
 use serde_json::Value;
 
-use crate::bundle::{REF_KEY, RefPointer};
+use crate::bundle::{Located, REF_KEY, RefPointer};
 
 /// Deepest nesting of arrays and objects accepted in a catalog or a validated value.
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
@@ -342,16 +342,15 @@ impl<'r: 'a, 'a> Walk<'r, 'a> {
     /// Resolves the `$ref` site `reference` once, charging its entry the first time it is reached.
     fn resolve(&mut self, reference: &'a String) -> Result<&'r Value, Expansion<'r>> {
         let unresolved = || Expansion::Unresolved(reference.clone());
-        let pointer = RefPointer::of(reference).ok_or_else(unresolved)?;
-        // One parse gives both: the entry charged holds the target.
-        let (section, name) = pointer.entry().ok_or_else(unresolved)?;
-        let target = pointer.resolve(self.root).ok_or_else(unresolved)?;
-        // The name is borrowed from the catalog's own key, so the walk copies no name.
-        let (name, entry) = self
-            .root
-            .get(section)
-            .and_then(Value::as_object)
-            .and_then(|entries| entries.get_key_value(name))
+        // One descent finds the entry charged and the target inside it; the name is the
+        // catalog's own key, so the walk copies no name.
+        let Located {
+            section,
+            name,
+            entry,
+            target,
+        } = RefPointer::of(reference)
+            .and_then(|pointer| pointer.locate(self.root))
             .ok_or_else(unresolved)?;
         if self.reached.insert((section, name)) {
             self.size += weight_up_to(entry, self.budget.saturating_sub(self.size));
