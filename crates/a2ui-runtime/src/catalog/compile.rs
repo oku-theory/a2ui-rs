@@ -181,7 +181,7 @@ struct Totals {
 
 impl Totals {
     /// Adds one entry's reach; `Ok` holds its targets.
-    fn add(&mut self, reach: Reach) -> Result<Targets, Error> {
+    fn add<'r>(&mut self, reach: Reach<'r>) -> Result<Targets<'r>, Error> {
         self.size += reach.size;
         self.patterns += reach.patterns;
         ensure!(
@@ -205,7 +205,8 @@ impl Totals {
 /// Compiles the entry `name` of `section` against a document pruned to what it reaches.
 ///
 /// The pruned document holds `$schema`, the entry and each `$defs`, `components` or
-/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Every target
+/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Each target's
+/// borrowed name is copied here, as a key of the pruned document. Every target
 /// was resolved in `root` by the entry's expansion, so each lookup finds it; were one absent,
 /// the pruned document would keep a dangling `$ref` and the build would report it.
 fn compile_entry(
@@ -213,7 +214,7 @@ fn compile_entry(
     section: &'static str,
     name: &str,
     schema: &Value,
-    targets: Targets,
+    targets: Targets<'_>,
 ) -> Result<Arc<Validator>, Error> {
     let mut entry = schema.clone();
     localize_refs(&mut entry);
@@ -225,12 +226,12 @@ fn compile_entry(
     for (target_section, target) in targets {
         let definition = root
             .get(target_section)
-            .and_then(|entries| entries.get(target.as_str()));
+            .and_then(|entries| entries.get(target));
         if let Some(definition) = definition {
             sections
                 .entry(target_section)
                 .or_default()
-                .insert(target, definition.clone());
+                .insert(target.to_owned(), definition.clone());
         }
     }
     let top: Map<String, Value> = sections
@@ -270,17 +271,19 @@ fn function_call_envelope() -> Value {
 }
 
 /// The `(section, name)` of every entry one entry's `$ref`s land in.
-type Targets = BTreeSet<(&'static str, String)>;
+///
+/// Names borrow the keys of `root`, the document the `$ref`s resolve in.
+type Targets<'r> = BTreeSet<(&'static str, &'r str)>;
 
 /// What one entry reaches once its `$ref`s are followed.
-struct Reach {
+struct Reach<'r> {
     size: usize,
     patterns: usize,
-    targets: Targets,
+    targets: Targets<'r>,
 }
 
 /// Expands the entry `name` in `root`; each way it breaks load rule 11 is a `CatalogError`.
-fn reach(root: &Value, name: &str, schema: &Value) -> Result<Reach, Error> {
+fn reach<'r>(root: &'r Value, name: &str, schema: &Value) -> Result<Reach<'r>, Error> {
     match expand(root, schema, MAX_ENTRY_EXPANSION) {
         Expansion::Within {
             size,

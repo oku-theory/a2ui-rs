@@ -181,8 +181,10 @@ fn weight_up_to(value: &Value, limit: usize) -> usize {
 }
 
 /// How one catalog entry expands once its local `$ref`s are followed.
+///
+/// Reached names borrow their keys from `root`, the document `$ref`s resolve in.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Expansion {
+pub(crate) enum Expansion<'r> {
     /// The entry fits the budget and [`MAX_SCHEMA_DEPTH`].
     Within {
         /// Nodes counted: a `$ref` target each time it is followed, plus each entry reached
@@ -191,7 +193,9 @@ pub(crate) enum Expansion {
         /// `pattern` strings and `patternProperties` keys counted.
         patterns: usize,
         /// The `(section, name)` of every entry a followed `$ref` lands in.
-        reached: BTreeSet<(&'static str, String)>,
+        ///
+        /// Each name is the entry's own key in `root`, not the decoded `$ref` token.
+        reached: BTreeSet<(&'static str, &'r str)>,
     },
     /// The count passed the budget.
     TooLarge,
@@ -209,12 +213,13 @@ enum Step<'a> {
     Leave,
 }
 
-struct Walk<'a> {
-    root: &'a Value,
+/// A walk of nodes living `'a`, resolving `$ref`s in a `root` living `'r`.
+struct Walk<'r, 'a> {
+    root: &'r Value,
     budget: usize,
     size: usize,
     patterns: usize,
-    reached: BTreeSet<(&'static str, &'a str)>,
+    reached: BTreeSet<(&'static str, &'r str)>,
     /// The target each `$ref` string node resolved to, keyed by the node's address, so each
     /// `$ref` site is decoded and looked up once per walk however often it is followed.
     resolved: BTreeMap<*const String, &'a Value>,
@@ -233,7 +238,7 @@ struct Walk<'a> {
 /// `node` and the target of every `$ref` whose subtree is being walked: a `$ref` to a node on
 /// it is a cycle, so every walk ends. The walk is iterative and stops at the first node past
 /// `budget` or [`MAX_SCHEMA_DEPTH`], so it never holds more than `budget` queued nodes.
-pub(crate) fn expand<'a>(root: &'a Value, node: &'a Value, budget: usize) -> Expansion {
+pub(crate) fn expand<'r>(root: &'r Value, node: &Value, budget: usize) -> Expansion<'r> {
     let mut walk = Walk {
         root,
         budget,
@@ -248,19 +253,16 @@ pub(crate) fn expand<'a>(root: &'a Value, node: &'a Value, budget: usize) -> Exp
         Ok(()) => Expansion::Within {
             size: walk.size,
             patterns: walk.patterns,
-            reached: walk
-                .reached
-                .into_iter()
-                .map(|(section, name)| (section, name.to_owned()))
-                .collect(),
+            reached: walk.reached,
         },
         Err(stop) => stop,
     }
 }
 
-impl<'a> Walk<'a> {
+// Targets resolved in `root` join the walked nodes on the stack and chain, hence `'r: 'a`.
+impl<'r: 'a, 'a> Walk<'r, 'a> {
     /// Walks from `node`; `Err` carries the reason the walk stopped.
-    fn run(&mut self, node: &'a Value) -> Result<(), Expansion> {
+    fn run(&mut self, node: &'a Value) -> Result<(), Expansion<'r>> {
         self.push("", node, 0)?;
         while let Some(step) = self.stack.pop() {
             match step {
@@ -274,7 +276,7 @@ impl<'a> Walk<'a> {
         Ok(())
     }
 
-    fn count(&mut self, depth: usize, weight: usize) -> Result<(), Expansion> {
+    fn count(&mut self, depth: usize, weight: usize) -> Result<(), Expansion<'r>> {
         self.size += weight;
         if self.size > self.budget {
             return Err(Expansion::TooLarge);
@@ -286,7 +288,7 @@ impl<'a> Walk<'a> {
     }
 
     /// Counts `node`, reached under the object key `key`, and queues it for visiting.
-    fn push(&mut self, key: &str, node: &'a Value, depth: usize) -> Result<(), Expansion> {
+    fn push(&mut self, key: &str, node: &'a Value, depth: usize) -> Result<(), Expansion<'r>> {
         self.count(depth, weight(key, node))?;
         if matches!(node, Value::Object(_) | Value::Array(_)) {
             self.stack.push(Step::Visit(node, depth));
@@ -294,7 +296,7 @@ impl<'a> Walk<'a> {
         Ok(())
     }
 
-    fn visit(&mut self, node: &'a Value, depth: usize) -> Result<(), Expansion> {
+    fn visit(&mut self, node: &'a Value, depth: usize) -> Result<(), Expansion<'r>> {
         match node {
             Value::Object(map) => {
                 for (key, child) in map {
@@ -327,7 +329,7 @@ impl<'a> Walk<'a> {
     }
 
     /// Counts the target of `reference` at `depth` and queues it for entering.
-    fn follow(&mut self, reference: &'a String, depth: usize) -> Result<(), Expansion> {
+    fn follow(&mut self, reference: &'a String, depth: usize) -> Result<(), Expansion<'r>> {
         let target = match self.resolved.get(&ptr::from_ref(reference)) {
             Some(target) => *target,
             None => self.resolve(reference)?,
@@ -338,14 +340,13 @@ impl<'a> Walk<'a> {
     }
 
     /// Resolves the `$ref` site `reference` once, charging its entry the first time it is reached.
-    fn resolve(&mut self, reference: &'a String) -> Result<&'a Value, Expansion> {
+    fn resolve(&mut self, reference: &'a String) -> Result<&'r Value, Expansion<'r>> {
         let unresolved = || Expansion::Unresolved(reference.clone());
         let pointer = RefPointer::of(reference).ok_or_else(unresolved)?;
         // One parse gives both: the entry charged holds the target.
         let (section, name) = pointer.entry().ok_or_else(unresolved)?;
         let target = pointer.resolve(self.root).ok_or_else(unresolved)?;
-        // The name is borrowed from the catalog's own key while walking; `expand` copies it once
-        // per distinct entry, when the walk ends.
+        // The name is borrowed from the catalog's own key, so the walk copies no name.
         let (name, entry) = self
             .root
             .get(section)
@@ -368,7 +369,7 @@ impl<'a> Walk<'a> {
         reference: &'a str,
         target: &'a Value,
         depth: usize,
-    ) -> Result<(), Expansion> {
+    ) -> Result<(), Expansion<'r>> {
         if self.chain.iter().any(|on_chain| ptr::eq(*on_chain, target)) {
             return Err(Expansion::Cycle(reference.to_owned()));
         }

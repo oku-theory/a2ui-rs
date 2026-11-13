@@ -106,7 +106,7 @@ fn chain(links: usize) -> Value {
     json!({"$defs": defs})
 }
 
-fn within(expansion: Expansion) -> (usize, usize, BTreeSet<(&'static str, String)>) {
+fn within(expansion: Expansion<'_>) -> (usize, usize, BTreeSet<(&'static str, &str)>) {
     match expansion {
         Expansion::Within {
             size,
@@ -241,8 +241,26 @@ fn expand_reached_entries_are_listed() {
         "components": {"C": {}},
         "x": {"allOf": [{"$ref": "#/$defs/S"}]}
     });
-    let expected = BTreeSet::from([("$defs", "S".to_owned()), ("components", "C".to_owned())]);
+    let expected = BTreeSet::from([("$defs", "S"), ("components", "C")]);
     assert_that!(within(expand(&root, &root["x"], 100)).2).is_equal_to(expected);
+}
+
+// The name must be the catalog's key itself: neither a copy nor the `$ref`'s token, which
+// also lives in `root` here.
+#[test]
+fn expand_reached_name_borrows_the_catalog_key() {
+    let root = json!({"$defs": {"S": {}}, "x": {"$ref": "#/$defs/S"}});
+    let key = root["$defs"]
+        .as_object()
+        .and_then(|defs| defs.keys().next())
+        .map(|key| key.as_ptr());
+    let reached = within(expand(&root, &root["x"], 100)).2;
+    let names: Vec<_> = reached
+        .iter()
+        .map(|(_, name)| Some(name.as_ptr()))
+        .collect();
+    assert_that!(key).is_some();
+    assert_that!(names).is_equal_to(vec![key]);
 }
 
 #[test]
@@ -251,7 +269,7 @@ fn expand_escaped_entry_name_is_listed_once_by_its_key() {
         "$defs": {"a/b": {}},
         "x": {"allOf": [{"$ref": "#/$defs/a~1b"}, {"$ref": "#/$defs/a%7E1b"}]}
     });
-    let expected = BTreeSet::from([("$defs", "a/b".to_owned())]);
+    let expected = BTreeSet::from([("$defs", "a/b")]);
     assert_that!(within(expand(&root, &root["x"], 100)).2).is_equal_to(expected);
 }
 
