@@ -21,6 +21,49 @@ fn agent_to_renderer_schema_embedded_document_is_v1_0() {
     ));
 }
 
+/// The common type names of protocol 1.0.0, sorted, which a 1.0.0 catalog's `$defs` may not reuse.
+const COMMON_TYPES_1_0_0: [&str; 21] = [
+    "AccessibilityAttributes",
+    "Action",
+    "CallId",
+    "CheckRule",
+    "Checkable",
+    "Child",
+    "ChildList",
+    "ComponentCommon",
+    "ComponentId",
+    "DataBinding",
+    "DynamicBoolean",
+    "DynamicNumber",
+    "DynamicString",
+    "DynamicStringList",
+    "DynamicValue",
+    "Extensions",
+    "FunctionCall",
+    "FunctionCommon",
+    "FunctionResponse",
+    "IndexSystemFunction",
+    "Surface",
+];
+
+/// A tripwire for the first 1.0.x `common_types.json` (Plan 2b, Decision 38; t-1647).
+///
+/// It fails when `vendor/sync.sh` adds, removes or renames a common type. Before updating the
+/// list, reserve names per `protocolVersion` as Decision 38 describes, or a catalog declaring
+/// 1.0.0 that defines a new type's name stops loading.
+#[test]
+fn common_type_defs_names_are_those_of_protocol_1_0_0() {
+    let mut names: Vec<&str> = common_type_defs()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    names.sort_unstable();
+    asserting("common type names changed: apply Plan 2b Decision 38 (t-1647) first")
+        .that(&names)
+        .is_equal_to(COMMON_TYPES_1_0_0.to_vec());
+}
+
 #[test]
 fn common_type_defs_embedded_document_holds_dynamic_string() {
     assert_that!(common_type_defs().unwrap().contains_key("DynamicString")).is_true();

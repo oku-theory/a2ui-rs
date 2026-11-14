@@ -7431,9 +7431,8 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
   runs after parsing; and fuzz `Catalog::parse` and `validate_component` (`cargo-fuzz`).
 - Spec: the function registry of Plan 4 (`FunctionRegistry`) reuses `FunctionDef` and
   `AllowedCallers` rather than a second function description; amend the design spec.
-- `$defs` shadowing: a catalog `$defs` named like a common type is rejected, so a 1.0.x
-  `common_types.json` adding a type can reject a catalog valid under 1.0.0; decide between
-  version-scoped common types and namespacing before the first 1.0.x schema update.
+- Decided (t-1570, Plan 2b Decision 38): common type names are reserved per protocol version;
+  a test pins the 1.0.0 names until the first 1.0.x `common_types.json` arrives.
 - Truncate `SchemaViolation` messages: jsonschema embeds the offending instance in its
   message, so one large invalid value makes a large error; cap the text (with a marker) at
   the error boundary.

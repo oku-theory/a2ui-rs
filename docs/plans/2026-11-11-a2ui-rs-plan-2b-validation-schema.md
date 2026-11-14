@@ -783,6 +783,44 @@ upstream's reading would be unsafe:
     (`#/$defs/DynamicString/oneOf/99`) is still the validation schema's check to report. The
     commit is marked breaking: a catalog that loaded before can be refused.
 
+38. **Common type names are reserved per protocol version (t-1570):** `check_defs` refuses a
+    catalog `$defs` entry named like a common type, so a 1.0.x `common_types.json` adding a type
+    `T` would refuse a catalog declaring 1.0.0 whose own `$defs` has `T`, valid when written.
+    Three answers were weighed:
+    - Keep refusing: an additive patch release of the schemas breaks valid catalogs. Refused.
+    - Namespacing the copied common types (`#/$defs/common/T` or a prefix): the validation
+      schema must keep upstream's flattened shape, where common types sit at `#/$defs/<name>`
+      (conformance compares it), and upstream's own v1.0 catalogs reference them by bare name
+      (`#/$defs/ChildList`, Decision 37), so a namespace would break both. Refused.
+    - **Chosen: version-scoped names.** The runtime keeps, per supported patch version, the set
+      of common type names that version defines. A catalog reads the set of its
+      `protocolVersion`: `1.0` is `1.0.0`, the set that reserves the fewest names and so refuses
+      the fewest catalogs; a patch newer than any known reads the newest set (patches compared
+      as digit strings, longest first, never parsed into an integer). Every place that keys on
+      a common type name reads that set, not the embedded `$defs`: `check_defs`, Decision 37's
+      check, the own-`$defs` filter and the `add_common_types` merge of
+      `catalog/validation_schema.rs` (which today drop and overwrite a catalog entry named like
+      a common type), the descriptions copied there, and `catalog/flatten.rs`'s mixin test.
+      A 1.0.0 catalog may then define `T`: its `#/$defs/T` reaches its own entry, and its
+      `common_types.json#/$defs/T` is refused, `T` not being a 1.0.0 type. A bare `#/$defs/T`
+      in a 1.0.0 catalog with no own `T` is a dangling reference, not the newer common type:
+      Decision 37's "such a name can only mean the common type" holds per version.
+    - **The bodies are the newest embedded ones**, since one runtime validates every 1.0.x
+      message with one set of schemas. So the closure of common types a catalog pulls in may
+      reach a name only a newer version defines (a 1.0.1 `ChildList` whose body refers to a new
+      `T`). If the catalog's own `$defs` holds that name, the copied body would bind to the
+      catalog's entry, and a catalog could loosen a common type (`"T": true`). That load is
+      refused with `DefsShadowCommonType`: the reserved names of a catalog are its version's
+      set plus every name the common types it reaches reach in turn. A catalog that never
+      reaches the changed type keeps loading.
+
+    Nothing changes until the first 1.0.x schema update: only 1.0.0 exists, so the sets would be
+    one. The implementation is t-1647. A tripwire holds the decision until then:
+    `schema_tests.rs` pins the 21 names of 1.0.0 and its failure message names this decision, so
+    the `vendor/sync.sh` that adds, removes or renames a common type fails `just test` before
+    any catalog breaks. `agent_to_renderer.json` is not affected: it is the runtime's own
+    schema, and no catalog `$defs` is merged into it.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
