@@ -7437,8 +7437,8 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
 - Truncate `SchemaViolation` messages: jsonschema embeds the offending instance in its
   message, so one large invalid value makes a large error; cap the text (with a marker) at
   the error boundary.
-- A shared basic catalog in a `std::sync::LazyLock` (`a2ui_catalog_basic::catalog()`
-  recompiles it on each call, about 20 ms) once the renderer loads it on a hot path.
+- Done (t-1572, Plan 2b Decision 35): a shared basic catalog; `a2ui_catalog_basic::catalog()`
+  compiles it once, in a `std::sync::OnceLock`.
 - wasm bundle size: measure what `jsonschema` adds (`fancy-regex`, `num-*`, `ahash`); if too
   large, evaluate `boon` as the validator.
 - A wasm runtime smoke test that builds and runs a catalog validator in a browser (Plan 6,

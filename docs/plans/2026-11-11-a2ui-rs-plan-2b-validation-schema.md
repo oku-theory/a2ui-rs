@@ -18,7 +18,7 @@ caps have not passed: each component flattened into one object (`catalog/flatten
 `args` closed, common-type descriptions copied onto whole-entry `$ref`s, merged local mixins
 pruned, and the common-type closure recomputed (`catalog/validation_schema.rs`). The result is
 output only (nothing compiles it) and the `Catalog` stores it in place of the bundle. It is built
-eagerly in every `from_json`, `derive` and `a2ui_catalog_basic::catalog()` call: a lazy build
+eagerly in every `from_json` and `derive` call (once for `a2ui_catalog_basic::catalog()`): a lazy build
 would keep the bundle alive and hide `common_type_defs()`'s error.
 
 **Tech Stack:** Rust 2024 (MSRV 1.88, let-chains), `serde_json`, `snafu`, `speculoos`, `rstest`,
@@ -713,6 +713,24 @@ upstream's reading would be unsafe:
     catalog text; `validate_component` must not face agent traffic before that cap exists.
     Instances it accepted before can now be refused: a behavioural tightening to note in the
     release notes, which `cargo-semver-checks` does not see.
+
+35. **One shared basic catalog (t-1572):** `a2ui_catalog_basic::catalog()` returns
+    `Result<&'static Catalog, Error>` and keeps the loaded catalog in a `std::sync::OnceLock`
+    (stable since 1.70, under our 1.88 MSRV; on `wasm32-unknown-unknown` without threads it
+    is a cell). It parsed and compiled the catalog, about 20 ms, on every call; a renderer
+    creating surfaces would pay that per surface, and `validate_component` needs the basic
+    catalog as a `CatalogLookup` on each one. `Catalog` is `Send + Sync` (asserted in
+    `error.rs`), so it can be a static. Only success is kept, not a `LazyLock<Result<..>>`
+    (review): the error stays owned, so `catalog()?` composes with callers' errors, each
+    caller gets its own backtrace, and a panic while loading leaves the cell empty instead of
+    poisoning every later call. The cost, a re-parse per call while the build is broken and a
+    possible duplicate compile when threads race on the first load, falls only where nothing
+    else works. Owned copies are not offered: `Catalog` is immutable and `derive` borrows its
+    source, so a caller wanting a variant derives one. This is a breaking change to the
+    published 0.2 API (`Catalog` becomes `&'static Catalog`): the commit is marked `!` so
+    release-plz bumps to 0.3, and the release notes say callers borrow. The trigger the task
+    named (a renderer on a hot path) has not arrived; the change is small and every caller in
+    the workspace already only borrowed it.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
