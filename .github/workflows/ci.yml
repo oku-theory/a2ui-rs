@@ -146,11 +146,11 @@ jobs:
         with:
           cache-on-failure: true
       - run: just msrv
-  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are
-  # unreviewed releases, so it runs only weekly, on demand and on release-plz's branch, whatever
-  # the event or inputs, so no run there skips it (Decision 32), without a cache to restore or save, and its own job: on main a red result is
-  # mostly upstream drift, and a dependency change shows here on a dispatched run of its branch,
-  # the next weekly one or the release PR.
+  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are unreviewed
+  # releases, so it runs only weekly, on demand and on release-plz's branch, whatever the event or
+  # inputs, so no run there skips it (Decision 32), without a cache to restore or save, and its own
+  # job: on main a red result is mostly upstream drift, and a dependency change shows here on a
+  # dispatched run of its branch, the next weekly one or the release PR.
   msrv-resolved:
     if: >-
       github.event_name == 'schedule'
@@ -191,12 +191,12 @@ jobs:
           tool: just,cargo-audit
           fallback: none
       - run: just minimal-versions
-  # cargo-semver-checks against crates.io's releases (t-1632): always on release-plz's branch,
-  # where the bumped versions must cover the API changes (any event or inputs, so no run there
-  # skips it, Decision 32), or on demand with semver_checks=true. Not on other pull requests: a breaking change waits for the release
-  # PR's bump. Both sides resolve outside Cargo.lock, so it builds unreviewed releases: a job of its
-  # own with this read-only token, no cache step and no secret, and never on main, whose cache
-  # scope every pull request restores (plan 2b, Decision 28).
+  # cargo-semver-checks against crates.io's releases (t-1632): always on release-plz's branch, where
+  # the bumped versions must cover the API changes (any event or inputs, so no run there skips it,
+  # Decision 32), or on demand with semver_checks=true. Not on other pull requests: a breaking
+  # change waits for the release PR's bump. Both sides resolve outside Cargo.lock, so it builds
+  # unreviewed releases: a job of its own with this read-only token, no cache step and no secret,
+  # and never on main, whose cache scope every pull request restores (plan 2b, Decision 28).
   semver-checks:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.semver_checks
