@@ -6,8 +6,11 @@ with the working tree, and prints a Markdown table: each crate added, removed or
 crates.io publish date of each new version, flagged when under a week old or yanked (plan 2b,
 Decision 30). Workspace members, which have no source, are left out; a release from any source but
 crates.io gets no date, only a request to read it by hand. It reads crates.io's API, one request a
-second, and fails on any error, or on a name, version or source it could not print safely, rather
-than print a table that hides a change. Needs Python 3.11 or later (tomllib).
+second, retrying a transient error (429, 5xx, timeout, network) once; a release still undated is
+marked FAILED in its cell, and so is every release after one that stays undated after a transient
+error, unasked; the script exits 1 after printing the whole table. It fails at once
+on a name, version or source it could not print safely, rather than print a table that hides a
+change. Needs Python 3.11 or later (tomllib).
 """
 
 import sys
@@ -16,13 +19,16 @@ if sys.version_info < (3, 11):
     sys.exit("lock_diff.py needs Python 3.11 or later (tomllib)")
 
 import datetime  # noqa: E402
+import http.client  # noqa: E402
 import json  # noqa: E402
 import re  # noqa: E402
 import subprocess  # noqa: E402
 import time  # noqa: E402
 import tomllib  # noqa: E402
+import urllib.error  # noqa: E402
 import urllib.parse  # noqa: E402
 import urllib.request  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 from typing import NamedTuple  # noqa: E402
 
 API = "https://crates.io/api/v1/crates"
@@ -37,6 +43,8 @@ NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 VERSION = re.compile(r"[0-9A-Za-z.+-]{1,64}")
 SOURCE = re.compile(r"[A-Za-z0-9+:/._?=&#%-]{1,256}")
 YOUNG = datetime.timedelta(days=7)
+# Seconds before the one retry of a transient crates.io error (429, 5xx, timeout, network).
+RETRY_WAIT = 5
 KINDS = ("added", "removed", "updated")
 
 
@@ -65,6 +73,16 @@ class Published(NamedTuple):
 
     date: datetime.datetime
     yanked: bool
+
+
+class Unavailable(NamedTuple):
+    """A release crates.io did not date, with a short reason this script wrote, safe in a cell.
+
+    `transient` says asking again later may succeed: a 429, a 5xx, a timeout or a network error.
+    """
+
+    reason: str
+    transient: bool = False
 
 
 def order(release: Release) -> tuple:
@@ -117,14 +135,20 @@ def fresh(change: Change) -> list[Release]:
     return [release for release in change.new if release not in change.old]
 
 
+def undated(published: dict[tuple[str, str], Published | Unavailable]) -> int:
+    """How many releases in `published` crates.io did not date."""
+    return sum(isinstance(entry, Unavailable) for entry in published.values())
+
+
 def render(
     changes: list[Change],
-    published: dict[tuple[str, str], Published],
+    published: dict[tuple[str, str], Published | Unavailable],
     now: datetime.datetime,
 ) -> str:
     """The Markdown summary of `changes`, each new release with its publish date and age.
 
-    A crate with two releases or more shows them all, so a duplicate a change adds stands out.
+    A crate with two releases or more shows them all, so a duplicate a change adds stands out; a
+    release crates.io did not date is marked FAILED and counted in the header.
     """
     lines = ["## Cargo.lock changes", ""]
     if not changes:
@@ -136,6 +160,14 @@ def render(
     lines += [
         f"{counts}. Read each added crate and each release listed beside an older one;",
         "if a release is under a week old, close this and take next week's.",
+    ]
+    failed = undated(published)
+    if failed:
+        noun, pronoun = ("release", "it") if failed == 1 else ("releases", "them")
+        lines.append(
+            f"{failed} {noun} could not be dated: read {pronoun} by hand; this check fails."
+        )
+    lines += [
         "",
         "| change | crate | from | to | published |",
         "|---|---|---|---|---|",
@@ -147,6 +179,9 @@ def render(
                 notes.append(f"{release.version}: not on crates.io, read it by hand")
                 continue
             entry = published[(change.name, release.version)]
+            if isinstance(entry, Unavailable):
+                notes.append(f"{release.version}: FAILED ({entry.reason}), read it on crates.io")
+                continue
             days = (now - entry.date).days
             flags = (", under a week" if now - entry.date < YOUNG else "") + (
                 ", yanked" if entry.yanked else ""
@@ -173,6 +208,72 @@ def publish_info(name: str, version: str) -> Published:
     return Published(datetime.datetime.fromisoformat(found["created_at"]), bool(found["yanked"]))
 
 
+def attempt(
+    name: str, version: str, fetch: Callable[[str, str], Published]
+) -> Published | Unavailable:
+    """One request: its answer, or what failed.
+
+    A 4xx other than 429 is not transient: asking again would get the same answer; nor is an
+    answer this script cannot read. urllib wraps only the errors of sending the request in
+    URLError: a connection reset or cut short while reading the answer comes as a bare OSError
+    or HTTPException, so both count as network errors.
+    """
+    try:
+        return fetch(name, version)
+    except urllib.error.HTTPError as error:
+        # The error holds the open response; close it, as `with urlopen` would have.
+        error.close()
+        return Unavailable(f"HTTP {error.code}", error.code == 429 or error.code >= 500)
+    except urllib.error.URLError as error:
+        timeout = isinstance(error.reason, TimeoutError)
+        return Unavailable("timeout" if timeout else "network error", transient=True)
+    except TimeoutError:
+        return Unavailable("timeout", transient=True)
+    except (OSError, http.client.HTTPException):
+        return Unavailable("network error", transient=True)
+    except (ValueError, KeyError, TypeError):
+        return Unavailable("bad answer")
+
+
+def lookup(
+    name: str,
+    version: str,
+    fetch: Callable[[str, str], Published] = publish_info,
+    wait: Callable[[float], None] = time.sleep,
+) -> Published | Unavailable:
+    """`fetch`'s answer, retried once after a transient error; else what failed."""
+    found = attempt(name, version, fetch)
+    if not (isinstance(found, Unavailable) and found.transient):
+        return found
+    wait(RETRY_WAIT)
+    return attempt(name, version, fetch)
+
+
+def collect(
+    wanted: list[tuple[str, str]],
+    find: Callable[[str, str], Published | Unavailable] = lookup,
+    pause: Callable[[float], None] = time.sleep,
+) -> dict[tuple[str, str], Published | Unavailable]:
+    """What `find` says of each (name, version) in `wanted`, one request a second.
+
+    Once a release stays undated after a transient error, crates.io is taken as down and the rest
+    are marked without a request: a release costs up to 66 seconds then (two 30-second timeouts,
+    the retry wait and the pause), so asking on would outlast the CI job, and lose the table.
+    """
+    published: dict[tuple[str, str], Published | Unavailable] = {}
+    down = False
+    for key in wanted:
+        if down:
+            published[key] = Unavailable("not tried, crates.io unreachable")
+            continue
+        if published:
+            # crates.io's crawler policy: at most one request a second.
+            pause(1)
+        published[key] = find(*key)
+        down = isinstance(published[key], Unavailable) and published[key].transient
+    return published
+
+
 def lock_at(ref: str | None) -> str:
     """Cargo.lock at `ref`, or in the working tree when `ref` is None."""
     if ref is None:
@@ -190,16 +291,18 @@ def main(args: list[str]) -> None:
     base = packages(lock_at(args[0]))
     head = packages(lock_at(args[1] if len(args) == 2 else None))
     changes = diff(base, head)
-    published = {}
-    for change in changes:
-        for release in fresh(change):
-            if release.source:
-                continue
-            if published:
-                # crates.io's crawler policy: at most one request a second.
-                time.sleep(1)
-            published[(change.name, release.version)] = publish_info(change.name, release.version)
+    published = collect(
+        [
+            (change.name, release.version)
+            for change in changes
+            for release in fresh(change)
+            if not release.source
+        ]
+    )
     print(render(changes, published, datetime.datetime.now(datetime.timezone.utc)), end="")
+    # The table is printed first, so one failed request costs one cell, not the summary.
+    if undated(published):
+        sys.exit("some releases could not be dated: their cells say FAILED")
 
 
 if __name__ == "__main__":

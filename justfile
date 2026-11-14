@@ -353,6 +353,53 @@ semver-checks:
     fi
     cargo semver-checks "${checked[@]}"
 
+# Whether cargo-semver-checks reads this toolchain's rustdoc JSON: a crate with no dependency,
+# checked against itself, so no API change and no third-party code can fail it, only the tool.
+semver-checks-tool:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo semver-checks --version
+    # Under target/, not $TMPDIR: rust-toolchain.toml applies only within the repository.
+    mkdir -p target
+    fixture="$(mktemp -d target/semver-tool.XXXXXX)"
+    trap 'rm -rf "$fixture"' EXIT
+    mkdir "$fixture/src"
+    # Its own `[workspace]` keeps it out of ours; no dependency, so nothing is resolved or built
+    # but this file.
+    cat > "$fixture/Cargo.toml" <<'EOF'
+    [package]
+    name = "semver-tool-fixture"
+    version = "0.1.0"
+    edition = "2024"
+
+    [workspace]
+    EOF
+    # Common item kinds; a format change limited to another kind passes here (plan 2b, Decision 31).
+    cat > "$fixture/src/lib.rs" <<'EOF'
+    //! A fixture.
+    /// A struct.
+    pub struct Point<T> { pub x: T, y: T }
+    impl<T: Copy> Point<T> {
+        pub fn new(x: T, y: T) -> Self { Self { x, y } }
+        pub fn y(&self) -> T { self.y }
+    }
+    /// An enum.
+    #[non_exhaustive]
+    pub enum Shape { Unit, Tuple(u8), Named { side: u32 } }
+    /// A trait.
+    pub trait Area { type Out; const SIDES: u8; fn area(&self) -> Self::Out; }
+    impl Area for Shape { type Out = u32; const SIDES: u8 = 4; fn area(&self) -> u32 { 0 } }
+    /// A function.
+    pub fn measure<'a, A: Area + ?Sized>(shape: &'a A) -> A::Out { shape.area() }
+    /// A constant.
+    pub const LIMIT: usize = 8;
+    /// A module.
+    pub mod nested { /// An alias.
+        pub type Pair = (u8, u8); }
+    EOF
+    export CARGO_TARGET_DIR="$PWD/$fixture/target"
+    cargo semver-checks --manifest-path "$fixture/Cargo.toml" --baseline-root "$fixture"
+
 # Licenses, sources (crates.io only) and advisories, yanked releases included: it reads the lock
 # alone, so `ci` runs it before anything builds.
 audit:

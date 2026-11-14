@@ -28,11 +28,19 @@ on:
         default: false
   schedule:
     - cron: "17 5 * * 1"
-# A new push to a pull request cancels its older run. Any other run has a group of its own,
-# since a group keeps one pending run only: every push to main runs to the end.
+# A new push to a pull request, or a new dispatch on release-plz's branch, cancels the older run,
+# whose hour-long jobs check a commit nobody will merge. Any other run has a group of
+# its own, since a group keeps one pending run only: every push to main runs to the end.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ci-${{ github.event.pull_request.number
+    || (github.event_name == 'workflow_dispatch'
+        && startsWith(github.ref, 'refs/heads/release-plz-') && github.ref)
+    || github.run_id }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+    || (github.event_name == 'workflow_dispatch'
+        && startsWith(github.ref, 'refs/heads/release-plz-')) }}
 # Builds run third-party build scripts: the token only reads.
 permissions:
   contents: read
@@ -73,7 +81,8 @@ jobs:
           # HEAD is the merge commit; its first parent is the base the pull request merges into.
           fetch-depth: 2
       - name: summarize the Cargo.lock change
-        # Named, bash runs with pipefail: a failing script fails the step despite `tee`.
+        # Named, bash runs with pipefail, so a failing script still fails the step despite `tee`;
+        # the table, with a FAILED cell for each undated release, has reached the summary page first.
         shell: bash
         # The base's own script, so a pull request cannot rewrite the summary of its own lock.
         run: |
@@ -138,15 +147,16 @@ jobs:
         with:
           cache-on-failure: true
       - run: just msrv
-  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are
-  # unreviewed releases, so it runs only weekly or on demand (not on the release PR's
-  # dispatch, which passes msrv_resolved=false), without a cache to restore or
-  # save, and its own job: on main a red result is mostly upstream drift, and a dependency change
-  # shows here on a dispatched run of its branch or the next weekly one.
+  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are unreviewed
+  # releases, so it runs only weekly, on demand and on release-plz's branch, whatever the event or
+  # inputs, so no run there skips it (Decision 32), without a cache to restore or save, and its own
+  # job: on main a red result is mostly upstream drift, and a dependency change shows here on a
+  # dispatched run of its branch, the next weekly one or the release PR.
   msrv-resolved:
     if: >-
       github.event_name == 'schedule'
       || (github.event_name == 'workflow_dispatch' && inputs.msrv_resolved)
+      || startsWith(github.head_ref || github.ref_name, 'release-plz-')
     runs-on: ubuntu-latest
     # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
     timeout-minutes: 60
@@ -163,11 +173,12 @@ jobs:
       - run: just msrv-resolved
   # Our lower bounds (t-1634): each direct dependency at its lowest allowed release, resolved by
   # nightly cargo, audited, then checked on the MSRV. Unreviewed releases again, so like
-  # msrv-resolved: weekly or on demand (not on the release PR's dispatch), no cache, its own job.
+  # msrv-resolved: weekly, on demand and always on release-plz's branch, no cache, its own job.
   minimal-versions:
     if: >-
       github.event_name == 'schedule'
       || (github.event_name == 'workflow_dispatch' && inputs.minimal_versions)
+      || startsWith(github.head_ref || github.ref_name, 'release-plz-')
     runs-on: ubuntu-latest
     # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
     timeout-minutes: 60
@@ -181,16 +192,17 @@ jobs:
           tool: just,cargo-audit
           fallback: none
       - run: just minimal-versions
-  # cargo-semver-checks against crates.io's releases (t-1632): on release-plz's release PR, whose
-  # dispatch sets semver_checks, where the bumped versions must cover the API changes, or on demand
-  # with semver_checks=true. Not on other pull requests: a breaking change waits for the release
-  # PR's bump. Both sides resolve outside Cargo.lock, so it builds unreviewed releases: a job of its
-  # own with this read-only token, no cache step and no secret, and never on main, whose cache
-  # scope every pull request restores (plan 2b, Decision 28).
+  # cargo-semver-checks against crates.io's releases (t-1632): always on release-plz's branch, where
+  # the bumped versions must cover the API changes (any event or inputs, so no run there skips it,
+  # Decision 32), or on demand with semver_checks=true. Not on other pull requests: a breaking
+  # change waits for the release PR's bump. Both sides resolve outside Cargo.lock, so it builds
+  # unreviewed releases: a job of its own with this read-only token, no cache step and no secret,
+  # and never on main, whose cache scope every pull request restores (plan 2b, Decision 28).
   semver-checks:
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.semver_checks
-      && github.ref != 'refs/heads/main'
+      (github.event_name == 'workflow_dispatch' && inputs.semver_checks
+      && github.ref != 'refs/heads/main')
+      || startsWith(github.head_ref || github.ref_name, 'release-plz-')
     runs-on: ubuntu-latest
     # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
     timeout-minutes: 60
@@ -205,3 +217,21 @@ jobs:
           tool: just,cargo-semver-checks
           fallback: none
       - run: just semver-checks
+  # Whether the pinned cargo-semver-checks reads the pinned toolchain's rustdoc JSON (t-1638):
+  # Renovate bumps rust-toolchain.toml and install-action's pin apart, and the semver-checks job
+  # above runs only on the release PR, too late. A crate with no dependency, checked against
+  # itself, so only the tool can fail it and nothing unreviewed runs: on every run, main's
+  # included, so two bumps merged one after the other are checked together (plan 2b, Decision 31).
+  semver-checks-tool:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-semver-checks
+          fallback: none
+      - run: just semver-checks-tool

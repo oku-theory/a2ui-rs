@@ -304,14 +304,15 @@ upstream's reading would be unsafe:
     (t-1622). The config was checked against Renovate's published JSON schema only. `ci.yml` runs on
     pushes to `main`, on pull requests, on demand (t-1623) and weekly on `main` (t-1621), so a
     branch with a pull request runs once, not once per event. A newer push to a pull request cancels
-    its older run; every other run has its own concurrency group (`run_id`), since a group keeps
-    only one pending run and would drop a queued push to `main`. A pull-request run restores its own
-    cache, else `main`'s, so the trybuild build is warm only once a run on `main` saved it; a
-    cancelled run saves none, so pushing again within a cold run of a toolchain bump starts the next
-    one cold too. A `merge_group` trigger is there for a merge queue, should one be enabled. A
-    branch without a pull request runs only on demand (`gh workflow run ci.yml --ref <branch>`).
-    Release-plz's pull request, opened with `GITHUB_TOKEN`, starts no `pull_request` run; its
-    workflow dispatches CI on it (Decision 24).
+    its older run, and so does a new dispatch on a `release-plz-*` branch (Decision 32); every other
+    run has its own concurrency group (`run_id`), since a group keeps only one pending run and would
+    drop a queued push to `main`. A pull-request run restores its own cache, else `main`'s, so the
+    trybuild build is warm only once a run on `main` saved it; a cancelled run saves none, so
+    pushing again within a cold run of a toolchain bump starts the next one cold too. A
+    `merge_group` trigger is there for a merge queue, should one be enabled. A branch without a pull
+    request runs only on demand (`gh workflow run ci.yml --ref <branch>`). Release-plz's pull
+    request, opened with `GITHUB_TOKEN`, starts no `pull_request` run; its workflow dispatches CI on
+    it (Decision 24).
 
 22. **zizmor (t-1625):** `just zizmor`, part of `just check`, audits all of `.github` (workflows,
     composite actions under `.github/actions`, flow-style `uses:` the `actions-pinned` grep
@@ -381,25 +382,25 @@ upstream's reading would be unsafe:
     empty branch would silently drop CI again. A job of its own, `release-pr-ci`, holding only
     `actions: write`, so release-plz's step never has it, checks the name again (it reaches a `gh`
     command line, where it must not read as an option) and runs `gh workflow run ci.yml --ref
-    <branch> -f msrv_resolved=false -f minimal_versions=false -f semver_checks=true` (Decisions 28,
-    29); if that fails, rerunning the job dispatches again. The run's
+    <branch> -f msrv_resolved=true -f minimal_versions=true -f semver_checks=true` (Decisions 28,
+    32); if that fails, rerunning the job dispatches again. The run's
     checks land on the branch's head commit, so they show on the PR and match required checks by job
     name. No new secret: a GitHub App or personal token would trigger `pull_request` itself but is a
     long-lived credential beside `contents: write`; gating `release` with `workflow_run` would put
     no check on the PR, and zizmor flags that trigger. `ci.yml`'s dispatch gains a boolean
     `msrv_resolved` input (and later `minimal_versions`, Decision 29), true by default so a manual
-    dispatch still runs that job; the release PR skips it, since it builds unreviewed crate releases,
-    which the weekly run covers. Each push to
-    `main` that moves the PR dispatches a new run on its new head; older runs are not cancelled
-    (their own concurrency group), which costs runner time only. The `release` job still does not
-    wait for CI on `main`. The user's part (t-1633): make `ci`, `msrv` and `zizmor` required checks
-    on `main`, never `msrv-resolved` or `minimal-versions`, which this run skips, and require
-    branches to be up to date
-    before merging (or use the merge queue, which `ci.yml` already runs on), so the commit `release`
-    publishes is the one CI tested; until then, and for an admin who bypasses them, a release PR can
-    merge before its run ends. A required `zizmor` also blocks merges during a GitHub API outage or
-    after a new advisory on a pinned action; rerun it, or update the pin. Not verified: a dispatch
-    from `release-pr-ci` on GitHub, and that its checks satisfy the required ones.
+    dispatch still runs that job; the release PR first skipped it, since it builds unreviewed crate
+    releases, which the weekly run was taken to cover, and runs it since Decision 32. Each push to
+    `main` that moves the PR dispatches a new run on its new head; since Decision 32 it cancels the
+    older one. The `release` job still does not wait for CI on `main`. The user's part (t-1633):
+    make `ci`, `msrv`, `zizmor`, `semver-checks`, `msrv-resolved` and `minimal-versions` required
+    checks on `main` (other pull requests' runs skip the last three, which satisfies a required
+    check; Decision 32), and require branches to be up to date before merging (or use the merge
+    queue, which `ci.yml` already runs on), so the commit `release` publishes is the one CI tested;
+    until then, and for an admin who bypasses them, a release PR can merge before its run ends. A
+    required `zizmor` also blocks merges during a GitHub API outage or after a new advisory on a
+    pinned action; rerun it, or update the pin. Not verified: a dispatch from `release-pr-ci` on
+    GitHub, and that its checks satisfy the required ones.
 
 25. **Packaged crates (t-1629):** `just package`, in `just ci` right after `check` (before any test
     can write a file under a crate), runs `cargo package --locked` on both libraries, which builds
@@ -481,23 +482,24 @@ upstream's reading would be unsafe:
     `ci.yml`'s `semver-checks` job only: the workflow's read-only token, no cache step, no secret,
     60 minutes at most, cargo-semver-checks from `taiki-e/install-action`'s pinned manifest
     (`fallback: none`), building rustdoc JSON with the pinned toolchain, so a toolchain or
-    install-action bump can break it until the tool reads that rustdoc format; Renovate's bump pull
-    requests do not run it (t-1638). It runs on a dispatch with `semver_checks` set, never on
-    `main`: `release-pr-ci` sets it, so the release PR checks that its version bumps cover the API
-    changes, and a person may pass it on another branch. The input is off by default, and the job
-    skips other pull requests and the weekly run, since a branch carries the last release's version
-    until release-plz bumps it, so any API break, allowed between releases (MVP), would fail it. Not
-    on `main` either: build scripts there could reach the runner's cache token and write to `main`'s
-    cache scope, which every pull request restores (`msrv-resolved` accepts that weekly). A red
-    release PR means release-plz's bump, taken from Conventional Commits alone (`semver_check =
-    false`), is too small: mark the break on `main` (a `feat!` commit, or a `BREAKING CHANGE:`
-    footer), and release-plz updates the PR on that push; editing the version on the release branch
-    is lost when release-plz rewrites it. Requiring the check is the user's choice (t-1633): other
-    pull requests' runs skip it, which satisfies a required check, and the release PR gets its
-    result from the dispatched run. The recipe was run with stub `cargo-semver-checks` and `curl`
-    commands on `PATH`: one crate checked and one notice, a failing tool fails it, an index answer
-    of 500 fails it, and no crate on the index passes with a notice; the tool itself was not run
-    locally, as it builds unreviewed releases. Not verified: the job on GitHub (t-1622).
+    install-action bump can break it until the tool reads that rustdoc format; Decision 31's
+    `semver-checks-tool` job checks that pair on every run (t-1638). This job runs on a dispatch
+    with `semver_checks` set, never on `main`: `release-pr-ci` sets it, so the release PR checks
+    that its version bumps cover the API changes, and a person may pass it on another branch. The
+    input is off by default, and the job skips other pull requests and the weekly run, since a
+    branch carries the last release's version until release-plz bumps it, so any API break, allowed
+    between releases (MVP), would fail it. Not on `main` either: build scripts there could reach the
+    runner's cache token and write to `main`'s cache scope, which every pull request restores
+    (`msrv-resolved` accepts that weekly). A red release PR means release-plz's bump, taken from
+    Conventional Commits alone (`semver_check = false`), is too small: mark the break on `main` (a
+    `feat!` commit, or a `BREAKING CHANGE:` footer), and release-plz updates the PR on that push;
+    editing the version on the release branch is lost when release-plz rewrites it. Requiring the
+    check is the user's choice (t-1633): other pull requests' runs skip it, which satisfies a
+    required check, and the release PR gets its result from the dispatched run. The recipe was run
+    with stub `cargo-semver-checks` and `curl` commands on `PATH`: one crate checked and one notice,
+    a failing tool fails it, an index answer of 500 fails it, and no crate on the index passes with
+    a notice; the tool itself was not run locally, as it builds unreviewed releases. Not verified:
+    the job on GitHub (t-1622).
 
 29. **Our lower bounds (t-1634):** every requirement in `workspace.dependencies` now names the
     release `Cargo.lock` held when it was raised (`serde_json = "1.0.154"`, `percent-encoding =
@@ -516,18 +518,18 @@ upstream's reading would be unsafe:
     published, and dev-dependencies) only resolve, and nothing runs tests there, so behaviour at the
     minimum, such as jsonschema's error texts (Decision 26), is not covered. The job is t-1634's
     regression guard. Accepted gap: a pull request may start using an API newer than a bound after a
-    lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch skips
-    it, so a release made in between could publish a bound that does not compile (t-1639). Nightly
-    only resolves, unpinned, as `-Z` flags need it; a nightly that breaks the flag fails the job,
-    not a release. Like `msrv-resolved` it builds unreviewed releases: `ci.yml`'s `minimal-versions`
-    job runs weekly on `main` and on a dispatch (`minimal_versions`, on by default, off on the
-    release PR's), with the read-only token, no cache step and its own 60-minute bound; it accepts
-    `msrv-resolved`'s exposure of `main`'s cache scope. Checked locally: the resolution fails on the
-    old bounds and passes on the new ones, the audit passes (one allowed warning, `unsafe-libyaml`
-    unmaintained, through `serde_yaml_ng` as in our lock), and the recipe runs to the end with
-    `cargo check` stubbed; the checks themselves, which build those releases, were not run (t-1622).
-    Before merging, `gh workflow run ci.yml --ref <branch>` (AGENTS.md), which runs the job; the
-    schedule shows only once it is on `main`.
+    lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch now
+    runs it too (Decision 32, t-1639). Nightly only resolves, unpinned, as `-Z` flags need it; a
+    nightly that breaks the flag fails the job, and the release PR with it, until nightly is fixed
+    or the recipe pins a dated nightly. Like `msrv-resolved` it builds unreviewed releases:
+    `ci.yml`'s `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
+    on by default, the release PR's included since Decision 32), with the read-only token, no cache
+    step and its own 60-minute bound; it accepts `msrv-resolved`'s exposure of `main`'s cache scope.
+    Checked locally: the resolution fails on the old bounds and passes on the new ones, the audit
+    passes (one allowed warning, `unsafe-libyaml` unmaintained, through `serde_yaml_ng` as in our
+    lock), and the recipe runs to the end with `cargo check` stubbed; the checks themselves, which
+    build those releases, were not run (t-1622). Before merging, `gh workflow run ci.yml --ref
+    <branch>` (AGENTS.md), which runs the job; the schedule shows only once it is on `main`.
 
 30. **Cargo.lock change summary (t-1636):** in a raw lock diff, a new transitive crate, the riskiest
     change, is one `[[package]]` block among many version and checksum lines. `scripts/lock_diff.py
@@ -555,8 +557,102 @@ upstream's reading would be unsafe:
     every duplicate on each run, noise the summary's release lists replace;
     `actions/dependency-review-action` and `cargo vet`, which give no publish date. Checked locally:
     the tests, and the summary of 03b248b's refresh (2 removed, 7 updated, two duplicates gone). On
-    GitHub, PR #2, which brings the script in, ran only that skip; the summary's first run is the
-    next pull request changing `Cargo.lock` (t-1622).
+    GitHub, PR #2, which brings the script in, ran only that skip; release PR #3 (run 43591819617)
+    ran the base's script and printed "No crate added, removed or updated." (only workspace members'
+    versions moved), so no crates.io request has run on GitHub yet (t-1622). One error, added by
+    t-1640: a crates.io request failing (a 429, a 5xx, a timeout, a reset connection) lost the whole
+    table of a sixty-crate refresh. `lookup` now retries a transient error (429, 5xx, timeout,
+    network, a connection reset or cut short while reading included) once after five seconds; a 4xx
+    other than 429, or an answer it cannot read, would come back the same, so it is not retried.
+    Otherwise it returns `Unavailable` with a reason the script writes itself (`HTTP 503`,
+    `timeout`, `network error`, `bad answer`, safe in a cell). Once a release stays undated after a
+    transient error, `collect` takes crates.io as down and marks the rest "not tried, crates.io
+    unreachable" without a request: each costs up to 66 seconds (two 30-second timeouts, the wait,
+    the pause), so asking on would outlast the job's 10 minutes and lose the table again. `render`
+    marks each undated release `FAILED (...), read it on crates.io` and counts them in the header,
+    and the script prints the whole table, then exits 1, so the step still fails and nothing passes
+    silently. Honouring a 429's `Retry-After` is left out: at one request a second a 429 is
+    unlikely, and its retry fails into a cell. As CI runs the base's copy, this takes effect on pull
+    requests opened once it is on `main`.
+
+    Correction (f5faf64), without rewriting pushed history: that commit's `Reviewed-by` trailer
+    lists "source-only changes deferred", but a release whose source changes is already an `updated`
+    row (`test_diff_same_version_from_another_source_is_updated`); only a checksum-only change goes
+    unlisted, which crates.io's immutable releases make moot.
+
+31. **The semver tool on toolchain bumps (t-1638):** cargo-semver-checks reads only the rustdoc
+    JSON formats it was built for, and Renovate bumps `rust-toolchain.toml` and install-action's pin
+    (which fixes the tool's version) in separate pull requests that never ran Decision 28's job, so
+    an incompatible pair would first fail on the release PR. `just semver-checks-tool` writes a
+    crate with no dependency under `target/` (inside the repository, so `rust-toolchain.toml`
+    applies; not `$TMPDIR`): a struct, a `#[non_exhaustive]` enum, a trait with an associated type
+    and constant, a generic function, a constant, a module and an alias, checked against itself
+    (`--baseline-root`). No API change, nothing to resolve and no third-party code, so only the tool
+    can fail it, an unreadable format included. As it builds nothing unreviewed, `ci.yml`'s
+    `semver-checks-tool` job runs on every run, `main`'s and the merge queue's included, with no
+    change filter: each bump's pull request checks its half against `main`'s other half, and the
+    push to `main` checks the pair two bumps merged one after the other leave behind. It stops such
+    a merge only as a required check (with the merge queue or up-to-date branches), the user's
+    setting (t-1633); a red `main` is fixed by the next bump that makes the pair readable. Either
+    bump's pull request may go red: the toolchain's `prBodyNotes` say to merge the `ci(deps)` pull
+    request first, then tick the rebase checkbox (re-running the old run keeps the old merge commit,
+    so the old pin), and the actions rule's say the reverse; if both are red, the new tool dropped
+    the current format, and both bumps go into one branch. Not taken: our own libraries against
+    themselves (their placeholder crates resolve outside `Cargo.lock`, so pull requests would build
+    unreviewed releases, and an upstream break would fail it); a `prBodyNotes` request for a manual
+    dispatch (a person must remember, and the crates.io baseline is red on any API break since the
+    release, hiding a format error); a weekly `--release-type major` run, which builds unreviewed
+    releases on `main` and still sees a bad pair only days after its merge. Accepted: the fixture
+    covers the item kinds listed, so a format change limited to another kind passes here and fails
+    on the release PR. Checked locally: the fixture compiles warning-free and the pinned 1.99.0
+    writes its rustdoc JSON (format 61); the recipe, with a stub `cargo-semver-checks` on `PATH`,
+    passes its arguments, fails when the tool fails and removes its directory. On GitHub, release
+    PR #3's dispatched run (43591825855) showed cargo-semver-checks 0.51.0 reading 1.99.0's rustdoc
+    JSON for `a2ui-runtime`. Not run: the recipe with the real tool (not installed locally); its
+    first run is the next CI run on GitHub (t-1622), which should show the fixture checked and no
+    lint.
+
+32. **The release PR checks its lower bounds (t-1639):** `minimal-versions` (Decision 29) and
+    `msrv-resolved` (t-1621) ran weekly on `main` and on a dispatch, not on the release PR's, so a
+    pull request using an API above a bound without changing it, merged after the weekly run, could
+    be published before the next one with a range that does not compile at its bottom. Both jobs,
+    and `semver-checks` (Decision 28), now run on every run of a `release-plz-*` branch, whatever
+    the event or inputs (`startsWith(github.head_ref || github.ref_name, 'release-plz-')`):
+    `release-pr-ci`'s dispatch (which also passes the inputs as true), a manual dispatch with them
+    off, and a `pull_request` run a person starts by pushing to or reopening the PR, so no run there
+    reports them skipped over a red result on the same head. They check the commit to be published,
+    its version bump included, given t-1633's up-to-date branches. They build unreviewed releases,
+    the exposure Decision 28 already accepts for `semver-checks` there: the read-only token, no
+    cache step, 60 minutes each; such a run writes only the release branch's cache scope (it reads
+    `main`'s too), which only that branch's later `ci` and `msrv` runs restore, and nothing in
+    `release-plz.yml` restores a cache or reads an artifact. Each push to `main` updates the release
+    PR (same branch) and dispatches again, so `ci.yml`'s `concurrency` groups dispatches on a
+    `release-plz-*` branch by ref and cancels the older one, as for a pull request; pushes under an
+    hour apart keep restarting them, so a release waits for a quiet `main`. A red result holds the
+    release once the jobs are required checks (t-1633, Decision 24's list): a bound to raise on
+    `main` (release-plz then updates the PR); upstream drift `msrv-resolved` reports, which users
+    would hit too (a temporary `<` bound on `main`, or an admin merge after reading the failure);
+    or a nightly that broke `-Z direct-minimal-versions`, until it is fixed or the recipe pins a
+    dated nightly (t-1641). A merge queue's `merge_group` run skips them: the PR's head result is
+    the gate there. Not taken: `scripts/release_gate.py`, a first design reviewed for this task
+    that read `main`'s latest weekly or dispatched result through the API and refused a red or
+    stale one (its review showed a green run from before the offending merge passes it, and tying
+    it to the release's base commit meant one more manual dispatch per release); a release
+    checklist step; and taiki-e's `cargo-minimal-versions`, which drops dev-dependencies through
+    cargo-hack, while our recipe already checks only the two libraries on the MSRV and adds no
+    tool. Checked locally: actionlint and zizmor. Not verified: a release-branch run on GitHub
+    (t-1622); the release PR open today (#3, v0.2.0) was dispatched before this change.
+
+33. **The catalog's first release, by hand (t-1642):** trusted publishing (Decision 23) cannot
+    create a crate, and `a2ui-catalog-basic` 0.1.0 cannot be published first by hand: its dry run
+    fails against `a2ui-runtime` 0.1.0 as published, which has no `Catalog`. Its first release is
+    therefore 0.2.0, with the runtime's. `release-plz.toml` sets `publish = false` for it, so
+    release-plz still bumps and tags it but publishes only `a2ui-runtime` 0.2.0, by trusted
+    publishing; the user then publishes `a2ui-catalog-basic` 0.2.0 from that tag with a one-day
+    `publish-new` token scoped to the crate, adds its trusted publisher, revokes the token, and a
+    second change removes `publish = false`. Not taken: merging the release PR as is, which leaves a
+    red `release` job after the runtime is published, with its tags uncertain; and publishing both
+    crates by hand, which leaves trusted publishing untried until the next release.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

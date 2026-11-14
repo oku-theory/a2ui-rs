@@ -113,8 +113,10 @@ jobs:
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
   # A push or pull request made with GITHUB_TOKEN starts no workflow, but a dispatch does: CI runs
-  # on the release PR's branch, and its checks land on the PR's head commit (Decision 24). Its own
-  # job, so `actions: write` stays away from release-plz's step. If it fails, rerun this job.
+  # on the release PR's branch, and its checks land on the PR's head commit (Decision 24),
+  # msrv-resolved and minimal-versions included, so the commit to publish is checked at its lower
+  # bounds and as a user resolves it (Decision 32). Its own job, so `actions: write` stays away from
+  # release-plz's step. If it fails, rerun this job.
   release-pr-ci:
     needs: release-pr
     if: ${{ needs.release-pr.outputs.branch != '' }}
@@ -133,4 +135,4 @@ jobs:
             exit 1
           fi
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" \
-            -f msrv_resolved=false -f minimal_versions=false -f semver_checks=true
+            -f msrv_resolved=true -f minimal_versions=true -f semver_checks=true
