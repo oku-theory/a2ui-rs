@@ -15,6 +15,12 @@ on:
         description: Also run the msrv-resolved job, which builds unreviewed crate releases.
         type: boolean
         default: true
+      # Off by default: before release-plz's bump, a branch carries the released version, so any
+      # API break, allowed between releases, fails it.
+      semver_checks:
+        description: Also run cargo-semver-checks, which builds unreviewed crate releases.
+        type: boolean
+        default: false
   schedule:
     - cron: "17 5 * * 1"
 # A new push to a pull request cancels its older run. Any other run has a group of its own,
@@ -117,3 +123,27 @@ jobs:
           tool: just,cargo-audit
           fallback: none
       - run: just msrv-resolved
+  # cargo-semver-checks against crates.io's releases (t-1632): on release-plz's release PR, whose
+  # dispatch sets semver_checks, where the bumped versions must cover the API changes, or on demand
+  # with semver_checks=true. Not on other pull requests: a breaking change waits for the release
+  # PR's bump. Both sides resolve outside Cargo.lock, so it builds unreviewed releases: a job of its
+  # own with this read-only token, no cache step and no secret, and never on main, whose cache
+  # scope every pull request restores (plan 2b, Decision 28).
+  semver-checks:
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.semver_checks
+      && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # cargo-semver-checks builds rustdoc JSON with the toolchain rust-toolchain.toml pins.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-semver-checks
+          fallback: none
+      - run: just semver-checks

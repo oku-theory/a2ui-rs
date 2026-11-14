@@ -86,7 +86,8 @@ jobs:
           tool: release-plz
           fallback: none
       # cargo-semver-checks, which built the crates beside this write token from dependencies
-      # outside Cargo.lock, is off in release-plz.toml (Decision 23).
+      # outside Cargo.lock, is off in release-plz.toml (Decision 23): ci.yml's read-only
+      # semver-checks job runs it on the release PR instead (Decision 28).
       - name: release-plz release-pr
         id: release-pr
         env:
@@ -132,4 +133,4 @@ jobs:
             exit 1
           fi
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" \
-            -f msrv_resolved=false
+            -f msrv_resolved=false -f semver_checks=true

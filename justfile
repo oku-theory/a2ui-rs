@@ -269,6 +269,47 @@ msrv-resolved:
     cargo check --manifest-path "$user/Cargo.toml" --locked
     cargo check --manifest-path "$user/Cargo.toml" --locked --target wasm32-unknown-unknown
 
+# cargo-semver-checks against our libraries' crates.io releases: builds unreviewed releases.
+semver-checks:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo semver-checks --version
+    # The workspace members cargo would publish (`publish = false` reads as []).
+    names="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.publish != []) | .name')"
+    if [ -z "$names" ]; then
+        echo "no publishable workspace member" >&2
+        exit 1
+    fi
+    checked=()
+    for name in $names; do
+        # crates.io's sparse index file is /ab/cd/<name>, lowercase, for four characters or more:
+        # any other name would 404 and be skipped, so it fails here instead.
+        if ! [[ "$name" =~ ^[a-z0-9][a-z0-9_-]{3,}$ ]]; then
+            echo "unexpected crate name for the index path: $name" >&2
+            exit 1
+        fi
+        url="https://index.crates.io/${name:0:2}/${name:2:2}/$name"
+        status="$(curl -sS --proto '=https' --retry 3 --max-time 30 -o /dev/null \
+            -w '%{http_code}' "$url")"
+        case "$status" in
+            # Both sides resolve outside Cargo.lock: CI or a disposable machine only.
+            200) checked+=(--package "$name") ;;
+            # No release yet, so no baseline: said in the log and on the run's summary page.
+            # Once every library is published, a 404 is a bug (plan 2b, Decision 28).
+            404) echo "::notice::$name is not on crates.io yet: no baseline to check against" ;;
+            *)
+                echo "crates.io index answered $status for $name" >&2
+                exit 1
+                ;;
+        esac
+    done
+    if [ "${#checked[@]}" -eq 0 ]; then
+        echo "::notice::no library is on crates.io yet: nothing to check"
+        exit 0
+    fi
+    cargo semver-checks "${checked[@]}"
+
 # Licenses, sources (crates.io only) and advisories, yanked releases included: it reads the lock
 # alone, so `ci` runs it before anything builds.
 audit:

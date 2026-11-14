@@ -354,8 +354,8 @@ upstream's reading would be unsafe:
     the release PR's merge would cancel the run that publishes it, and release-plz already skips
     versions on crates.io. `semver_check = false`: cargo-semver-checks resolves and builds the
     crates outside `Cargo.lock`, so newly released dependencies nobody reviewed would run beside
-    `release-pr`'s write token; it should come back as a read-only CI job once a baseline is on
-    crates.io (t-1632). `publish_no_verify = true` (t-1629, Decision 25): `cargo publish` no longer
+    `release-pr`'s write token; a read-only CI job runs it instead (Decision 28).
+    `publish_no_verify = true` (t-1629, Decision 25): `cargo publish` no longer
     builds each package in `release`, which `needs` the `package` job's build of the same commit
     from the reviewed `Cargo.lock`, so no dependency build script runs beside `GITHUB_TOKEN`
     (contents write), the crates.io token release-plz hands to cargo, or the job's OIDC token
@@ -381,7 +381,8 @@ upstream's reading would be unsafe:
     empty branch would silently drop CI again. A job of its own, `release-pr-ci`, holding only
     `actions: write`, so release-plz's step never has it, checks the name again (it reaches a `gh`
     command line, where it must not read as an option) and runs `gh workflow run ci.yml --ref
-    <branch> -f msrv_resolved=false`; if that fails, rerunning the job dispatches again. The run's
+    <branch> -f msrv_resolved=false -f semver_checks=true` (Decision 28); if that fails, rerunning
+    the job dispatches again. The run's
     checks land on the branch's head commit, so they show on the PR and match required checks by job
     name. No new secret: a GitHub App or personal token would trigger `pull_request` itself but is a
     long-lived credential beside `contents: write`; gating `release` with `workflow_run` would put
@@ -466,6 +467,35 @@ upstream's reading would be unsafe:
     skip with an empty schema fails it, and so would a jsonschema or `referencing` release that
     resolves `$ref`s lazily (both float within Decision 26's caret): should it fail after a lock
     refresh, make the skip an error.
+
+28. **cargo-semver-checks (t-1632):** `just semver-checks` runs it on each publishable workspace
+    member found on crates.io's sparse index, against the release cargo-semver-checks picks there
+    (the newest non-yanked one not above the current version); a member the index does not know
+    (404) has no baseline and is skipped with a `::notice::`, any other answer fails (after three
+    retries), and so does a name the index path cannot hold (not lowercase, under four characters).
+    At t-1632, `a2ui-runtime` 0.1.0 was on crates.io (an early hand publish) and
+    `a2ui-catalog-basic` was not (t-1633); once both are, a 404 is a bug, and the skip should become
+    an error. Both sides resolve outside `Cargo.lock`, building unreviewed releases, so it runs in
+    `ci.yml`'s `semver-checks` job only: the workflow's read-only token, no cache step, no secret,
+    60 minutes at most, cargo-semver-checks from `taiki-e/install-action`'s pinned manifest
+    (`fallback: none`), building rustdoc JSON with the pinned toolchain, so a toolchain or
+    install-action bump can break it until the tool reads that rustdoc format; Renovate's bump pull
+    requests do not run it (t-1638). It runs on a dispatch with `semver_checks` set, never on
+    `main`: `release-pr-ci` sets it, so the release PR checks that its version bumps cover the API
+    changes, and a person may pass it on another branch. The input is off by default, and the job
+    skips other pull requests and the weekly run, since a branch carries the last release's version
+    until release-plz bumps it, so any API break, allowed between releases (MVP), would fail it. Not
+    on `main` either: build scripts there could reach the runner's cache token and write to `main`'s
+    cache scope, which every pull request restores (`msrv-resolved` accepts that weekly). A red
+    release PR means release-plz's bump, taken from Conventional Commits alone (`semver_check =
+    false`), is too small: mark the break on `main` (a `feat!` commit, or a `BREAKING CHANGE:`
+    footer), and release-plz updates the PR on that push; editing the version on the release branch
+    is lost when release-plz rewrites it. Requiring the check is the user's choice (t-1633): other
+    pull requests' runs skip it, which satisfies a required check, and the release PR gets its
+    result from the dispatched run. The recipe was run with stub `cargo-semver-checks` and `curl`
+    commands on `PATH`: one crate checked and one notice, a failing tool fails it, an index answer
+    of 500 fails it, and no crate on the index passes with a notice; the tool itself was not run
+    locally, as it builds unreviewed releases. Not verified: the job on GitHub (t-1622).
 
 ## The algorithm (reference for Tasks 1 and 2)
 
