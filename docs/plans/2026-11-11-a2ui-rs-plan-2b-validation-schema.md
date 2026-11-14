@@ -643,6 +643,17 @@ upstream's reading would be unsafe:
     tool. Checked locally: actionlint and zizmor. Not verified: a release-branch run on GitHub
     (t-1622); the release PR open today (#3, v0.2.0) was dispatched before this change.
 
+33. **The catalog's first release, by hand (t-1642):** trusted publishing (Decision 23) cannot
+    create a crate, and `a2ui-catalog-basic` 0.1.0 cannot be published first by hand: its dry run
+    fails against `a2ui-runtime` 0.1.0 as published, which has no `Catalog`. Its first release is
+    therefore 0.2.0, with the runtime's. `release-plz.toml` sets `publish = false` for it, so
+    release-plz still bumps and tags it but publishes only `a2ui-runtime` 0.2.0, by trusted
+    publishing; the user then publishes `a2ui-catalog-basic` 0.2.0 from that tag with a one-day
+    `publish-new` token scoped to the crate, adds its trusted publisher, revokes the token, and a
+    second change removes `publish = false`. Not taken: merging the release PR as is, which leaves a
+    red `release` job after the runtime is published, with its tags uncertain; and publishing both
+    crates by hand, which leaves trusted publishing untried until the next release.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
