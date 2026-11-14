@@ -2,8 +2,9 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::super::test_support::{catalog_error, fan_out, load, mixin_copies, v10};
-use super::{function_call_envelope, pruned, reach};
+use super::{Targets, compile_entry, function_call_envelope, pruned, reach};
 use crate::bundle::{for_each_ref, resolve};
+use crate::error::Category;
 use crate::limits::MAX_SCHEMA_DEPTH;
 
 fn refs(node: &Value, out: &mut Vec<String>) {
@@ -70,6 +71,19 @@ fn pruned_entry_reaching_defs_and_a_component_holds_exactly_those_keys() {
         "functions": {"f": {"returnType": "string"}},
         "$defs": {"D": {"type": "string"}, "E": {"type": "number"}}
     }));
+}
+
+#[test]
+fn compile_entry_target_absent_from_root_is_catalog_error() {
+    // `reach` never yields such a target; a fabricated one pins that the dangling `$ref` the
+    // pruned document keeps fails the build rather than compiling a looser validator.
+    let root = reaching_root();
+    let entry = json!({"properties": {"label": {"$ref": "#/$defs/Ghost"}}});
+    let targets: Targets<'_> = [("$defs", "Ghost")].into_iter().collect();
+    let err = compile_entry(&root, "components", "X", &entry, targets).unwrap_err();
+    assert_that!(err.category()).is_equal_to(Category::Catalog);
+    // Our fixture's name, not jsonschema's wording: the build failed on that `$ref`.
+    assert_that!(err.to_string()).contains("'/$defs/Ghost'");
 }
 
 #[test]

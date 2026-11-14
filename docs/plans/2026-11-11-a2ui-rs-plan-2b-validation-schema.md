@@ -456,6 +456,17 @@ upstream's reading would be unsafe:
     their negation, `rebaseWhen`, manager name), not by `renovate-config-validator`; not verified: a
     live run (t-1622). A summary of the crates a lock diff adds is t-1636.
 
+27. **A pruned entry's absent target (t-1631):** `pruned` skips a target missing from `root`
+    rather than failing: `reach` resolved every target in that same `root`, so none is ever
+    absent, and an explicit error (a fallible `pruned` returning `MalformedCatalog`) would add a
+    branch only a fabricated target reaches. The skip leaves a dangling `$ref` in the pruned
+    document, which jsonschema's offline build rejects, as it resolves every `$ref` when building.
+    `compile_entry_target_absent_from_root_is_catalog_error` pins that with a fabricated target:
+    a `CatalogError` naming `'/$defs/Ghost'`, not a validator that accepts too much. Replacing the
+    skip with an empty schema fails it, and so would a jsonschema or `referencing` release that
+    resolves `$ref`s lazily (both float within Decision 26's caret): should it fail after a lock
+    refresh, make the skip an error.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
