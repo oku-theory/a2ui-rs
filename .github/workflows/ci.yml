@@ -1,9 +1,9 @@
 name: ci
 # Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
 # Renovate's included, runs once, through its pull request, except release-plz's, which its
-# workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main, the msrv-resolved
-# job checks what new upstream releases change, the ci job's audit sees new crate advisories and
-# the zizmor job new action advisories.
+# workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main,
+# the msrv-resolved job checks what new upstream releases change, the ci job's audit sees new
+# crate advisories and the zizmor job new action advisories.
 on:
   push:
     branches: [main]
@@ -107,6 +107,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The pinned toolchain packages the crates; the recipe installs the MSRV for the rest.
+      - run: rustup toolchain install
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-audit

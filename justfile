@@ -201,13 +201,15 @@ msrv-compile-fail:
         exit 1
     fi
 
-# On the MSRV, a user's crate resolves the libraries afresh: builds unreviewed crate releases.
+# On the MSRV, a user's crate resolves the packaged libraries afresh: builds unreviewed releases.
 msrv-resolved:
     #!/usr/bin/env bash
     set -euo pipefail
-    RUSTUP_TOOLCHAIN="$(just msrv-version)"
-    export RUSTUP_TOOLCHAIN
-    just msrv-toolchain
+    version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)"
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Cargo.toml needs one workspace version such as 0.1.0, found: $version" >&2
+        exit 1
+    fi
     # Cargo.lock proves our versions only. A crate of its own, with no lock, no dev-dependencies
     # and no rust-version, resolves the newest versions this rustc accepts (resolver 3, as in an
     # edition 2024 crate), the way a user's does; its `[workspace]` keeps it out of ours. A
@@ -215,9 +217,20 @@ msrv-resolved:
     mkdir -p target
     user="$(mktemp -d target/msrv-user.XXXXXX)"
     trap 'rm -rf "$user"' EXIT
-    mkdir "$user/src"
+    # It depends on the packages crates.io would get, unpacked, not on our sources: a file missing
+    # from `include` fails here too. The pinned toolchain packages them (the MSRV's cargo cannot
+    # package a crate whose sibling is not yet published); --no-verify, as nothing is built yet.
+    unset RUSTUP_TOOLCHAIN
+    cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked --no-verify --allow-dirty \
+        --target-dir "$PWD/$user/package"
+    mkdir "$user/packages" "$user/src"
+    for crate in a2ui-runtime a2ui-catalog-basic; do
+        tar -xzf "$user/package/package/$crate-$version.crate" -C "$user/packages"
+    done
     : > "$user/src/lib.rs"
-    cat > "$user/Cargo.toml" <<'EOF'
+    # [patch.crates-io] stands the packages in for releases crates.io may not have yet;
+    # `exclude` keeps them out of its workspace, so their dev-dependencies stay unresolved.
+    cat > "$user/Cargo.toml" <<EOF
     [package]
     name = "msrv-user"
     version = "0.0.0"
@@ -225,14 +238,28 @@ msrv-resolved:
     publish = false
 
     [dependencies]
-    a2ui-runtime = { path = "../../crates/a2ui-runtime" }
-    a2ui-catalog-basic = { path = "../../crates/a2ui-catalog-basic" }
+    a2ui-runtime = "=$version"
+    a2ui-catalog-basic = "=$version"
+
+    [patch.crates-io]
+    a2ui-runtime = { path = "packages/a2ui-runtime-$version" }
+    a2ui-catalog-basic = { path = "packages/a2ui-catalog-basic-$version" }
 
     [workspace]
+    exclude = ["packages"]
     EOF
+    RUSTUP_TOOLCHAIN="$(just msrv-version)"
+    export RUSTUP_TOOLCHAIN
+    just msrv-toolchain
     # Resolving runs no crate's code: known advisories, known-malicious crates included, and yanked
     # releases stop the run before any build script does.
     cargo generate-lockfile --manifest-path "$user/Cargo.toml"
+    # A patch cargo did not use only warns: our crates must come from the packages, sourceless.
+    ours='^name = "a2ui-(runtime|catalog-basic)"$'
+    if grep -A2 -E "$ours" "$user/Cargo.lock" | grep -q '^source'; then
+        echo "the user crate resolved a2ui from a registry, not from the packages" >&2
+        exit 1
+    fi
     cargo audit --file "$user/Cargo.lock" --deny yanked
     # Its builds stay in the crate's own target/, gone with it, whatever the caller's setting.
     export CARGO_TARGET_DIR="$PWD/$user/target"
@@ -247,8 +274,38 @@ audit:
     cargo deny check licenses
     cargo audit
 
+# Packages both libraries as crates.io receives them, each built from its package alone, so a
+# file missing from `include` fails here rather than for a user; their license texts must ship.
+package:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Locally from the working tree, as `just ci` runs before a commit; in CI (CI is set) cargo
+    # refuses a tree a step dirtied, which would ship a file a fresh checkout lacks.
+    dirty="--allow-dirty"
+    if [ -n "${CI:-}" ]; then dirty=""; fi
+    # A build misses no legal file: each crate's license texts, and upstream's NOTICE once it has
+    # one.
+    notice=()
+    if [ -f vendor/a2ui/NOTICE ]; then notice=(NOTICE-A2UI); fi
+    shipped() {
+        local crate="$1" listed
+        shift
+        listed="$(cargo package --list -p "$crate" --locked --allow-dirty)"
+        for file in "$@"; do
+            if ! grep -qxF "$file" <<< "$listed"; then
+                echo "$crate's package lacks $file" >&2
+                exit 1
+            fi
+        done
+    }
+    shipped a2ui-runtime LICENSE-MIT LICENSE-APACHE schemas/v1_0/LICENSE \
+        ${notice[@]+"${notice[@]/#/schemas/v1_0/}"}
+    shipped a2ui-catalog-basic LICENSE-A2UI catalog.json ${notice[@]+"${notice[@]}"}
+    cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked $dirty
+
 # The full pre-merge gate.
-ci: check test audit
+# `package` before `test`, so no file a test writes under a crate slips into the package.
+ci: check package test audit
 
 # Writes the executed-case manifest (one process, so no duplicate records).
 conformance-manifest dir:

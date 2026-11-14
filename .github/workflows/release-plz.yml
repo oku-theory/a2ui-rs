@@ -8,10 +8,12 @@ permissions: {}
 jobs:
   # Publishes to crates.io and tags a GitHub release when a release PR is merged. No long-lived
   # registry token: release-plz trades the job's OIDC token for a short-lived one (crates.io
-  # trusted publishing, plan 2b Decision 23). `cargo publish` verifies each package by building
-  # it, so dependency build scripts run beside that token and GITHUB_TOKEN, an accepted risk.
+  # trusted publishing, plan 2b Decision 23). It builds nothing: `publish_no_verify` skips the
+  # package build the `package` job ran on this commit (Decision 25), so no dependency build
+  # script runs beside these tokens.
   release:
     if: ${{ github.repository_owner == 'oku-theory' }}
+    needs: package
     runs-on: ubuntu-latest
     # The trusted publisher the user adds on crates.io names this environment, restricted to main.
     environment: release
@@ -38,6 +40,26 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
           release-plz release --git-token "$GITHUB_TOKEN" --forge github
+
+  # Builds both packages on the very commit `release` publishes, with a read-only token and no
+  # OIDC, so `release` publishes without building them (Decision 25). No cache: a restored one
+  # could carry another run's build outputs into what is published.
+  package:
+    if: ${{ github.repository_owner == 'oku-theory' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checks out the commit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+          fallback: none
+      - run: just package
 
   # Opens or updates the release PR from the commits since the last release.
   release-pr:

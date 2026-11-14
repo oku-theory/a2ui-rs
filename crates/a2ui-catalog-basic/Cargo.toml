@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
+# NOTICE-A2UI exists only while upstream has a NOTICE (vendor/sync.sh copies it); listed so that it
+# ships the day it does. `just package` builds the crate from these files alone.
 include = ["src/**", "catalog.json", "LICENSE-A2UI", "NOTICE-A2UI", "Cargo.toml"]
 
 [dependencies]

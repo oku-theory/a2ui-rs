@@ -256,7 +256,7 @@ upstream's reading would be unsafe:
     its own copy of each case, not worth it for three cases. `CARGO_TARGET_DIR` is made absolute
     there, since trybuild resolves it from the test's crate directory. `just msrv` proves our
     `Cargo.lock` (MSRV-aware with resolver 3). `just msrv-resolved` checks what a user resolves
-    (t-1621): a crate of its own under `target/`, depending on both libraries' sources by path, with
+    (t-1621): a crate of its own under `target/`, depending on both libraries' packages, unpacked (Decision 25), with
     no lock, no dev-dependencies and no `rust-version`, resolves afresh on the MSRV and must `cargo
     check` natively and for wasm. As an edition 2024 crate it resolves with resolver 3, which falls
     back to versions this rustc accepts when a crate declares its `rust-version`; it catches a crate
@@ -276,18 +276,19 @@ upstream's reading would be unsafe:
     checked before its merge by dispatching the workflow on its branch (AGENTS.md), since pull
     requests skip the job. GitHub disables a public repository's schedule after 60 days without
     activity and mails its failures to whoever last edited the cron line. The resolved versions are
-    printed for the log. Checked by hand: a dependency needing rustc 1.92 fails it. Path
-    dependencies skip packaging, so `include` is not checked (t-1629). `-Z direct-minimal-versions`
-    was set aside: it needs nightly and checks our lower bounds, not a user's newest resolution
-    (t-1629). No clippy in `just msrv`, since the pinned clippy's `incompatible_msrv` already reads
-    `rust-version`. If a dev-dependency ever needs a newer rustc, narrow the `msrv` job to the
-    published crates' libraries rather than raise `rust-version`. Every other job, release-plz's
-    included, installs the file's toolchain (`rustup toolchain install`), since the file overrides
-    any other in the checkout. CI caches with `Swatinem/rust-cache`, saved even after a red run,
-    which keeps dependency artifacts under `target/`, including trybuild's own build in
-    `target/tests/trybuild` (~400 s cold; unconfirmed until two runs on one pull request or on
-    `main`, t-1622); the key holds the rustc version, so a bump starts cold. A separate trybuild job
-    was set aside: a second job and cache to keep for no gain over one warm cache.
+    printed for the log. Checked by hand: a dependency needing rustc 1.92 fails it. It depends on
+    the packaged crates, unpacked, through `[patch.crates-io]`, so a file `include` misses fails it
+    too (t-1629, Decision 25). `-Z direct-minimal-versions` was set aside: it needs nightly and
+    checks our lower bounds, not a user's newest resolution (t-1634). No clippy in `just msrv`,
+    since the pinned clippy's `incompatible_msrv` already reads `rust-version`. If a dev-dependency
+    ever needs a newer rustc, narrow the `msrv` job to the published crates' libraries rather than
+    raise `rust-version`. Every other job, release-plz's included, installs the file's toolchain
+    (`rustup toolchain install`), since the file overrides any other in the checkout. CI caches with
+    `Swatinem/rust-cache`, saved even after a red run, which keeps dependency artifacts under
+    `target/`, including trybuild's own build in `target/tests/trybuild` (~400 s cold; unconfirmed
+    until two runs on one pull request or on `main`, t-1622); the key holds the rustc version, so a
+    bump starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
+    gain over one warm cache.
 21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with the
     release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that then runs
     with the job's token. `just actions-pinned`, part of `just check`, fails on any `uses:` in
@@ -354,22 +355,22 @@ upstream's reading would be unsafe:
     versions on crates.io. `semver_check = false`: cargo-semver-checks resolves and builds the
     crates outside `Cargo.lock`, so newly released dependencies nobody reviewed would run beside
     `release-pr`'s write token; it should come back as a read-only CI job once a baseline is on
-    crates.io (t-1632). Accepted: `cargo publish` verifies each package by building it from the
-    reviewed `Cargo.lock`, so in `release` a dependency's build script can read `GITHUB_TOKEN`
-    (contents write) and the crates.io token release-plz hands to cargo, and any step can request an
-    OIDC token (`ACTIONS_ID_TOKEN_REQUEST_*`), all for the job's duration, until a package build in
-    CI (t-1629) lets `publish_no_verify` skip that build. Each push to `main` runs the job, so each
-    records a deployment to `release`, though most publish nothing. The user's part (t-1633), before
-    any release PR is merged (one merged earlier fails to publish): restrict the `release`
-    environment to the `main` branch, with no required reviewers (else every push to `main` waits),
-    before adding the trusted publishers, since crates.io checks the repository, workflow and
-    environment, not the branch, and GitHub creates a missing environment unprotected; publish
-    `a2ui-runtime` then `a2ui-catalog-basic` once by hand with a short-lived token scoped to
-    publishing new crates (crates.io cannot publish a new crate through trusted publishing), and tag
-    them in release-plz's form (`a2ui-runtime-v0.1.0`) or accept that release-plz's first tag is the
-    next version; add a trusted publisher on crates.io for each crate (`oku-theory/a2ui-rs`,
-    workflow `release-plz.yml`, environment `release`); then revoke that token and delete any
-    `CARGO_REGISTRY_TOKEN` secret. Not verified: a release on GitHub.
+    crates.io (t-1632). `publish_no_verify = true` (t-1629, Decision 25): `cargo publish` no longer
+    builds each package in `release`, which `needs` the `package` job's build of the same commit
+    from the reviewed `Cargo.lock`, so no dependency build script runs beside `GITHUB_TOKEN`
+    (contents write), the crates.io token release-plz hands to cargo, or the job's OIDC token
+    request (`ACTIONS_ID_TOKEN_REQUEST_*`). Each push to `main` runs the job, so each records a
+    deployment to `release`, though most publish nothing. The user's part (t-1633), before any
+    release PR is merged (one merged earlier fails to publish): restrict the `release` environment
+    to the `main` branch, with no required reviewers (else every push to `main` waits), before
+    adding the trusted publishers, since crates.io checks the repository, workflow and environment,
+    not the branch, and GitHub creates a missing environment unprotected; publish `a2ui-runtime`
+    then `a2ui-catalog-basic` once by hand with a short-lived token scoped to publishing new crates
+    (crates.io cannot publish a new crate through trusted publishing), and tag them in release-plz's
+    form (`a2ui-runtime-v0.1.0`) or accept that release-plz's first tag is the next version; add a
+    trusted publisher on crates.io for each crate (`oku-theory/a2ui-rs`, workflow `release-plz.yml`,
+    environment `release`); then revoke that token and delete any `CARGO_REGISTRY_TOKEN` secret. Not
+    verified: a release on GitHub.
 
 24. **CI on the release PR (t-1627):** release-plz opens and updates its release PR with
     `GITHUB_TOKEN`, and GitHub starts no workflow for a push or pull request made with that token,
@@ -396,6 +397,33 @@ upstream's reading would be unsafe:
     merge before its run ends. A required `zizmor` also blocks merges during a GitHub API outage or
     after a new advisory on a pinned action; rerun it, or update the pin. Not verified: a dispatch
     from `release-pr-ci` on GitHub, and that its checks satisfy the required ones.
+
+25. **Packaged crates (t-1629):** `just package`, in `just ci` right after `check` (before any test
+    can write a file under a crate), runs `cargo package --locked` on both libraries, which builds
+    each from its packaged files alone, `a2ui-catalog-basic` against `a2ui-runtime`'s package: a
+    file missing from `include` (`catalog.json`, the `include_str!` schemas) fails there, not for a
+    user. It first requires, through `cargo package --list`, the legal files a build would not miss:
+    `a2ui-runtime`'s `LICENSE-MIT` and `LICENSE-APACHE` (symlinks to the root's, which cargo
+    packages as files; it shipped neither before), upstream's `schemas/v1_0/LICENSE`,
+    `a2ui-catalog-basic`'s `LICENSE-A2UI`, and `NOTICE-A2UI` in both whenever `vendor/a2ui/NOTICE`
+    exists. `NOTICE-A2UI` stays in `a2ui-catalog-basic`'s `include`: `vendor/sync.sh` copies it only
+    while upstream has a `NOTICE` (none at the vendored commit). Locally it packages the working
+    tree (`--allow-dirty`), since `just ci` runs before a commit; with `CI` set cargo refuses a tree
+    a step dirtied. `publish_no_verify` (Decision 23) needs the published commit built:
+    release-plz.yml's `release` job `needs` a `package` job that runs `just package` on that very
+    commit with a read-only token, no OIDC and no cache, so a red package publishes nothing,
+    whatever branch protection allows. `just msrv-resolved` packages them too (pinned toolchain,
+    `RUSTUP_TOOLCHAIN` unset, `--no-verify`, since the MSRV's cargo cannot package a crate whose
+    sibling is unpublished), unpacks them, and its user crate depends on `=<version>` with
+    `[patch.crates-io]` pointing at the unpacked packages and `exclude` keeping them out of its
+    workspace, so their dev-dependencies stay unresolved; it fails if its lock takes either crate
+    from a registry, since cargo only warns about an unused patch. The version is the workspace's,
+    one `X.Y.Z`: a pre-release or a crate with its own version fails it loudly. Checked locally:
+    `just package` passes, fails without `catalog.json` in `include`, and with `CI` set refuses a
+    dirty tree; the user crate's resolution and audit against the unpacked packages pass. Not run:
+    its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds are
+    t-1634: a nightly `-Z direct-minimal-versions` resolution already fails, since jsonschema 0.61.1
+    needs `percent-encoding ^2.3` while the workspace asks `2`.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
@@ -2031,7 +2059,7 @@ difference first.
   stale; `grep -rn "dead_code\|allow(" crates/a2ui-runtime/src` finds no leftover;
   `wc -l crates/*/ARCHITECTURE.md` gives at most 50 each; the new source files stay under 500
   lines.
-- Run `just ci` (check + test + audit) green, then
+- Run `just ci` (check + package + test + audit) green, then
   `just conformance-manifest "$PWD/target/manifest-plan2b"` and
   `grep -h 'validation_schema' target/manifest-plan2b/*.jsonl` shows both `test_v10_*` cases
   passed and the three v0.8/v0.9 cases skipped by version.
