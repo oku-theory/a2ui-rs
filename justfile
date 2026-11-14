@@ -135,12 +135,34 @@ msrv-compile-fail:
     # resolves. TRYBUILD=overwrite writes each case's .stderr there with this compiler's wording,
     # so a case trybuild did not run has none, and still fails a case that compiles.
     copy="$(mktemp -d "$crate/tests/ui-msrv.XXXXXX")"
-    trap 'rm -rf "$copy"' EXIT
+    # Kept when a case's errors differ, for its .stderr; ignored by git.
+    keep=""
+    trap '[ -n "$keep" ] || rm -rf "$copy"' EXIT
     cp "$crate"/tests/ui/*.rs "$copy"/
     TRYBUILD=overwrite A2UI_TRYBUILD_CASES="${copy#"$crate"/}/*.rs" \
         cargo test -p a2ui-runtime --test reason_compile_fail --locked
-    # Each error's code and its line in the case, both kept when a release rewords the text.
-    failures() { grep -oE "error\[E[0-9]+\]|/${2//./\\.}:[0-9]+" "$1" | sort || true; }
+    # Each error as its code and the first case line among its spans (`-->` or `:::`, its own or
+    # a help's or note's), both kept when a release rewords the text; later spans and notes,
+    # which a release may add or drop, are not compared. A code-less `error:` counts as
+    # `error`, a block with no case line as `-`; a `warning:` ends the error before it.
+    failures() {
+        awk -v at="/$2:" '
+            function flush() { if (code != "") print code "\t" line; code = "" }
+            /^warning(\[[^]]*\])?: / { flush(); next }
+            /^error(\[E[0-9]+\])?: / {
+                flush()
+                code = substr($0, 1, index($0, ":") - 1)
+                line = "-"
+                next
+            }
+            code != "" && line == "-" && /^ *(-->|:::) / && index($0, at) {
+                rest = substr($0, index($0, at) + length(at))
+                if (match(rest, /^[0-9]+/)) line = substr(rest, 1, RLENGTH)
+            }
+            END { flush() }
+        ' "$1" | sort
+    }
+    failed=""
     for case in "$crate"/tests/ui/*.rs; do
         name="$(basename "$case")"
         stderr="${name%.rs}.stderr"
@@ -153,19 +175,31 @@ msrv-compile-fail:
             echo "tests/ui/$stderr holds no error code to compare" >&2
             exit 1
         fi
+        # Else a parser that found no line would compare codes alone, on both sides.
+        if grep -q $'\t-$' <<< "$expected"; then
+            echo "tests/ui/$stderr has an error pointing at no line of $name" >&2
+            exit 1
+        fi
         if [ ! -f "$copy/$stderr" ]; then
             echo "$name did not run" >&2
             exit 1
         fi
         actual="$(failures "$copy/$stderr" "$name")"
         if [ "$expected" != "$actual" ]; then
+            keep=1
+            failed=1
             echo "$name fails otherwise on $(rustc -V): expected" >&2
             echo "$expected" >&2
             echo "got" >&2
             echo "$actual" >&2
-            exit 1
+            echo "its .stderr, kept in $copy:" >&2
+            diff -u "$crate/tests/ui/$stderr" "$copy/$stderr" >&2 || true
         fi
     done
+    if [ -n "$failed" ]; then
+        echo "remove the copy when done: rm -rf $copy" >&2
+        exit 1
+    fi
 
 # On the MSRV, a user's crate resolves the libraries afresh: builds unreviewed crate releases.
 msrv-resolved:
