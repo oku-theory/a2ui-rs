@@ -15,6 +15,7 @@ just msrv-resolved   # what a user resolves on rust-version; builds unreviewed r
 just minimal-versions   # our lower bounds on rust-version; builds unreviewed releases: CI or a disposable machine
 just lock-diff [base]   # what Cargo.lock added, removed and updated since base (origin/main), with publish dates
 just semver-checks   # cargo-semver-checks against crates.io's releases; builds unreviewed releases: CI or a disposable machine
+just semver-checks-tool   # whether cargo-semver-checks reads this toolchain's rustdoc JSON, on a fixture crate with no dependency
 just conformance-manifest <dir>   # executed-case manifest for upstream's comparer
 ```
 

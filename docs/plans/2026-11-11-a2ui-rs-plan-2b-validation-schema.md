@@ -481,23 +481,24 @@ upstream's reading would be unsafe:
     `ci.yml`'s `semver-checks` job only: the workflow's read-only token, no cache step, no secret,
     60 minutes at most, cargo-semver-checks from `taiki-e/install-action`'s pinned manifest
     (`fallback: none`), building rustdoc JSON with the pinned toolchain, so a toolchain or
-    install-action bump can break it until the tool reads that rustdoc format; Renovate's bump pull
-    requests do not run it (t-1638). It runs on a dispatch with `semver_checks` set, never on
-    `main`: `release-pr-ci` sets it, so the release PR checks that its version bumps cover the API
-    changes, and a person may pass it on another branch. The input is off by default, and the job
-    skips other pull requests and the weekly run, since a branch carries the last release's version
-    until release-plz bumps it, so any API break, allowed between releases (MVP), would fail it. Not
-    on `main` either: build scripts there could reach the runner's cache token and write to `main`'s
-    cache scope, which every pull request restores (`msrv-resolved` accepts that weekly). A red
-    release PR means release-plz's bump, taken from Conventional Commits alone (`semver_check =
-    false`), is too small: mark the break on `main` (a `feat!` commit, or a `BREAKING CHANGE:`
-    footer), and release-plz updates the PR on that push; editing the version on the release branch
-    is lost when release-plz rewrites it. Requiring the check is the user's choice (t-1633): other
-    pull requests' runs skip it, which satisfies a required check, and the release PR gets its
-    result from the dispatched run. The recipe was run with stub `cargo-semver-checks` and `curl`
-    commands on `PATH`: one crate checked and one notice, a failing tool fails it, an index answer
-    of 500 fails it, and no crate on the index passes with a notice; the tool itself was not run
-    locally, as it builds unreviewed releases. Not verified: the job on GitHub (t-1622).
+    install-action bump can break it until the tool reads that rustdoc format; Decision 31's
+    `semver-checks-tool` job checks that pair on every run (t-1638). This job runs on a dispatch
+    with `semver_checks` set, never on `main`: `release-pr-ci` sets it, so the release PR checks
+    that its version bumps cover the API changes, and a person may pass it on another branch. The
+    input is off by default, and the job skips other pull requests and the weekly run, since a
+    branch carries the last release's version until release-plz bumps it, so any API break, allowed
+    between releases (MVP), would fail it. Not on `main` either: build scripts there could reach the
+    runner's cache token and write to `main`'s cache scope, which every pull request restores
+    (`msrv-resolved` accepts that weekly). A red release PR means release-plz's bump, taken from
+    Conventional Commits alone (`semver_check = false`), is too small: mark the break on `main` (a
+    `feat!` commit, or a `BREAKING CHANGE:` footer), and release-plz updates the PR on that push;
+    editing the version on the release branch is lost when release-plz rewrites it. Requiring the
+    check is the user's choice (t-1633): other pull requests' runs skip it, which satisfies a
+    required check, and the release PR gets its result from the dispatched run. The recipe was run
+    with stub `cargo-semver-checks` and `curl` commands on `PATH`: one crate checked and one notice,
+    a failing tool fails it, an index answer of 500 fails it, and no crate on the index passes with
+    a notice; the tool itself was not run locally, as it builds unreviewed releases. Not verified:
+    the job on GitHub (t-1622).
 
 29. **Our lower bounds (t-1634):** every requirement in `workspace.dependencies` now names the
     release `Cargo.lock` held when it was raised (`serde_json = "1.0.154"`, `percent-encoding =
@@ -557,6 +558,38 @@ upstream's reading would be unsafe:
     the tests, and the summary of 03b248b's refresh (2 removed, 7 updated, two duplicates gone). On
     GitHub, PR #2, which brings the script in, ran only that skip; the summary's first run is the
     next pull request changing `Cargo.lock` (t-1622).
+
+31. **The semver tool on toolchain bumps (t-1638):** cargo-semver-checks reads only the rustdoc
+    JSON formats it was built for, and Renovate bumps `rust-toolchain.toml` and install-action's pin
+    (which fixes the tool's version) in separate pull requests that never ran Decision 28's job, so
+    an incompatible pair would first fail on the release PR. `just semver-checks-tool` writes a
+    crate with no dependency under `target/` (inside the repository, so `rust-toolchain.toml`
+    applies; not `$TMPDIR`): a struct, a `#[non_exhaustive]` enum, a trait with an associated type
+    and constant, a generic function, a constant, a module and an alias, checked against itself
+    (`--baseline-root`). No API change, nothing to resolve and no third-party code, so only the tool
+    can fail it, an unreadable format included. As it builds nothing unreviewed, `ci.yml`'s
+    `semver-checks-tool` job runs on every run, `main`'s and the merge queue's included, with no
+    change filter: each bump's pull request checks its half against `main`'s other half, and the
+    push to `main` checks the pair two bumps merged one after the other leave behind. It stops such
+    a merge only as a required check (with the merge queue or up-to-date branches), the user's
+    setting (t-1633); a red `main` is fixed by the next bump that makes the pair readable. Either
+    bump's pull request may go red: the toolchain's `prBodyNotes` say to merge the `ci(deps)` pull
+    request first, then tick the rebase checkbox (re-running the old run keeps the old merge commit,
+    so the old pin), and the actions rule's say the reverse; if both are red, the new tool dropped
+    the current format, and both bumps go into one branch. Not taken: our own libraries against
+    themselves (their placeholder crates resolve outside `Cargo.lock`, so pull requests would build
+    unreviewed releases, and an upstream break would fail it); a `prBodyNotes` request for a manual
+    dispatch (a person must remember, and the crates.io baseline is red on any API break since the
+    release, hiding a format error); a weekly `--release-type major` run, which builds unreviewed
+    releases on `main` and still sees a bad pair only days after its merge. Accepted: the fixture
+    covers the item kinds listed, so a format change limited to another kind passes here and fails
+    on the release PR. Checked locally: the fixture compiles warning-free and the pinned 1.99.0
+    writes its rustdoc JSON (format 61); the recipe, with a stub `cargo-semver-checks` on `PATH`,
+    passes its arguments, fails when the tool fails and removes its directory. On GitHub, release
+    PR #3's dispatched run (43591825855) showed cargo-semver-checks 0.51.0 reading 1.99.0's rustdoc
+    JSON for `a2ui-runtime`. Not run: the recipe with the real tool (not installed locally); its
+    first run is the next CI run on GitHub (t-1622), which should show the fixture checked and no
+    lint.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

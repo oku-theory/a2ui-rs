@@ -20,6 +20,7 @@
         "Finish this bump in the branch, then squash-merge it (plan 2b, Decision 20):",
         "1. `TRYBUILD=overwrite cargo test -p a2ui-runtime --test reason_compile_fail`, then re-read each `crates/a2ui-runtime/tests/ui/*.stderr`: each must still fail with E0277 on the `Piece` bound or E0597 on the borrowed `document`.",
         "2. Fix the new `clippy -D warnings` lints, then run `just ci`. CI's cache starts cold on the new rustc.",
+        "3. A red `semver-checks-tool` job means the pinned cargo-semver-checks cannot read this rustc's rustdoc JSON: leave this open until Renovate's ci(deps) pull request brings a cargo-semver-checks that reads it, merge that one first, then tick this pull request's rebase checkbox so CI runs on the new `main` (re-running the old run keeps the old pin). If ci(deps) is red too, its tool no longer reads the current rustc's format: bring both bumps into one branch (plan 2b, Decision 31).",
         "Renovate stops updating this branch once a person pushes to it: if a newer rustc ships first, close this pull request and Renovate opens a fresh one."
       ]
     },
@@ -32,7 +33,10 @@
       "semanticCommitScope": "deps",
       "schedule": ["before 6am on monday"],
       "minimumReleaseAge": "7 days",
-      "automerge": false
+      "automerge": false,
+      "prBodyNotes": [
+        "A red `semver-checks-tool` job means this install-action release's cargo-semver-checks cannot read the pinned rustc's rustdoc JSON: if the build(toolchain) pull request is open, merge it first and tick this pull request's rebase checkbox; if it is red too, bring both bumps into one branch (plan 2b, Decision 31)."
+      ]
     },
     {
       "description": "Cargo only refreshes Cargo.lock: requirements in Cargo.toml stay a person's change.",

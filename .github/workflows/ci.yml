@@ -205,3 +205,21 @@ jobs:
           tool: just,cargo-semver-checks
           fallback: none
       - run: just semver-checks
+  # Whether the pinned cargo-semver-checks reads the pinned toolchain's rustdoc JSON (t-1638):
+  # Renovate bumps rust-toolchain.toml and install-action's pin apart, and the semver-checks job
+  # above runs only on the release PR, too late. A crate with no dependency, checked against
+  # itself, so only the tool can fail it and nothing unreviewed runs: on every run, main's
+  # included, so two bumps merged one after the other are checked together (plan 2b, Decision 31).
+  semver-checks-tool:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-semver-checks
+          fallback: none
+      - run: just semver-checks-tool
