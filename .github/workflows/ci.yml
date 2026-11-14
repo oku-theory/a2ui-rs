@@ -78,8 +78,16 @@ jobs:
         # The base's own script, so a pull request cannot rewrite the summary of its own lock.
         run: |
           base="$(git rev-parse HEAD^1)"
+          # Plain assignments, so a git error fails the step (bash -e); empty when absent.
+          base_script="$(git ls-tree --name-only "$base" -- scripts/lock_diff.py)"
+          head_script="$(git ls-tree --name-only HEAD -- scripts/lock_diff.py)"
           if git diff --quiet "$base" HEAD -- Cargo.lock; then
             echo "Cargo.lock unchanged"
+          elif [ -z "$base_script" ] && [ -n "$head_script" ]; then
+            # Only the pull request that brings the script in: its base cannot summarize it. A
+            # main that lost the script fails at `git show` below.
+            echo "No summary: the base has no scripts/lock_diff.py yet." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
           else
             git show "$base:scripts/lock_diff.py" > "$RUNNER_TEMP/lock_diff.py"
             python3 -B "$RUNNER_TEMP/lock_diff.py" "$base" HEAD | tee -a "$GITHUB_STEP_SUMMARY"

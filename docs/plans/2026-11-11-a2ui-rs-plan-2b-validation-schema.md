@@ -543,18 +543,20 @@ upstream's reading would be unsafe:
     fails on any error, and on a name, version or source holding a character a Markdown cell cannot
     show as is, rather than print a table that hides a change. CI's `lock-diff` job runs it on pull
     requests whose `Cargo.lock` differs from the merge commit's first parent (`fetch-depth: 2`),
-    with that parent's own copy of the script, so a pull request cannot rewrite its own summary, and
-    appends the table to the run's summary page. It builds nothing, needs no toolchain, and runs in
-    a job of its own with the read-only token; `shell: bash` gives its `tee` pipeline `pipefail`.
-    Python 3.11 or later (`tomllib`), not a Rust tool: the runner has it, and a crate would need a
-    build, its dependencies and a lock of its own; the script says so and exits on an older one.
-    Its unit tests (stdlib `unittest`, offline, fixed dates) run in `just test`, which therefore
-    needs that Python too (stock macOS has 3.9). Considered, not taken: `cargo deny check bans` with
-    `multiple-versions = "warn"`, which prints the dependency tree of every duplicate on each run,
-    noise the summary's release lists replace; `actions/dependency-review-action` and `cargo vet`,
-    which give no publish date. Checked locally: the tests, and the summary of 03b248b's refresh
-    (2 removed, 7 updated, two duplicates gone). Not verified: the job on GitHub, which the first
-    pull request changing `Cargo.lock` runs (t-1622 records it).
+    with that parent's own copy of the script, so a pull request cannot rewrite its own summary (on
+    the pull request that brings the script in, whose base lacks it, the job says so and gives none;
+    a base that lost it fails), and appends the table to the run's summary page. It builds nothing,
+    needs no toolchain, and runs in a job of its own with the read-only token; `shell: bash` gives
+    its `tee` pipeline `pipefail`. Python 3.11 or later (`tomllib`), not a Rust tool: the runner has
+    it, and a crate would need a build, its dependencies and a lock of its own; the script says so
+    and exits on an older one. Its unit tests (stdlib `unittest`, offline, fixed dates) run in `just
+    test`, which therefore needs that Python too (stock macOS has 3.9). Considered, not taken:
+    `cargo deny check bans` with `multiple-versions = "warn"`, which prints the dependency tree of
+    every duplicate on each run, noise the summary's release lists replace;
+    `actions/dependency-review-action` and `cargo vet`, which give no publish date. Checked locally:
+    the tests, and the summary of 03b248b's refresh (2 removed, 7 updated, two duplicates gone). On
+    GitHub, PR #2, which brings the script in, ran only that skip; the summary's first run is the
+    next pull request changing `Cargo.lock` (t-1622).
 
 ## The algorithm (reference for Tasks 1 and 2)
 
