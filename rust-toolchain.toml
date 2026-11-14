@@ -4,7 +4,7 @@
 # (TRYBUILD=overwrite) and fixes new lints; renovate.json has Renovate open that pull request once
 # its GitHub App is installed (t-1622).
 [toolchain]
-channel = "1.99.0"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"
