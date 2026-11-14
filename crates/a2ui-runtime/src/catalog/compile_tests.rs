@@ -2,7 +2,7 @@ use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
 use super::super::test_support::{catalog_error, fan_out, load, mixin_copies, v10};
-use super::function_call_envelope;
+use super::{function_call_envelope, pruned, reach};
 use crate::bundle::{for_each_ref, resolve};
 use crate::limits::MAX_SCHEMA_DEPTH;
 
@@ -24,6 +24,52 @@ fn fanned(section: &str, entry: &str, levels: usize, unevaluated: bool) -> Value
     );
     extra.insert(section.to_owned(), Value::Object(entries));
     v10(Value::Object(extra))
+}
+
+/// A root whose entry `X` reaches `$defs/D`, function `f` and component `C`, which reaches
+/// `$defs/E`; `Unreached`, `g` and `$defs/F` are reached by nothing.
+fn reaching_root() -> Value {
+    json!({
+        "components": {
+            "X": {"properties": {
+                "label": {"$ref": "#/$defs/D"},
+                "call": {"$ref": "#/functions/f"},
+                "child": {"$ref": "#/components/C"}
+            }},
+            "C": {"properties": {"n": {"$ref": "#/$defs/E"}}},
+            "Unreached": {"type": "object"}
+        },
+        "functions": {"f": {"returnType": "string"}, "g": {"returnType": "number"}},
+        "$defs": {"D": {"type": "string"}, "E": {"type": "number"}, "F": {"type": "null"}}
+    })
+}
+
+#[test]
+fn pruned_entry_reaching_defs_and_a_component_holds_exactly_those_keys() {
+    let root = reaching_root();
+    // As authored: `localize_refs` must turn the catalog-relative `$ref` into a local one.
+    let entry = json!({"properties": {
+        "label": {"$ref": "catalog.json#/$defs/D"},
+        "call": {"$ref": "#/functions/f"},
+        "child": {"$ref": "#/components/C"}
+    }});
+    let targets = reach(&root, "X", &entry).unwrap().targets;
+    let document = pruned(&root, "components", "X", &entry, targets);
+    // A literal, not `DRAFT_2020_12`: the pin is the document the build sees.
+    assert_that!(document).is_equal_to(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$ref": "#/components/X",
+        "components": {
+            "X": {"properties": {
+                "label": {"$ref": "#/$defs/D"},
+                "call": {"$ref": "#/functions/f"},
+                "child": {"$ref": "#/components/C"}
+            }},
+            "C": {"properties": {"n": {"$ref": "#/$defs/E"}}}
+        },
+        "functions": {"f": {"returnType": "string"}},
+        "$defs": {"D": {"type": "string"}, "E": {"type": "number"}}
+    }));
 }
 
 #[test]

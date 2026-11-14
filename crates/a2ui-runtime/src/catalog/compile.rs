@@ -203,12 +203,6 @@ impl Totals {
 }
 
 /// Compiles the entry `name` of `section` against a document pruned to what it reaches.
-///
-/// The pruned document holds `$schema`, the entry and each `$defs`, `components` or
-/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Each target's
-/// borrowed name is copied here, as a key of the pruned document. Every target
-/// was resolved in `root` by the entry's expansion, so each lookup finds it; were one absent,
-/// the pruned document would keep a dangling `$ref` and the build would report it.
 fn compile_entry(
     root: &Value,
     section: &'static str,
@@ -216,6 +210,24 @@ fn compile_entry(
     schema: &Value,
     targets: Targets<'_>,
 ) -> Result<Arc<Validator>, Error> {
+    let document = pruned(root, section, name, schema, targets);
+    Ok(Arc::new(compile(&document)?))
+}
+
+/// The document the entry `name` of `section` compiles against, rooted at that entry.
+///
+/// It holds `$schema`, the root `$ref`, the entry and each `$defs`, `components` or
+/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Each target's
+/// borrowed name is copied here, as a key of the pruned document. Every target
+/// was resolved in `root` by the entry's expansion, so each lookup finds it; were one absent,
+/// the pruned document would keep a dangling `$ref`, which [`compile_entry`]'s build reports.
+fn pruned(
+    root: &Value,
+    section: &'static str,
+    name: &str,
+    schema: &Value,
+    targets: Targets<'_>,
+) -> Value {
     let mut entry = schema.clone();
     localize_refs(&mut entry);
     let mut sections: BTreeMap<&str, Map<String, Value>> = BTreeMap::new();
@@ -239,7 +251,7 @@ fn compile_entry(
         .map(|(key, entries)| (key.to_owned(), Value::Object(entries)))
         .collect();
     let reference = local_ref(&format!("/{section}/{name}"));
-    Ok(Arc::new(compile(&rooted(&top, &reference))?))
+    rooted(&top, &reference)
 }
 
 /// `bundle` with `FunctionCall` reduced to its envelope, as the root `$ref`s resolve in.
