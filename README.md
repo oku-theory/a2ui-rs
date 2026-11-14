@@ -8,6 +8,7 @@ checked against the upstream conformance suites, with a Leptos renderer.
 | `a2ui-runtime` | Protocol state: data model, expressions, surfaces, catalogs (pure Rust) |
 | `a2ui-catalog-basic` | The published v1.0 basic catalog, loaded with `a2ui-runtime` |
 | `a2ui-conformance` | Runs the vendored upstream suites (not published) |
+| `fuzz/` (`a2ui-fuzz`) | libFuzzer targets in their own workspace: `just fuzz <target>` |
 
 `vendor/a2ui` is a copy of upstream files (Apache-2.0) at the commit in `vendor/UPSTREAM`;
 refresh it with `just vendor-sync <commit>`.

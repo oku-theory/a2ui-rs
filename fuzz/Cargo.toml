@@ -1,0 +1,50 @@
+[package]
+name = "a2ui-fuzz"
+description = "libFuzzer targets for a2ui-runtime's agent-facing entry points."
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace, so libfuzzer-sys and its C++ build stay out of the published crates' lock,
+# MSRV and minimal-versions builds. `just fuzz-check` (in `just check`) keeps it formatted, linted
+# and on the root lock's versions; `just fuzz-lock` rebuilds fuzz/Cargo.lock from Cargo.lock.
+[workspace]
+members = ["."]
+
+# serde_json mirrors the root Cargo.toml's requirement.
+[workspace.dependencies]
+a2ui-catalog-basic = { path = "../crates/a2ui-catalog-basic" }
+a2ui-runtime = { path = "../crates/a2ui-runtime" }
+libfuzzer-sys = "0.4.13"
+serde_json = "1.0.154"
+
+[dependencies]
+a2ui-catalog-basic.workspace = true
+a2ui-runtime.workspace = true
+libfuzzer-sys.workspace = true
+serde_json.workspace = true
+
+# The root workspace's lints; a harness may expect, with a reason (a panic is the finding).
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+allow_attributes = "deny"
+
+[[bin]]
+name = "catalog_parse"
+path = "fuzz_targets/catalog_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validate_component"
+path = "fuzz_targets/validate_component.rs"
+test = false
+doc = false
+bench = false

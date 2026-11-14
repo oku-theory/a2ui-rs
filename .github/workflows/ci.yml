@@ -134,6 +134,7 @@ jobs:
       # The lock's advisories and yanked releases, before this job builds it (the ci job's audit
       # runs in parallel).
       - run: cargo audit --deny yanked
+      - run: cargo audit --deny yanked --file fuzz/Cargo.lock
       # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
       - run: |
           version="$(just msrv-version)"

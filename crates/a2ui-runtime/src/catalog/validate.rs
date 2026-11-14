@@ -55,7 +55,8 @@ impl Catalog {
     /// Before any of that, the instance must hold at most `MAX_COMPONENT_NODES` (65 536) JSON
     /// nodes and `MAX_COMPONENT_CALLS` (1 024) calls (`@call` objects, nested ones included), then
     /// nest at most `MAX_JSON_DEPTH` (64) levels, so one component runs a bounded number of
-    /// validators.
+    /// validators. These caps run on a value already parsed: a caller parsing untrusted text
+    /// must cap its size first, as [`Catalog::parse`] does for a catalog.
     pub fn validate_component(
         &self,
         component: &Value,

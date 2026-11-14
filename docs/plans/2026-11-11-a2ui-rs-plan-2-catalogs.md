@@ -7426,9 +7426,11 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
 - Instance size and call caps for `validate_component` (Plan 3, in the message layer that
   receives components): a cap on a component's JSON nodes and on the nested calls one
   component holds, beside the depth cap it already has.
-- `Catalog::from_json(&Value)` precondition: document that a caller parsing untrusted text
-  must bound it first (as `Catalog::parse` does with `MAX_CATALOG_BYTES`), since the node cap
-  runs after parsing; and fuzz `Catalog::parse` and `validate_component` (`cargo-fuzz`).
+- Done (t-1568): `Catalog::from_json` documents that untrusted text is capped before parsing;
+  `fuzz/` holds libFuzzer targets for `Catalog::parse` and `validate_component`, run by
+  `just fuzz <target> [seconds]` on the pinned toolchain without cargo-fuzz; `just check`
+  builds them and keeps their lock on the root's versions, `just audit` audits it; deeper
+  targets (agent catalogs, oracles, ASan, a schedule) are t-1649.
 - Decided (t-1569, Plan 2b Decision 39): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
   `AllowedCallers`, bound to the host-loaded catalog; the spec is amended; open points t-1648.
 - Decided (t-1570, Plan 2b Decision 38): common type names are reserved per protocol version;
