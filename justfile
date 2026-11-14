@@ -73,6 +73,16 @@ deps:
 test:
     cargo nextest run --workspace
     cargo test --doc --workspace
+    just lock-diff-test
+
+# scripts/lock_diff.py's unit tests, offline; -B leaves no __pycache__ behind.
+lock-diff-test:
+    python3 -B -m unittest discover -s scripts -p '*_test.py'
+
+# Compares the working tree's Cargo.lock with the one where HEAD left `base`, fetched or not.
+# What Cargo.lock added, removed and updated since `base`, each new release with its publish date.
+lock-diff base="origin/main":
+    python3 -B scripts/lock_diff.py "$(git merge-base "{{base}}" HEAD)"
 
 # The runtime must build for the browser.
 wasm:

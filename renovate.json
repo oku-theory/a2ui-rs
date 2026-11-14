@@ -50,6 +50,7 @@
     "rebaseWhen": "conflicted",
     "prBodyNotes": [
       "This lock takes the newest compatible releases, with no 7-day wait (plan 2b, Decision 26): read each crate the diff adds; if a release in it is under a week old, close this and take next week's.",
+      "CI's lock-diff job lists, on its run's summary page, each crate added, removed or updated, with each new release's publish date (Decision 30).",
       "CI audits the lock before building it, and the msrv job builds it `--locked` on rust-version. Renovate rewrites this branch only on a conflict, so what you reviewed is what merges."
     ]
   }

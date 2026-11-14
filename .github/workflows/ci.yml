@@ -59,6 +59,31 @@ jobs:
           # Each tool from the pinned commit's manifest, its checksum verified, or the step fails.
           fallback: none
       - run: just ci
+  # What a pull request's Cargo.lock change adds, removes and updates, each new release with its
+  # crates.io publish date, on the run's summary page (t-1636): in the raw diff a new crate is one
+  # [[package]] block among many. It builds nothing and only reads crates.io's API.
+  lock-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # HEAD is the merge commit; its first parent is the base the pull request merges into.
+          fetch-depth: 2
+      - name: summarize the Cargo.lock change
+        # Named, bash runs with pipefail: a failing script fails the step despite `tee`.
+        shell: bash
+        # The base's own script, so a pull request cannot rewrite the summary of its own lock.
+        run: |
+          base="$(git rev-parse HEAD^1)"
+          if git diff --quiet "$base" HEAD -- Cargo.lock; then
+            echo "Cargo.lock unchanged"
+          else
+            git show "$base:scripts/lock_diff.py" > "$RUNNER_TEMP/lock_diff.py"
+            python3 -B "$RUNNER_TEMP/lock_diff.py" "$base" HEAD | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
   # zizmor's online audits (impostor commits, tag and SHA mismatch, known advisories), in a job
   # that builds nothing and restores no cache, so its token is beyond any build script's reach,
   # and whose red result, a finding or a GitHub API outage, leaves the ci job's own.

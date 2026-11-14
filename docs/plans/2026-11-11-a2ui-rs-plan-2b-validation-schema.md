@@ -457,7 +457,7 @@ upstream's reading would be unsafe:
     within `rust-version` where crates declare one; the `msrv` job, building it `--locked` on the
     MSRV, catches the rest. Checked against Renovate's published schema by hand (update types and
     their negation, `rebaseWhen`, manager name), not by `renovate-config-validator`; not verified: a
-    live run (t-1622). A summary of the crates a lock diff adds is t-1636.
+    live run (t-1622). A summary of the crates a lock diff adds is t-1636 (Decision 30).
 
 27. **A pruned entry's absent target (t-1631):** `pruned` skips a target missing from `root`
     rather than failing: `reach` resolved every target in that same `root`, so none is ever
@@ -528,6 +528,33 @@ upstream's reading would be unsafe:
     `cargo check` stubbed; the checks themselves, which build those releases, were not run (t-1622).
     Before merging, `gh workflow run ci.yml --ref <branch>` (AGENTS.md), which runs the job; the
     schedule shows only once it is on `main`.
+
+30. **Cargo.lock change summary (t-1636):** in a raw lock diff, a new transitive crate, the riskiest
+    change, is one `[[package]]` block among many version and checksum lines. `scripts/lock_diff.py
+    <base> [<head>]` (`just lock-diff`, against the merge base with `origin/main` by default)
+    compares the crates of two locks (workspace members have no source and are left out) and prints
+    a Markdown table: each crate added, removed or updated, with all its releases on each side in
+    version order, so a duplicate shows as `1.0.0` to `1.0.0, 2.0.0`, and each release the change
+    brings in with its crates.io publish date and age, flagged under a week (Decision 26's one-week
+    rule) and when yanked. A release from any other source (git, another registry) is shown with
+    that source and no date, only a request to read it by hand: crates.io's date for the same name
+    and version would describe other code. It reads crates.io's API one request a second (its
+    crawler policy) with the `User-Agent` `cargo-lock-diff`, which names no person or project, and
+    fails on any error, and on a name, version or source holding a character a Markdown cell cannot
+    show as is, rather than print a table that hides a change. CI's `lock-diff` job runs it on pull
+    requests whose `Cargo.lock` differs from the merge commit's first parent (`fetch-depth: 2`),
+    with that parent's own copy of the script, so a pull request cannot rewrite its own summary, and
+    appends the table to the run's summary page. It builds nothing, needs no toolchain, and runs in
+    a job of its own with the read-only token; `shell: bash` gives its `tee` pipeline `pipefail`.
+    Python 3.11 or later (`tomllib`), not a Rust tool: the runner has it, and a crate would need a
+    build, its dependencies and a lock of its own; the script says so and exits on an older one.
+    Its unit tests (stdlib `unittest`, offline, fixed dates) run in `just test`, which therefore
+    needs that Python too (stock macOS has 3.9). Considered, not taken: `cargo deny check bans` with
+    `multiple-versions = "warn"`, which prints the dependency tree of every duplicate on each run,
+    noise the summary's release lists replace; `actions/dependency-review-action` and `cargo vet`,
+    which give no publish date. Checked locally: the tests, and the summary of 03b248b's refresh
+    (2 removed, 7 updated, two duplicates gone). Not verified: the job on GitHub, which the first
+    pull request changing `Cargo.lock` runs (t-1622 records it).
 
 ## The algorithm (reference for Tasks 1 and 2)
 
