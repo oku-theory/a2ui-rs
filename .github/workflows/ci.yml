@@ -81,7 +81,8 @@ jobs:
           # HEAD is the merge commit; its first parent is the base the pull request merges into.
           fetch-depth: 2
       - name: summarize the Cargo.lock change
-        # Named, bash runs with pipefail: a failing script fails the step despite `tee`.
+        # Named, bash runs with pipefail, so a failing script still fails the step despite `tee`;
+        # the table, with a FAILED cell for each undated release, has reached the summary page first.
         shell: bash
         # The base's own script, so a pull request cannot rewrite the summary of its own lock.
         run: |

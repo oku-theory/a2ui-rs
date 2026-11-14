@@ -557,8 +557,28 @@ upstream's reading would be unsafe:
     every duplicate on each run, noise the summary's release lists replace;
     `actions/dependency-review-action` and `cargo vet`, which give no publish date. Checked locally:
     the tests, and the summary of 03b248b's refresh (2 removed, 7 updated, two duplicates gone). On
-    GitHub, PR #2, which brings the script in, ran only that skip; the summary's first run is the
-    next pull request changing `Cargo.lock` (t-1622).
+    GitHub, PR #2, which brings the script in, ran only that skip; release PR #3 (run 43591819617)
+    ran the base's script and printed "No crate added, removed or updated." (only workspace members'
+    versions moved), so no crates.io request has run on GitHub yet (t-1622). One error, added by
+    t-1640: a crates.io request failing (a 429, a 5xx, a timeout, a reset connection) lost the whole
+    table of a sixty-crate refresh. `lookup` now retries a transient error (429, 5xx, timeout,
+    network, a connection reset or cut short while reading included) once after five seconds; a 4xx
+    other than 429, or an answer it cannot read, would come back the same, so it is not retried.
+    Otherwise it returns `Unavailable` with a reason the script writes itself (`HTTP 503`,
+    `timeout`, `network error`, `bad answer`, safe in a cell). Once a release stays undated after a
+    transient error, `collect` takes crates.io as down and marks the rest "not tried, crates.io
+    unreachable" without a request: each costs up to 66 seconds (two 30-second timeouts, the wait,
+    the pause), so asking on would outlast the job's 10 minutes and lose the table again. `render`
+    marks each undated release `FAILED (...), read it on crates.io` and counts them in the header,
+    and the script prints the whole table, then exits 1, so the step still fails and nothing passes
+    silently. Honouring a 429's `Retry-After` is left out: at one request a second a 429 is
+    unlikely, and its retry fails into a cell. As CI runs the base's copy, this takes effect on pull
+    requests opened once it is on `main`.
+
+    Correction (f5faf64), without rewriting pushed history: that commit's `Reviewed-by` trailer
+    lists "source-only changes deferred", but a release whose source changes is already an `updated`
+    row (`test_diff_same_version_from_another_source_is_updated`); only a checksum-only change goes
+    unlisted, which crates.io's immutable releases make moot.
 
 31. **The semver tool on toolchain bumps (t-1638):** cargo-semver-checks reads only the rustdoc
     JSON formats it was built for, and Renovate bumps `rust-toolchain.toml` and install-action's pin
