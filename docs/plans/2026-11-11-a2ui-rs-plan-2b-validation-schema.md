@@ -425,26 +425,28 @@ upstream's reading would be unsafe:
     t-1634: a nightly `-Z direct-minimal-versions` resolution already fails, since jsonschema 0.61.1
     needs `percent-encoding ^2.3` while the workspace asks `2`.
 
-26. **jsonschema's pin and Cargo.lock maintenance (t-1630):** `jsonschema = "=0.61.1"` stays (plan
-    2's approved decision) and now says what it holds: users get the jsonschema error texts both
-    libraries' tests quote (`validator.rs` forwards them in `SchemaViolation`). It freezes the top
-    crate only: its dependencies float within their range for a user, `referencing` (`$ref`
-    resolution), `jsonschema-regex` and `jsonschema-value` (`^0.61.1`), `regex` (`^1.11.1`, which
-    decides `pattern` under `PatternOptions::regex()`), `fancy-regex` (`^0.20.1`), so a user can run
-    a mix no test of ours ran until our lock catches up. Its cost: Cargo allows one 0.61.x per
-    graph, so a graph that needs jsonschema 0.61.2 or later, a security fix included, fails to
-    resolve until we release. Our own tests no longer need it, since the reviewed lock holds
-    jsonschema too; relaxing it to `0.61.1` (caret, below 0.62) is the open alternative, the
-    maintainer's call. `Cargo.lock` drifted from what users resolve, since Renovate ran no `cargo`
-    manager: it now runs it for `lockFileMaintenance` only, a `build(deps)` pull request before
-    06:00 UTC on Mondays, never automerged, rebased only on a conflict (`rebaseWhen`), so the lock a
-    person reviewed is the one that merges; a package rule disables every other cargo update type
-    (`!lockFileMaintenance`), so `Cargo.toml` requirements stay a person's change, and with them
-    Renovate's per-crate security pull requests: a fix within range comes with the next refresh,
-    CI's weekly audit flagging it meanwhile, any other by hand. Accepted: the refresh takes the
-    newest compatible releases, with no 7-day wait, as neither Renovate nor cargo ages them, and its
-    pull request CI builds them with a read-only token, its cache scoped to that pull request. So
-    `just ci` now runs `audit` first, `cargo audit --deny yanked` and `cargo deny check sources`
+26. **jsonschema's requirement and Cargo.lock maintenance (t-1630, t-1637):** plan 2 pinned
+    `jsonschema = "=0.61.1"`. It froze the top crate only: its dependencies float within their range
+    for a user, `referencing` (`$ref` resolution), `jsonschema-regex` and `jsonschema-value`
+    (`^0.61.1`), `regex` (`^1.11.1`, which decides `pattern` under `PatternOptions::regex()`),
+    `fancy-regex` (`^0.20.1`), so a user could run jsonschema 0.61.1 beside later `referencing` or
+    `jsonschema-*` releases. And Cargo allows one 0.61.x per graph, so a graph needing 0.61.2 or
+    later, a security fix included, would fail to resolve until we released. Our tests did not need
+    it, since the reviewed lock holds jsonschema too. So, by the maintainer's choice (t-1637), it is
+    now `0.61.1`, a caret below 0.62: a user takes 0.61.x patch releases, a fresh resolution taking
+    the siblings of the same release, while `regex` and `fancy-regex` float as before, and the error
+    texts both libraries' tests quote (`validator.rs` forwards them in `SchemaViolation`) change for
+    us only through a reviewed lock refresh, whose CI runs those tests; a user may see a patch
+    release's wording first. `Cargo.lock` drifted from what users resolve, since Renovate ran no
+    `cargo` manager: it now runs it for `lockFileMaintenance` only, a `build(deps)` pull request
+    before 06:00 UTC on Mondays, never automerged, rebased only on a conflict (`rebaseWhen`), so the
+    lock a person reviewed is the one that merges; a package rule disables every other cargo update
+    type (`!lockFileMaintenance`), so `Cargo.toml` requirements stay a person's change, and with
+    them Renovate's per-crate security pull requests: a fix within range comes with the next
+    refresh, CI's weekly audit flagging it meanwhile, any other by hand. Accepted: the refresh takes
+    the newest compatible releases, with no 7-day wait, as neither Renovate nor cargo ages them, and
+    its pull request CI builds them with a read-only token, its cache scoped to that pull request.
+    So `just ci` now runs `audit` first, `cargo audit --deny yanked` and `cargo deny check sources`
     (crates.io only) reading the lock before any build script, the `msrv` job audits before it
     builds, and the pull request's body asks the reviewer to read each added crate and to skip a
     week when a release is younger than one. `msrv-resolved` ignores the lock, so a lock refresh
