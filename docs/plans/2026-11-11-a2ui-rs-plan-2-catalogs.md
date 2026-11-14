@@ -7429,8 +7429,8 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
 - `Catalog::from_json(&Value)` precondition: document that a caller parsing untrusted text
   must bound it first (as `Catalog::parse` does with `MAX_CATALOG_BYTES`), since the node cap
   runs after parsing; and fuzz `Catalog::parse` and `validate_component` (`cargo-fuzz`).
-- Spec: the function registry of Plan 4 (`FunctionRegistry`) reuses `FunctionDef` and
-  `AllowedCallers` rather than a second function description; amend the design spec.
+- Decided (t-1569, Plan 2b Decision 39): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
+  `AllowedCallers`, bound to the host-loaded catalog; the spec is amended; open points t-1648.
 - Decided (t-1570, Plan 2b Decision 38): common type names are reserved per protocol version;
   a test pins the 1.0.0 names until the first 1.0.x `common_types.json` arrives.
 - Truncate `SchemaViolation` messages: jsonschema embeds the offending instance in its

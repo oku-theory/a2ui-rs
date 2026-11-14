@@ -70,9 +70,14 @@ One concept per module:
   write returns the paths it touched.
 - `dynamic`: `Dynamic<T>` (literal, `@path`, `@call`) and an `Evaluator` resolving in a scope; a
   failed binding yields `null` plus an `EXPRESSION_ERROR`, siblings keep rendering.
-- `function`: `FunctionRegistry` (`returnType`, `allowedCallers`, `requiresUserActivation`, local
-  vs `callAgentFunction` routing); implementations are `Fn(&Args, &Ctx) -> Result<Value>` registered
-  per catalog.
+- `function`: `FunctionRegistry` binds implementations, `Fn(&Args, &Ctx) -> Result<Value>`, to the
+  functions of the catalogs the host loaded, sharing each catalog, never copying it. It describes
+  no function itself: the return type, `allowedCallers` (`AllowedCallers`),
+  `requiresUserActivation` and argument validator are the catalog's `FunctionDef`, read through
+  `Catalog::function`. A call runs locally when an implementation is registered (`@` functions
+  always), else goes to the agent as `callAgentFunction`, schema-only declarations included;
+  `AllowedCallers` and `requires_user_activation()` gate both routes. A catalog the agent sends
+  never rebinds or loosens a host implementation (Plan 2b, Decision 39).
 - `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
   size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
   backtracking regex.

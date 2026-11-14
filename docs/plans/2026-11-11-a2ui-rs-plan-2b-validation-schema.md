@@ -821,6 +821,35 @@ upstream's reading would be unsafe:
     any catalog breaks. `agent_to_renderer.json` is not affected: it is the runtime's own
     schema, and no catalog `$defs` is merged into it.
 
+39. **The function registry reuses `FunctionDef` (t-1569):** Plan 4's `FunctionRegistry` holds
+    implementations only. What a function is (return type, `allowedCallers`,
+    `requiresUserActivation`, the compiled validator of its calls) is already the catalog's
+    `FunctionDef`, checked at load (a function requiring user activation must be `rendererOnly`)
+    and used by `validate_component` (an `agentOnly` function cannot be called from a
+    component). A second description in the registry could disagree with its catalog, so the
+    registry reads it through `Catalog::function`. It shares the catalog, never copies its
+    definitions; the handle takes a `&'static Catalog` (the shared basic catalog, Decision 35)
+    as well as an `Arc<Catalog>`, the type being Plan 4's choice.
+
+    Routing follows upstream's fallback rule (protocol, "Function Location Resolution"): `@`
+    functions run locally, a function with a registered implementation runs locally, and any
+    other call is sent as `callAgentFunction`. A function the catalog declares without an
+    implementation (schema-only) is therefore legal and goes to the agent, never refused at
+    registration. `AllowedCallers` and `requires_user_activation()` do not choose the route;
+    they gate both routes of a declared function (an `agentOnly` call or a passive call needing
+    a gesture is an `EXPRESSION_ERROR`, never dispatched). A call to an undeclared name is
+    already refused by `validate_component` (`UnknownFunction`), which upstream allows a
+    renderer that declares the agent functions it expects; so registering an implementation for
+    a name the catalog lacks is an error too, as it could never be called.
+
+    The policy is a trust boundary: an implementation is host code, and the catalog the host
+    registered it with is the one whose policy guards it. So implementations bind to that
+    loaded catalog, not to its id string: a catalog the agent sends (inline, or one reusing a
+    registered id) never rebinds them or loosens their `allowedCallers` or
+    `requiresUserActivation`. Left to Plan 4, tracked as t-1648: what re-registering an id
+    does to the old bindings, and two catalogs sharing an id. The design spec's `function`
+    module now says so.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
