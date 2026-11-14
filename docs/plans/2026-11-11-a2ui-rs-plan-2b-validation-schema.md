@@ -381,18 +381,20 @@ upstream's reading would be unsafe:
     empty branch would silently drop CI again. A job of its own, `release-pr-ci`, holding only
     `actions: write`, so release-plz's step never has it, checks the name again (it reaches a `gh`
     command line, where it must not read as an option) and runs `gh workflow run ci.yml --ref
-    <branch> -f msrv_resolved=false -f semver_checks=true` (Decision 28); if that fails, rerunning
-    the job dispatches again. The run's
+    <branch> -f msrv_resolved=false -f minimal_versions=false -f semver_checks=true` (Decisions 28,
+    29); if that fails, rerunning the job dispatches again. The run's
     checks land on the branch's head commit, so they show on the PR and match required checks by job
     name. No new secret: a GitHub App or personal token would trigger `pull_request` itself but is a
     long-lived credential beside `contents: write`; gating `release` with `workflow_run` would put
     no check on the PR, and zizmor flags that trigger. `ci.yml`'s dispatch gains a boolean
-    `msrv_resolved` input, true by default so a manual dispatch still runs that job; the release PR
-    skips it, since it builds unreviewed crate releases, which the weekly run covers. Each push to
+    `msrv_resolved` input (and later `minimal_versions`, Decision 29), true by default so a manual
+    dispatch still runs that job; the release PR skips it, since it builds unreviewed crate releases,
+    which the weekly run covers. Each push to
     `main` that moves the PR dispatches a new run on its new head; older runs are not cancelled
     (their own concurrency group), which costs runner time only. The `release` job still does not
     wait for CI on `main`. The user's part (t-1633): make `ci`, `msrv` and `zizmor` required checks
-    on `main`, never `msrv-resolved`, which this run skips, and require branches to be up to date
+    on `main`, never `msrv-resolved` or `minimal-versions`, which this run skips, and require
+    branches to be up to date
     before merging (or use the merge queue, which `ci.yml` already runs on), so the commit `release`
     publishes is the one CI tested; until then, and for an admin who bypasses them, a release PR can
     merge before its run ends. A required `zizmor` also blocks merges during a GitHub API outage or
@@ -422,9 +424,9 @@ upstream's reading would be unsafe:
     one `X.Y.Z`: a pre-release or a crate with its own version fails it loudly. Checked locally:
     `just package` passes, fails without `catalog.json` in `include`, and with `CI` set refuses a
     dirty tree; the user crate's resolution and audit against the unpacked packages pass. Not run:
-    its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds are
-    t-1634: a nightly `-Z direct-minimal-versions` resolution already fails, since jsonschema 0.61.1
-    needs `percent-encoding ^2.3` while the workspace asks `2`.
+    its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds were
+    t-1634 (Decision 29): a nightly `-Z direct-minimal-versions` resolution failed, since jsonschema
+    0.61.1 needs `percent-encoding ^2.3` while the workspace asked `2`.
 
 26. **jsonschema's requirement and Cargo.lock maintenance (t-1630, t-1637):** plan 2 pinned
     `jsonschema = "=0.61.1"`. It froze the top crate only: its dependencies float within their range
@@ -496,6 +498,36 @@ upstream's reading would be unsafe:
     commands on `PATH`: one crate checked and one notice, a failing tool fails it, an index answer
     of 500 fails it, and no crate on the index passes with a notice; the tool itself was not run
     locally, as it builds unreviewed releases. Not verified: the job on GitHub (t-1622).
+
+29. **Our lower bounds (t-1634):** every requirement in `workspace.dependencies` now names the
+    release `Cargo.lock` held when it was raised (`serde_json = "1.0.154"`, `percent-encoding =
+    "2.3.2"`, ...; `jsonschema` stays at Decision 26's `0.61.1`), since that is what our builds and
+    tests exercised then (later lock refreshes move past them); older releases were never checked,
+    and the minimum resolution already failed: jsonschema 0.61.1 needs `percent-encoding ^2.3`, the
+    workspace asked `2`, so nightly picked 2.0.0 and gave up. Finding each crate's true minimum
+    would mean building old, unreviewed releases one by one, for a library whose users take recent
+    releases anyway. Raising one later is a requirement change, so AGENTS.md's dispatch rule applies
+    (its pull request skips the check). `just minimal-versions` guards them: on a copy of the
+    tracked files under `target/`, nightly cargo resolves `-Z direct-minimal-versions` (each
+    workspace member's direct dependency at its lowest allowed release, the rest the newest), `cargo
+    audit --deny yanked` reads that lock before anything builds, then the MSRV's cargo checks
+    `a2ui-runtime` and `a2ui-catalog-basic`, native and wasm32, `--locked`. So the published
+    libraries' bounds compile at their minimum; the others (`a2ui-conformance`'s, which is not
+    published, and dev-dependencies) only resolve, and nothing runs tests there, so behaviour at the
+    minimum, such as jsonschema's error texts (Decision 26), is not covered. The job is t-1634's
+    regression guard. Accepted gap: a pull request may start using an API newer than a bound after a
+    lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch skips
+    it, so a release made in between could publish a bound that does not compile (t-1639). Nightly
+    only resolves, unpinned, as `-Z` flags need it; a nightly that breaks the flag fails the job,
+    not a release. Like `msrv-resolved` it builds unreviewed releases: `ci.yml`'s `minimal-versions`
+    job runs weekly on `main` and on a dispatch (`minimal_versions`, on by default, off on the
+    release PR's), with the read-only token, no cache step and its own 60-minute bound; it accepts
+    `msrv-resolved`'s exposure of `main`'s cache scope. Checked locally: the resolution fails on the
+    old bounds and passes on the new ones, the audit passes (one allowed warning, `unsafe-libyaml`
+    unmaintained, through `serde_yaml_ng` as in our lock), and the recipe runs to the end with
+    `cargo check` stubbed; the checks themselves, which build those releases, were not run (t-1622).
+    Before merging, `gh workflow run ci.yml --ref <branch>` (AGENTS.md), which runs the job; the
+    schedule shows only once it is on `main`.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

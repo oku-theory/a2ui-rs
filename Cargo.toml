@@ -10,24 +10,27 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/oku-theory/a2ui-rs"
 
 [workspace.dependencies]
+# Each lower bound is the release Cargo.lock held when it was last raised; a new dependency starts
+# at the lock's release too. Weekly, `just minimal-versions` resolves them all and checks that the
+# published libraries still compile at theirs (plan 2b, Decision 29).
 a2ui-catalog-basic = { path = "crates/a2ui-catalog-basic", version = "0.1.0" }
 a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
 # Caret, below 0.62: a user takes 0.61.x patch releases, security fixes included; its siblings
 # and regex float as before. Its error texts, which our tests quote, change for us only through the reviewed
 # Cargo.lock (plan 2b, Decision 26).
 jsonschema = { version = "0.61.1", default-features = false }
-libtest-mimic = "0.8"
-percent-encoding = "2"
-regex = "1"
-rstest = "0.28"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml_ng = "0.10"
-snafu = "0.9"
-speculoos = "0.13"
-toml = "1"
-trybuild = "1"
-unicode-ident = "1"
+libtest-mimic = "0.8.2"
+percent-encoding = "2.3.2"
+regex = "1.13.1"
+rstest = "0.28.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml_ng = "0.10.0"
+snafu = "0.9.2"
+speculoos = "0.13.0"
+toml = "1.2.1"
+trybuild = "1.0.122"
+unicode-ident = "1.0.27"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

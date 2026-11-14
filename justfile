@@ -269,6 +269,39 @@ msrv-resolved:
     cargo check --manifest-path "$user/Cargo.toml" --locked
     cargo check --manifest-path "$user/Cargo.toml" --locked --target wasm32-unknown-unknown
 
+# Our lower bounds, each direct dependency at its lowest allowed release, checked on the MSRV.
+# Nightly cargo resolves them (-Z direct-minimal-versions), so it builds unreviewed releases.
+minimal-versions:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # A copy of the workspace, so Cargo.lock stays ours; a killed run leaves it under target/.
+    mkdir -p target
+    copy="$(mktemp -d target/minimal-versions.XXXXXX)"
+    trap 'rm -rf "$copy"' EXIT
+    # The tracked files as the working tree holds them, symlinks kept.
+    git ls-files -z | tar --null -T - -cf - | tar -xf - -C "$copy"
+    rm "$copy/Cargo.lock"
+    # The MSRV runs everything but the resolver, so the pinned toolchain is never installed.
+    RUSTUP_TOOLCHAIN="$(just msrv-version)"
+    export RUSTUP_TOOLCHAIN
+    just msrv-toolchain
+    # Only the resolver runs on nightly (`+nightly` beats RUSTUP_TOOLCHAIN): nothing builds with it.
+    rustup toolchain install nightly --profile minimal
+    # Its version, for the log: nightly is not pinned.
+    cargo +nightly -V
+    cargo +nightly generate-lockfile --manifest-path "$copy/Cargo.toml" -Z direct-minimal-versions
+    # Resolving runs no crate's code: known advisories, known-malicious crates included, and
+    # yanked releases stop the run before any build script does.
+    cargo audit --file "$copy/Cargo.lock" --deny yanked
+    # Its builds stay in the copy's own target/, gone with it, whatever the caller's setting.
+    export CARGO_TARGET_DIR="$PWD/$copy/target"
+    # The libraries' dependencies as resolved, for the log.
+    cargo tree --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic \
+        --target all -e normal,build --prefix none | sed -E 's/ \((\*|proc-macro)\)//g' | sort -u
+    cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic
+    cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic \
+        --target wasm32-unknown-unknown
+
 # cargo-semver-checks against our libraries' crates.io releases: builds unreviewed releases.
 semver-checks:
     #!/usr/bin/env bash

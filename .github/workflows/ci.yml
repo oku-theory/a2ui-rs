@@ -2,8 +2,9 @@ name: ci
 # Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
 # Renovate's included, runs once, through its pull request, except release-plz's, which its
 # workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main,
-# the msrv-resolved job checks what new upstream releases change, the ci job's audit sees new
-# crate advisories and the zizmor job new action advisories.
+# the msrv-resolved job checks what new upstream releases change, the minimal-versions job checks
+# our lower bounds, the ci job's audit sees new crate advisories and the zizmor job new action
+# advisories.
 on:
   push:
     branches: [main]
@@ -13,6 +14,10 @@ on:
     inputs:
       msrv_resolved:
         description: Also run the msrv-resolved job, which builds unreviewed crate releases.
+        type: boolean
+        default: true
+      minimal_versions:
+        description: Also run the minimal-versions job, which builds unreviewed crate releases.
         type: boolean
         default: true
       # Off by default: before release-plz's bump, a branch carries the released version, so any
@@ -123,6 +128,26 @@ jobs:
           tool: just,cargo-audit
           fallback: none
       - run: just msrv-resolved
+  # Our lower bounds (t-1634): each direct dependency at its lowest allowed release, resolved by
+  # nightly cargo, audited, then checked on the MSRV. Unreviewed releases again, so like
+  # msrv-resolved: weekly or on demand (not on the release PR's dispatch), no cache, its own job.
+  minimal-versions:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.minimal_versions)
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The recipe installs nightly, for the resolver only, and the MSRV, for the checks.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-audit
+          fallback: none
+      - run: just minimal-versions
   # cargo-semver-checks against crates.io's releases (t-1632): on release-plz's release PR, whose
   # dispatch sets semver_checks, where the bumped versions must cover the API changes, or on demand
   # with semver_checks=true. Not on other pull requests: a breaking change waits for the release
