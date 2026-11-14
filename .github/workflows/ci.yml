@@ -1,7 +1,8 @@
 name: ci
 # Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
 # Renovate's included, runs once, through its pull request. Weekly on main, the msrv-resolved
-# job checks what new upstream releases change, and the ci job's audit sees new advisories.
+# job checks what new upstream releases change, the ci job's audit sees new crate advisories and
+# the zizmor job new action advisories.
 on:
   push:
     branches: [main]
@@ -37,8 +38,28 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          tool: cargo-nextest,just,cargo-deny,cargo-audit
+          tool: cargo-nextest,just,cargo-deny,cargo-audit,zizmor
+          # Each tool from the pinned commit's manifest, its checksum verified, or the step fails.
+          fallback: none
       - run: just ci
+  # zizmor's online audits (impostor commits, tag and SHA mismatch, known advisories), in a job
+  # that builds nothing and restores no cache, so its token is beyond any build script's reach,
+  # and whose red result, a finding or a GitHub API outage, leaves the ci job's own.
+  zizmor:
+    runs-on: ubuntu-latest
+    # A stalled GitHub API call ends here, not after six hours.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,zizmor
+          fallback: none
+      - run: just zizmor-online
+        env:
+          GH_TOKEN: ${{ github.token }}
   # The declared MSRV (`rust-version`) for users, apart from the pinned compiler above:
   # RUSTUP_TOOLCHAIN overrides rust-toolchain.toml for every rustup proxy in this job.
   msrv:
@@ -50,6 +71,7 @@ jobs:
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-nextest,just
+          fallback: none
       # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
       - run: |
           version="$(just msrv-version)"
@@ -79,4 +101,5 @@ jobs:
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-audit
+          fallback: none
       - run: just msrv-resolved

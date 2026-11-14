@@ -1,13 +1,14 @@
-# Formatting, lints, dependency rules, pinned actions and the wasm build.
+# Formatting, lints, dependency rules, pinned and audited actions, and the wasm build.
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
     just deps
     just actions-pinned
+    just zizmor
     just wasm
 
 # Every workflow step's action is a full commit SHA, its release in a comment for Renovate.
-# Checks the form only, offline: that each SHA is its tag's commit was checked by hand (t-1619).
+# Checks the form only, offline: `just zizmor-online` checks each SHA against its tag.
 actions-pinned:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -26,6 +27,34 @@ actions-pinned:
         echo "$unpinned" >&2
         exit 1
     fi
+
+# Audits .github with zizmor, offline: pins, permissions, credentials, injections.
+zizmor: zizmor-installed
+    zizmor --offline .github
+
+# zizmor's online audits too, with GH_TOKEN: each SHA is its commented tag's commit, in the named
+# repository (no fork's impostor commit), and no pinned action has a known advisory. CI runs it.
+zizmor-online: zizmor-installed
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${GH_TOKEN:-}" ]; then
+        echo "zizmor-online needs GH_TOKEN, a token that reads public repositories" >&2
+        exit 1
+    fi
+    # These would skip the online audits, or swap the config, and still pass.
+    unset ZIZMOR_OFFLINE ZIZMOR_NO_ONLINE_AUDITS ZIZMOR_CONFIG ZIZMOR_NO_CONFIG
+    zizmor --gh-token "$GH_TOKEN" .github
+
+# zizmor is on PATH; prints its version, which CI takes from taiki-e/install-action's manifest.
+[private]
+zizmor-installed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v zizmor > /dev/null; then
+        echo "zizmor is missing: brew install zizmor, or cargo install --locked zizmor" >&2
+        exit 1
+    fi
+    zizmor --version
 
 # a2ui-runtime: no direct UI, async or JS dependency; wasm-bindgen only through getrandom.
 deps:

@@ -292,7 +292,7 @@ upstream's reading would be unsafe:
     `uses:` in `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it finds
     no workflow. It checks the form offline, not that the SHA is that tag's commit: each pin was
     checked by hand against the peeled tag when set, and Renovate keeps SHA and comment together
-    afterwards; a hand edit is unguarded until a tool such as zizmor runs in CI (t-1625). Local
+    afterwards; `just zizmor-online` checks a hand edit in CI (Decision 22). Local
     `./` actions and `docker://` images would fail it; none exist. The tools
     `taiki-e/install-action` installs carry no version: the manifests in its pinned commit fix
     them, so a bump of that action moves them too. `release-plz/action` pins its own nested
@@ -310,6 +310,35 @@ upstream's reading would be unsafe:
     merge queue, should one be enabled. A branch without a pull request runs only on demand (`gh
     workflow run ci.yml --ref <branch>`). Release-plz's pull request, opened with
     `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
+
+22. **zizmor (t-1625):** `just zizmor`, part of `just check`, audits all of `.github` (workflows,
+    composite actions under `.github/actions`, flow-style `uses:` the `actions-pinned` grep
+    misses) offline at zizmor's default persona. `just zizmor-online` adds the online audits and
+    fails without `GH_TOKEN`, so no exported token turns `just check` online: each SHA is the
+    commit of the tag in its `# vX.Y.Z` comment (`ref-version-mismatch`), lives in the named
+    repository rather than only in a fork (`impostor-commit`), and has no known advisory
+    (`known-vulnerable-actions`). `.github/zizmor.yml` states the `unpinned-uses` policy, a SHA
+    for every action, `actions/*` included (1.32.0's default already, now independent of it);
+    a config change or a `# zizmor: ignore` comment silences an audit, so review it as a
+    workflow change. `just actions-pinned` stays for the comment's form, which Renovate reads.
+    Both recipes print zizmor's version and say how to install it when it is missing (`brew
+    install zizmor` or `cargo install --locked zizmor`). CI's `zizmor` job builds nothing and
+    restores no cache: checkout, `taiki-e/install-action` (`just,zizmor`), then `just
+    zizmor-online` with the job's read-only token, so no build script can read the token, and a
+    red result, a finding or a GitHub API outage, leaves the `ci` job's own; the `ci` job installs
+    zizmor too for `just check`'s offline run. Every `install-action` step sets `fallback: none`:
+    each tool comes from the pinned commit's manifest, its sha256 verified (zizmor 1.32.0 at
+    `cfdb7ed`), never from an unpinned cargo-binstall. A Renovate bump of `install-action` moves
+    zizmor too, so a red bump may be a new audit; a local zizmor of another release may disagree
+    with CI's, and its printed version tells which. It guards hand edits and Renovate drift, not a
+    hostile pull request, which can rewrite the job itself; review does that. GitHub's
+    repository setting requiring full-SHA pins also covers nested actions' own `uses:`, which
+    zizmor does not follow; it is the user's to enable (t-1622). Checked by hand on copies: a
+    tag-pinned `actions/checkout` fails offline, in a workflow step, a composite action and a
+    flow-style `uses:`; a SHA whose comment names another tag fails online only; no impostor
+    commit was forged. zizmor found nothing at the regular persona; the auditor persona's
+    findings on `release-plz.yml` (no workflow-level `permissions`, secrets outside an
+    environment) are t-1626's. Not verified: the jobs on GitHub (t-1622).
 
 ## The algorithm (reference for Tasks 1 and 2)
 
