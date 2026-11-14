@@ -77,7 +77,7 @@ One concept per module:
   `Catalog::function`. A call runs locally when an implementation is registered (`@` functions
   always), else goes to the agent as `callAgentFunction`, schema-only declarations included;
   `AllowedCallers` and `requires_user_activation()` gate both routes. A catalog the agent sends
-  never rebinds or loosens a host implementation (Plan 2b, Decision 39).
+  never rebinds or loosens a host implementation (Plan 2b, Decision 40).
 - `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
   size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
   backtracking regex.
@@ -99,7 +99,7 @@ A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRI
 `INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `CATALOG_NOT_FOUND`, and the
 `DATA_ERROR` and `CATALOG_ERROR` the conformance suites expect; `UNKNOWN_FUNCTION` is the agent's
 reply, which the renderer reads, not one it raises; a `#[non_exhaustive]` enum that gains each code
-with the first error raising it, and a code per stage, plan 2b Decision 33) and
+with the first error raising it, and a code per stage, plan 2b Decision 34) and
 `category()` matching the harness taxonomy (`Parse`, `Validation`, `Integrity`, `Recursion`,
 `Catalog`, `Data`, `Expression`, `State`, `Compilation`). `Display` is English for logs; the
 application localizes from the code. Input an error quotes (paths, names, `$ref`s, schema

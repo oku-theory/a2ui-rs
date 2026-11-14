@@ -7431,19 +7431,19 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
   `just fuzz <target> [seconds]` on the pinned toolchain without cargo-fuzz; `just check`
   builds them and keeps their lock on the root's versions, `just audit` audits it; deeper
   targets (agent catalogs, oracles, ASan, a schedule) are t-1649.
-- Decided (t-1569, Plan 2b Decision 39): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
+- Decided (t-1569, Plan 2b Decision 40): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
   `AllowedCallers`, bound to the host-loaded catalog; the spec is amended; open points t-1648.
-- Decided (t-1570, Plan 2b Decision 38): common type names are reserved per protocol version;
+- Decided (t-1570, Plan 2b Decision 39): common type names are reserved per protocol version;
   a test pins the 1.0.0 names until the first 1.0.x `common_types.json` arrives.
 - Truncate `SchemaViolation` messages: jsonschema embeds the offending instance in its
   message, so one large invalid value makes a large error; cap the text (with a marker) at
   the error boundary.
-- Done (t-1572, Plan 2b Decision 35): a shared basic catalog; `a2ui_catalog_basic::catalog()`
+- Done (t-1572, Plan 2b Decision 36): a shared basic catalog; `a2ui_catalog_basic::catalog()`
   compiles it once, in a `std::sync::OnceLock`.
-- Done (t-1573, Plan 2b Decision 36): wasm bundle size measured; `jsonschema` is 2.52 MiB of the
+- Done (t-1573, Plan 2b Decision 37): wasm bundle size measured; `jsonschema` is 2.52 MiB of the
   runtime's 2.81 MiB, `boon` would be 1.37 MiB; the swap waits for Plan 6's size budget
   (t-1646).
 - Plan 6: set a wasm size budget for the renderer, measured after `wasm-opt` and checked in CI;
-  if the runtime exceeds it, evaluate `boon` (t-1646, Plan 2b Decision 36).
+  if the runtime exceeds it, evaluate `boon` (t-1646, Plan 2b Decision 37).
 - A wasm runtime smoke test that builds and runs a catalog validator in a browser (Plan 6,
   `wasm-bindgen-test`): today wasm32 is only built, never run.

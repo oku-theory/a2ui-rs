@@ -45,7 +45,7 @@ const NESTED: &str = "only the catalog's top level may declare it";
 /// is left to the schema build, whose meta-schema check rejects it.
 ///
 /// A common types reference must name a common type, not a catalog definition it would land
-/// on once localized (Plan 2b, Decision 37).
+/// on once localized (Plan 2b, Decision 38).
 ///
 /// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
 /// so they are refused like `#/title`. Pointers are built only for an error. The document is at

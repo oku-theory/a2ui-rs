@@ -658,7 +658,7 @@ upstream's reading would be unsafe:
     the user published `a2ui-catalog-basic` 0.2.0 by hand from that tag, after its dry run passed
     against the published runtime, added its trusted publisher and revoked the token; `publish =
     false` is gone, so the next release publishes both crates by trusted publishing.
-33. **`Error::code()` (t-1565):** each error carries an `ErrorCode` beside its `Category`, the
+34. **`Error::code()` (t-1565):** each error carries an `ErrorCode` beside its `Category`, the
     `code` a renderer `error` message or surface diagnostic reports. It lands ahead of Plan 3's
     message processor, against Plan 2's deferral, so each variant's code is fixed where the
     variant is. One private match decides both per variant (`Inner::class`), so a new variant must
@@ -693,10 +693,10 @@ upstream's reading would be unsafe:
     only: the cases with a `rendererError` code are message-processor cases, skipped until Plan 3
     runs them and compares codes too (t-1643).
 
-34. **Component size and call caps (t-1567):** `validate_component` refuses, before any other
+35. **Component size and call caps (t-1567):** `validate_component` refuses, before any other
     check, its depth cap included, an instance holding more than 65 536 JSON nodes or 1 024 calls,
     as `ComponentLimit` (`ValidationError`, `VALIDATION_FAILED`; the message names the cap, the
-    code stays coarse as Decision 33's codes are). The depth cap bounded recursion, not work: a
+    code stays coarse as Decision 34's codes are). The depth cap bounded recursion, not work: a
     flat array of a million calls ran a million function validators. A call is any object holding
     an `@call` key, nested ones, calls into unknown catalogs, non-string `@call`s and ones under an
     envelope key the walk skips included: counting more than is checked errs on the safe side.
@@ -714,7 +714,7 @@ upstream's reading would be unsafe:
     Instances it accepted before can now be refused: a behavioural tightening to note in the
     release notes, which `cargo-semver-checks` does not see.
 
-35. **One shared basic catalog (t-1572):** `a2ui_catalog_basic::catalog()` returns
+36. **One shared basic catalog (t-1572):** `a2ui_catalog_basic::catalog()` returns
     `Result<&'static Catalog, Error>` and keeps the loaded catalog in a `std::sync::OnceLock`
     (stable since 1.70, under our 1.88 MSRV; on `wasm32-unknown-unknown` without threads it
     is a cell). It parsed and compiled the catalog, about 20 ms, on every call; a renderer
@@ -732,7 +732,7 @@ upstream's reading would be unsafe:
     named (a renderer on a hot path) has not arrived; the change is small and every caller in
     the workspace already only borrowed it.
 
-36. **The wasm cost of `jsonschema` (t-1573):** measured on 2026-11-14 with Rust 1.99.0, each
+37. **The wasm cost of `jsonschema` (t-1573):** measured on 2026-11-14 with Rust 1.99.0, each
     case a `cdylib` for `wasm32-unknown-unknown` built `--release` with `opt-level = "s"`,
     `lto = true`, `codegen-units = 1`, `panic = "abort"` and `strip = true`, without `wasm-opt`
     (not installed); compressed with `gzip -9`. Rows 2 and 4 compile a schema read from the
@@ -769,7 +769,7 @@ upstream's reading would be unsafe:
     `validator.rs` and `catalog/compile.rs`. The measurement crates were throwaway, a dozen lines
     each; Plan 6's budget should come with a committed size check instead.
 
-37. **A `common_types.json` `$ref` names a common type (t-1575):** localizing drops the document
+38. **A `common_types.json` `$ref` names a common type (t-1575):** localizing drops the document
     part of a `$ref`, so `common_types.json#/$defs/Weight` resolved to the catalog's own
     `Weight`: lenient, not unsafe (the caps applied), but the reference meant one document and
     reached another. Load rule 4 now refuses a `common_types.json` reference (any of its three
@@ -783,7 +783,7 @@ upstream's reading would be unsafe:
     (`#/$defs/DynamicString/oneOf/99`) is still the validation schema's check to report. The
     commit is marked breaking: a catalog that loaded before can be refused.
 
-38. **Common type names are reserved per protocol version (t-1570):** `check_defs` refuses a
+39. **Common type names are reserved per protocol version (t-1570):** `check_defs` refuses a
     catalog `$defs` entry named like a common type, so a 1.0.x `common_types.json` adding a type
     `T` would refuse a catalog declaring 1.0.0 whose own `$defs` has `T`, valid when written.
     Three answers were weighed:
@@ -791,20 +791,20 @@ upstream's reading would be unsafe:
     - Namespacing the copied common types (`#/$defs/common/T` or a prefix): the validation
       schema must keep upstream's flattened shape, where common types sit at `#/$defs/<name>`
       (conformance compares it), and upstream's own v1.0 catalogs reference them by bare name
-      (`#/$defs/ChildList`, Decision 37), so a namespace would break both. Refused.
+      (`#/$defs/ChildList`, Decision 38), so a namespace would break both. Refused.
     - **Chosen: version-scoped names.** The runtime keeps, per supported patch version, the set
       of common type names that version defines. A catalog reads the set of its
       `protocolVersion`: `1.0` is `1.0.0`, the set that reserves the fewest names and so refuses
       the fewest catalogs; a patch newer than any known reads the newest set (patches compared
       as digit strings, longest first, never parsed into an integer). Every place that keys on
-      a common type name reads that set, not the embedded `$defs`: `check_defs`, Decision 37's
+      a common type name reads that set, not the embedded `$defs`: `check_defs`, Decision 38's
       check, the own-`$defs` filter and the `add_common_types` merge of
       `catalog/validation_schema.rs` (which today drop and overwrite a catalog entry named like
       a common type), the descriptions copied there, and `catalog/flatten.rs`'s mixin test.
       A 1.0.0 catalog may then define `T`: its `#/$defs/T` reaches its own entry, and its
       `common_types.json#/$defs/T` is refused, `T` not being a 1.0.0 type. A bare `#/$defs/T`
       in a 1.0.0 catalog with no own `T` is a dangling reference, not the newer common type:
-      Decision 37's "such a name can only mean the common type" holds per version.
+      Decision 38's "such a name can only mean the common type" holds per version.
     - **The bodies are the newest embedded ones**, since one runtime validates every 1.0.x
       message with one set of schemas. So the closure of common types a catalog pulls in may
       reach a name only a newer version defines (a 1.0.1 `ChildList` whose body refers to a new
@@ -821,14 +821,14 @@ upstream's reading would be unsafe:
     any catalog breaks. `agent_to_renderer.json` is not affected: it is the runtime's own
     schema, and no catalog `$defs` is merged into it.
 
-39. **The function registry reuses `FunctionDef` (t-1569):** Plan 4's `FunctionRegistry` holds
+40. **The function registry reuses `FunctionDef` (t-1569):** Plan 4's `FunctionRegistry` holds
     implementations only. What a function is (return type, `allowedCallers`,
     `requiresUserActivation`, the compiled validator of its calls) is already the catalog's
     `FunctionDef`, checked at load (a function requiring user activation must be `rendererOnly`)
     and used by `validate_component` (an `agentOnly` function cannot be called from a
     component). A second description in the registry could disagree with its catalog, so the
     registry reads it through `Catalog::function`. It shares the catalog, never copies its
-    definitions; the handle takes a `&'static Catalog` (the shared basic catalog, Decision 35)
+    definitions; the handle takes a `&'static Catalog` (the shared basic catalog, Decision 36)
     as well as an `Arc<Catalog>`, the type being Plan 4's choice.
 
     Routing follows upstream's fallback rule (protocol, "Function Location Resolution"): `@`
