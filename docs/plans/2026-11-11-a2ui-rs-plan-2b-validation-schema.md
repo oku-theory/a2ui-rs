@@ -230,20 +230,20 @@ upstream's reading would be unsafe:
     code change, and a local run on another version disagrees with CI. The wasm build needs its
     target installed, which the file now says once. A bump is its own `build(toolchain)` commit: new
     channel, `TRYBUILD=overwrite`, new lints fixed. `renovate.json` (t-1616) enables Renovate's
-    `rust-toolchain` manager (and, since Decision 21, `github-actions`), never `cargo`, so it never
-    touches `rust-version` or `Cargo.lock`; once the Renovate GitHub App is installed on the
-    repository (open: t-1622), it opens that pull request before 06:00 UTC on Mondays for releases
-    at least a week old, with these steps in its body and its Dependency Dashboard as the sign it
-    runs. A person finishes and squash-merges it, since the hosted app runs no commands and the
-    `.stderr` files need re-reading. Patch releases are proposed too. Enabling its `cargo` manager
-    would resolve `Cargo.lock` for the pinned rustc; `just msrv` would catch a lock past the MSRV.
-    The pin applies in this repository only; `rust-version = "1.88"` stays the declared MSRV for
-    users, and CI's `msrv` job checks it (t-1615): `just msrv` reads the version from Cargo.toml and
-    sets `RUSTUP_TOOLCHAIN`, which overrides the file, then builds the workspace (wasm build
-    included) and runs every test, all `--locked`, doctests too (t-1620: none exist yet, and nextest
-    would skip them silently, so `just test` runs `cargo test --doc` as well). trybuild's `.stderr`
-    files hold the pinned compiler's wording, so on the MSRV `just msrv-compile-fail` copies
-    `tests/ui` beside it (`A2UI_TRYBUILD_CASES` points the test there), cases only, and runs it with
+    `rust-toolchain` manager (and, since Decision 21, `github-actions`; since Decision 26, `cargo`
+    for the lock alone), and never touches `rust-version`; once the Renovate GitHub App is installed
+    on the repository (open: t-1622), it opens that pull request before 06:00 UTC on Mondays for
+    releases at least a week old, with these steps in its body and its Dependency Dashboard as the
+    sign it runs. A person finishes and squash-merges it, since the hosted app runs no commands and
+    the `.stderr` files need re-reading. Patch releases are proposed too. Renovate's `cargo` manager
+    only refreshes `Cargo.lock` (Decision 26). The pin applies in this repository only;
+    `rust-version = "1.88"` stays the declared MSRV for users, and CI's `msrv` job checks it
+    (t-1615): `just msrv` reads the version from Cargo.toml and sets `RUSTUP_TOOLCHAIN`, which
+    overrides the file, then builds the workspace (wasm build included) and runs every test, all
+    `--locked`, doctests too (t-1620: none exist yet, and nextest would skip them silently, so `just
+    test` runs `cargo test --doc` as well). trybuild's `.stderr` files hold the pinned compiler's
+    wording, so on the MSRV `just msrv-compile-fail` copies `tests/ui` beside it
+    (`A2UI_TRYBUILD_CASES` points the test there), cases only, and runs it with
     `TRYBUILD=overwrite`, which still fails a case that compiles and writes each `.stderr` in the
     copy, so a case it skipped has none. Each written file must then hold the tracked file's errors,
     each as its code paired with the first case line among its spans (`-->` or `:::`), duplicates
@@ -256,39 +256,39 @@ upstream's reading would be unsafe:
     its own copy of each case, not worth it for three cases. `CARGO_TARGET_DIR` is made absolute
     there, since trybuild resolves it from the test's crate directory. `just msrv` proves our
     `Cargo.lock` (MSRV-aware with resolver 3). `just msrv-resolved` checks what a user resolves
-    (t-1621): a crate of its own under `target/`, depending on both libraries' packages, unpacked (Decision 25), with
-    no lock, no dev-dependencies and no `rust-version`, resolves afresh on the MSRV and must `cargo
-    check` natively and for wasm. As an edition 2024 crate it resolves with resolver 3, which falls
-    back to versions this rustc accepts when a crate declares its `rust-version`; it catches a crate
-    that declares none or wrongly, or a requirement no accepted version meets. A user on resolver 2
-    gets the newest versions, unchecked here, and feature unification with a user's other
-    dependencies is not modelled. Its crates are releases nobody reviewed: the lock is generated
-    first, which runs no crate's code, and `cargo audit` (yanked releases denied too) reads it
-    before any build; its builds stay in its own `target/`. A build script of a release not yet
-    advised could still read the runner's cache token and plant cache entries for `main`: accepted,
-    as a container would cost more than the weekly check is worth. So it is a recipe of its own,
-    outside `just msrv`, and in CI a job of its own run weekly (`schedule`) or on demand, with no
-    cache restored or saved; pull requests do not run it, so on `main` a red result is mostly
-    upstream drift. Its fix, in order: a newer `rust-version`, an issue to the crate that
-    misdeclares its own, or, last, a capped entry in `workspace.dependencies` that a2ui-runtime
-    references as a direct dependency, since an unreferenced entry constrains nothing; that cap
-    constrains users too, so it is temporary, with a task to remove it. A dependency change is
-    checked before its merge by dispatching the workflow on its branch (AGENTS.md), since pull
-    requests skip the job. GitHub disables a public repository's schedule after 60 days without
-    activity and mails its failures to whoever last edited the cron line. The resolved versions are
-    printed for the log. Checked by hand: a dependency needing rustc 1.92 fails it. It depends on
-    the packaged crates, unpacked, through `[patch.crates-io]`, so a file `include` misses fails it
-    too (t-1629, Decision 25). `-Z direct-minimal-versions` was set aside: it needs nightly and
-    checks our lower bounds, not a user's newest resolution (t-1634). No clippy in `just msrv`,
-    since the pinned clippy's `incompatible_msrv` already reads `rust-version`. If a dev-dependency
-    ever needs a newer rustc, narrow the `msrv` job to the published crates' libraries rather than
-    raise `rust-version`. Every other job, release-plz's included, installs the file's toolchain
-    (`rustup toolchain install`), since the file overrides any other in the checkout. CI caches with
-    `Swatinem/rust-cache`, saved even after a red run, which keeps dependency artifacts under
-    `target/`, including trybuild's own build in `target/tests/trybuild` (~400 s cold; unconfirmed
-    until two runs on one pull request or on `main`, t-1622); the key holds the rustc version, so a
-    bump starts cold. A separate trybuild job was set aside: a second job and cache to keep for no
-    gain over one warm cache.
+    (t-1621): a crate of its own under `target/`, depending on both libraries' packages, unpacked
+    (Decision 25), with no lock, no dev-dependencies and no `rust-version`, resolves afresh on the
+    MSRV and must `cargo check` natively and for wasm. As an edition 2024 crate it resolves with
+    resolver 3, which falls back to versions this rustc accepts when a crate declares its
+    `rust-version`; it catches a crate that declares none or wrongly, or a requirement no accepted
+    version meets. A user on resolver 2 gets the newest versions, unchecked here, and feature
+    unification with a user's other dependencies is not modelled. Its crates are releases nobody
+    reviewed: the lock is generated first, which runs no crate's code, and `cargo audit` (yanked
+    releases denied too) reads it before any build; its builds stay in its own `target/`. A build
+    script of a release not yet advised could still read the runner's cache token and plant cache
+    entries for `main`: accepted, as a container would cost more than the weekly check is worth. So
+    it is a recipe of its own, outside `just msrv`, and in CI a job of its own run weekly
+    (`schedule`) or on demand, with no cache restored or saved; pull requests do not run it, so on
+    `main` a red result is mostly upstream drift. Its fix, in order: a newer `rust-version`, an
+    issue to the crate that misdeclares its own, or, last, a capped entry in
+    `workspace.dependencies` that a2ui-runtime references as a direct dependency, since an
+    unreferenced entry constrains nothing; that cap constrains users too, so it is temporary, with a
+    task to remove it. A dependency change is checked before its merge by dispatching the workflow
+    on its branch (AGENTS.md), since pull requests skip the job. GitHub disables a public
+    repository's schedule after 60 days without activity and mails its failures to whoever last
+    edited the cron line. The resolved versions are printed for the log. Checked by hand: a
+    dependency needing rustc 1.92 fails it. It depends on the packaged crates, unpacked, through
+    `[patch.crates-io]`, so a file `include` misses fails it too (t-1629, Decision 25). `-Z
+    direct-minimal-versions` was set aside: it needs nightly and checks our lower bounds, not a
+    user's newest resolution (t-1634). No clippy in `just msrv`, since the pinned clippy's
+    `incompatible_msrv` already reads `rust-version`. If a dev-dependency ever needs a newer rustc,
+    narrow the `msrv` job to the published crates' libraries rather than raise `rust-version`. Every
+    other job, release-plz's included, installs the file's toolchain (`rustup toolchain install`),
+    since the file overrides any other in the checkout. CI caches with `Swatinem/rust-cache`, saved
+    even after a red run, which keeps dependency artifacts under `target/`, including trybuild's own
+    build in `target/tests/trybuild` (~400 s cold; unconfirmed until two runs on one pull request or
+    on `main`, t-1622); the key holds the rustc version, so a bump starts cold. A separate trybuild
+    job was set aside: a second job and cache to keep for no gain over one warm cache.
 21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with the
     release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that then runs
     with the job's token. `just actions-pinned`, part of `just check`, fails on any `uses:` in
@@ -424,6 +424,35 @@ upstream's reading would be unsafe:
     its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds are
     t-1634: a nightly `-Z direct-minimal-versions` resolution already fails, since jsonschema 0.61.1
     needs `percent-encoding ^2.3` while the workspace asks `2`.
+
+26. **jsonschema's pin and Cargo.lock maintenance (t-1630):** `jsonschema = "=0.61.1"` stays (plan
+    2's approved decision) and now says what it holds: users get the jsonschema error texts both
+    libraries' tests quote (`validator.rs` forwards them in `SchemaViolation`). It freezes the top
+    crate only: its dependencies float within their range for a user, `referencing` (`$ref`
+    resolution), `jsonschema-regex` and `jsonschema-value` (`^0.61.1`), `regex` (`^1.11.1`, which
+    decides `pattern` under `PatternOptions::regex()`), `fancy-regex` (`^0.20.1`), so a user can run
+    a mix no test of ours ran until our lock catches up. Its cost: Cargo allows one 0.61.x per
+    graph, so a graph that needs jsonschema 0.61.2 or later, a security fix included, fails to
+    resolve until we release. Our own tests no longer need it, since the reviewed lock holds
+    jsonschema too; relaxing it to `0.61.1` (caret, below 0.62) is the open alternative, the
+    maintainer's call. `Cargo.lock` drifted from what users resolve, since Renovate ran no `cargo`
+    manager: it now runs it for `lockFileMaintenance` only, a `build(deps)` pull request before
+    06:00 UTC on Mondays, never automerged, rebased only on a conflict (`rebaseWhen`), so the lock a
+    person reviewed is the one that merges; a package rule disables every other cargo update type
+    (`!lockFileMaintenance`), so `Cargo.toml` requirements stay a person's change, and with them
+    Renovate's per-crate security pull requests: a fix within range comes with the next refresh,
+    CI's weekly audit flagging it meanwhile, any other by hand. Accepted: the refresh takes the
+    newest compatible releases, with no 7-day wait, as neither Renovate nor cargo ages them, and its
+    pull request CI builds them with a read-only token, its cache scoped to that pull request. So
+    `just ci` now runs `audit` first, `cargo audit --deny yanked` and `cargo deny check sources`
+    (crates.io only) reading the lock before any build script, the `msrv` job audits before it
+    builds, and the pull request's body asks the reviewer to read each added crate and to skip a
+    week when a release is younger than one. `msrv-resolved` ignores the lock, so a lock refresh
+    needs no dispatch (AGENTS.md's rule is for requirement changes). Resolver 3 keeps the lock
+    within `rust-version` where crates declare one; the `msrv` job, building it `--locked` on the
+    MSRV, catches the rest. Checked against Renovate's published schema by hand (update types and
+    their negation, `rebaseWhen`, manager name), not by `renovate-config-validator`; not verified: a
+    live run (t-1622). A summary of the crates a lock diff adds is t-1636.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

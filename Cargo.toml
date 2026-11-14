@@ -12,6 +12,10 @@ repository = "https://github.com/oku-theory/a2ui-rs"
 [workspace.dependencies]
 a2ui-catalog-basic = { path = "crates/a2ui-catalog-basic", version = "0.1.0" }
 a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
+# Exact, for the top crate only: users get the error texts our tests quote (both libraries').
+# Its dependencies float for them: referencing ($ref), jsonschema-regex, jsonschema-value,
+# regex (which runs `pattern`), fancy-regex. A graph needing jsonschema >= 0.61.2, a security
+# fix included, fails to resolve until our bump (plan 2b, Decision 26).
 jsonschema = { version = "=0.61.1", default-features = false }
 libtest-mimic = "0.8"
 percent-encoding = "2"

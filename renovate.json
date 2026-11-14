@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Bumps the pinned compiler and the SHA-pinned actions (plan 2b, Decisions 20, 21).",
-  "enabledManagers": ["rust-toolchain", "github-actions"],
+  "description": "Bumps the pinned compiler, the SHA-pinned actions and Cargo.lock (plan 2b, Decisions 20, 21, 26).",
+  "enabledManagers": ["rust-toolchain", "github-actions", "cargo"],
   "semanticCommits": "enabled",
   "timezone": "Etc/UTC",
   "dependencyDashboard": {
@@ -33,6 +33,24 @@
       "schedule": ["before 6am on monday"],
       "minimumReleaseAge": "7 days",
       "automerge": false
+    },
+    {
+      "description": "Cargo only refreshes Cargo.lock: requirements in Cargo.toml stay a person's change.",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["!lockFileMaintenance"],
+      "enabled": false
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"],
+    "semanticCommitType": "build",
+    "semanticCommitScope": "deps",
+    "automerge": false,
+    "rebaseWhen": "conflicted",
+    "prBodyNotes": [
+      "This lock takes the newest compatible releases, with no 7-day wait (plan 2b, Decision 26): read each crate the diff adds; if a release in it is under a week old, close this and take next week's.",
+      "CI audits the lock before building it, and the msrv job builds it `--locked` on rust-version. Renovate rewrites this branch only on a conflict, so what you reviewed is what merges."
+    ]
+  }
 }

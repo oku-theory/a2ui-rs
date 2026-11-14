@@ -269,10 +269,11 @@ msrv-resolved:
     cargo check --manifest-path "$user/Cargo.toml" --locked
     cargo check --manifest-path "$user/Cargo.toml" --locked --target wasm32-unknown-unknown
 
-# Licenses and advisories.
+# Licenses, sources (crates.io only) and advisories, yanked releases included: it reads the lock
+# alone, so `ci` runs it before anything builds.
 audit:
-    cargo deny check licenses
-    cargo audit
+    cargo deny check licenses sources
+    cargo audit --deny yanked
 
 # Packages both libraries as crates.io receives them, each built from its package alone, so a
 # file missing from `include` fails here rather than for a user; their license texts must ship.
@@ -304,8 +305,9 @@ package:
     cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked $dirty
 
 # The full pre-merge gate.
-# `package` before `test`, so no file a test writes under a crate slips into the package.
-ci: check package test audit
+# `audit` first, before any build script runs; `package` before `test`, so no file a test writes
+# under a crate slips into the package.
+ci: audit check package test
 
 # Writes the executed-case manifest (one process, so no duplicate records).
 conformance-manifest dir:

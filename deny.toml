@@ -1,2 +1,7 @@
+# Every dependency comes from crates.io: no other registry, no git source.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
 [licenses]
 allow = ["MIT", "MIT-0", "Apache-2.0", "Unicode-3.0", "Zlib"]

@@ -76,8 +76,11 @@ jobs:
           persist-credentials: false
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          tool: cargo-nextest,just
+          tool: cargo-nextest,just,cargo-audit
           fallback: none
+      # The lock's advisories and yanked releases, before this job builds it (the ci job's audit
+      # runs in parallel).
+      - run: cargo audit --deny yanked
       # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
       - run: |
           version="$(just msrv-version)"
