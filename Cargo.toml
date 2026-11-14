@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/a2ui-runtime", "crates/a2ui-catalog-basic", "crates/a2ui-conformance"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -13,8 +13,8 @@ repository = "https://github.com/oku-theory/a2ui-rs"
 # Each lower bound is the release Cargo.lock held when it was last raised; a new dependency starts
 # at the lock's release too. Weekly, `just minimal-versions` resolves them all and checks that the
 # published libraries still compile at theirs (plan 2b, Decision 29).
-a2ui-catalog-basic = { path = "crates/a2ui-catalog-basic", version = "0.1.0" }
-a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.1.0" }
+a2ui-catalog-basic = { path = "crates/a2ui-catalog-basic", version = "0.2.0" }
+a2ui-runtime = { path = "crates/a2ui-runtime", version = "0.2.0" }
 # Caret, below 0.62: a user takes 0.61.x patch releases, security fixes included; its siblings
 # and regex float as before. Its error texts, which our tests quote, change for us only through the reviewed
 # Cargo.lock (plan 2b, Decision 26).
