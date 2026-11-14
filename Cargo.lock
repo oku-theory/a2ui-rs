@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "a2ui-catalog-basic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "a2ui-runtime",
  "serde_json",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "a2ui-conformance"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "a2ui-catalog-basic",
  "a2ui-runtime",
@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "a2ui-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jsonschema",
  "percent-encoding",
