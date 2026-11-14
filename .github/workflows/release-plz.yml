@@ -2,14 +2,23 @@ name: release-plz
 on:
   push:
     branches: [main]
+# Each job grants itself what it needs, nothing more.
+permissions: {}
 
 jobs:
-  # Publishes to crates.io and tags a GitHub release when a release PR is merged.
+  # Publishes to crates.io and tags a GitHub release when a release PR is merged. No long-lived
+  # registry token: release-plz trades the job's OIDC token for a short-lived one (crates.io
+  # trusted publishing, plan 2b Decision 23). `cargo publish` verifies each package by building
+  # it, so dependency build scripts run beside that token and GITHUB_TOKEN, an accepted risk.
   release:
     if: ${{ github.repository_owner == 'oku-theory' }}
     runs-on: ubuntu-latest
+    # The trusted publisher the user adds on crates.io names this environment, restricted to main.
+    environment: release
     permissions:
-      contents: write
+      contents: write # pushes the release tags, creates the GitHub releases
+      pull-requests: read # finds the merged release PR and its commits
+      id-token: write # mints the OIDC token crates.io trades for a short-lived publish token
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -17,23 +26,29 @@ jobs:
           persist-credentials: false
       # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
       - run: rustup toolchain install
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+      # release-plz from the pinned commit's manifest, its checksum verified (not cargo-binstall).
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          command: release
+          tool: release-plz
+          fallback: none
+      - name: release-plz release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          release-plz release --git-token "$GITHUB_TOKEN" --forge github
 
   # Opens or updates the release PR from the commits since the last release.
   release-pr:
     if: ${{ github.repository_owner == 'oku-theory' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
+    permissions:
+      contents: write # pushes the release PR's branch
+      pull-requests: write # opens and updates the release PR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,9 +56,18 @@ jobs:
           persist-credentials: false
       # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
       - run: rustup toolchain install
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+      # release-plz from the pinned commit's manifest, its checksum verified (not cargo-binstall).
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          command: release-pr
+          tool: release-plz
+          fallback: none
+      # cargo-semver-checks, which built the crates beside this write token from dependencies
+      # outside Cargo.lock, is off in release-plz.toml (Decision 23).
+      - name: release-plz release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          release-plz release-pr --git-token "$GITHUB_TOKEN" --forge github \
+            --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"

@@ -286,30 +286,28 @@ upstream's reading would be unsafe:
     unconfirmed until two runs on one pull request or on `main`, t-1622); the key holds the
     rustc version, so a bump starts cold. A separate trybuild job was set aside: a second job
     and cache to keep for no gain over one warm cache.
-21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with
-    the release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that
-    then runs with the job's token. `just actions-pinned`, part of `just check`, fails on any
-    `uses:` in `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it finds
-    no workflow. It checks the form offline, not that the SHA is that tag's commit: each pin was
-    checked by hand against the peeled tag when set, and Renovate keeps SHA and comment together
-    afterwards; `just zizmor-online` checks a hand edit in CI (Decision 22). Local
-    `./` actions and `docker://` images would fail it; none exist. The tools
-    `taiki-e/install-action` installs carry no version: the manifests in its pinned commit fix
-    them, so a bump of that action moves them too. `release-plz/action` pins its own nested
-    actions by SHA at the pinned commit. Renovate's `github-actions` manager is enabled
-    (`pinDigests` pins any action added by tag): one grouped `ci(deps)` pull request before
-    06:00 UTC on Mondays, releases at least a week old, never automerged, once the app is
-    installed (t-1622). The config was checked against Renovate's published JSON schema only.
-    `ci.yml` runs on pushes to `main`, on pull requests, on demand (t-1623) and weekly on `main`
-    (t-1621), so a branch with a pull request runs once, not once per event. A newer push to a
-    pull request cancels its older run; every other run has its own concurrency group
-    (`run_id`), since a group keeps only one pending run and would drop a queued push to `main`.
-    A pull-request run restores its own cache, else `main`'s, so the trybuild build is warm only
-    once a run on `main` saved it; a cancelled run saves none, so pushing again within a cold
-    run of a toolchain bump starts the next one cold too. A `merge_group` trigger is there for a
-    merge queue, should one be enabled. A branch without a pull request runs only on demand (`gh
-    workflow run ci.yml --ref <branch>`). Release-plz's pull request, opened with
-    `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
+21. **CI hardening (t-1619):** every workflow step names its action by a full commit SHA with the
+    release in a trailing `# vX.Y.Z` comment, since a tag can be moved to other code that then runs
+    with the job's token. `just actions-pinned`, part of `just check`, fails on any `uses:` in
+    `.github/workflows` not written `owner/repo@<40-hex> # vX.Y.Z`, and when it finds no workflow.
+    It checks the form offline, not that the SHA is that tag's commit: each pin was checked by hand
+    against the peeled tag when set, and Renovate keeps SHA and comment together afterwards; `just
+    zizmor-online` checks a hand edit in CI (Decision 22). Local `./` actions and `docker://` images
+    would fail it; none exist. The tools `taiki-e/install-action` installs carry no version: the
+    manifests in its pinned commit fix them, so a bump of that action moves them too; release-plz
+    itself is one of them (Decision 23). Renovate's `github-actions` manager is enabled
+    (`pinDigests` pins any action added by tag): one grouped `ci(deps)` pull request before 06:00
+    UTC on Mondays, releases at least a week old, never automerged, once the app is installed
+    (t-1622). The config was checked against Renovate's published JSON schema only. `ci.yml` runs on
+    pushes to `main`, on pull requests, on demand (t-1623) and weekly on `main` (t-1621), so a
+    branch with a pull request runs once, not once per event. A newer push to a pull request cancels
+    its older run; every other run has its own concurrency group (`run_id`), since a group keeps
+    only one pending run and would drop a queued push to `main`. A pull-request run restores its own
+    cache, else `main`'s, so the trybuild build is warm only once a run on `main` saved it; a
+    cancelled run saves none, so pushing again within a cold run of a toolchain bump starts the next
+    one cold too. A `merge_group` trigger is there for a merge queue, should one be enabled. A
+    branch without a pull request runs only on demand (`gh workflow run ci.yml --ref <branch>`).
+    Release-plz's pull request, opened with `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
 
 22. **zizmor (t-1625):** `just zizmor`, part of `just check`, audits all of `.github` (workflows,
     composite actions under `.github/actions`, flow-style `uses:` the `actions-pinned` grep
@@ -338,7 +336,37 @@ upstream's reading would be unsafe:
     flow-style `uses:`; a SHA whose comment names another tag fails online only; no impostor
     commit was forged. zizmor found nothing at the regular persona; the auditor persona's
     findings on `release-plz.yml` (no workflow-level `permissions`, secrets outside an
-    environment) are t-1626's. Not verified: the jobs on GitHub (t-1622).
+    environment) are resolved by Decision 23. Not verified: the jobs on GitHub (t-1622).
+23. **Trusted publishing (t-1626):** `release-plz.yml` holds no long-lived registry token. Its
+    `release` job (`id-token: write`, environment `release`) lets release-plz trade the job's OIDC
+    token for a crates.io token valid about 30 minutes; `CARGO_REGISTRY_TOKEN` is gone from both
+    jobs, as `release-pr` needs it only for a private registry. release-plz comes from
+    `taiki-e/install-action`'s pinned manifest, checksum verified, `fallback: none`;
+    `release-plz/action` is dropped, since it installed release-plz with cargo-binstall and no
+    checksum, and its nested `git-config` action is two `git config` lines naming
+    `github-actions[bot]`. The workflow grants nothing at its top (`permissions: {}`), each
+    permission carries its reason; zizmor's auditor persona flags only that missing group. The
+    `release` job has no `concurrency` group: a group keeps one pending run, so a push queued behind
+    the release PR's merge would cancel the run that publishes it, and release-plz already skips
+    versions on crates.io. `semver_check = false`: cargo-semver-checks resolves and builds the
+    crates outside `Cargo.lock`, so newly released dependencies nobody reviewed would run beside
+    `release-pr`'s write token; it should come back as a read-only CI job once a baseline is on
+    crates.io (t-1632). Accepted: `cargo publish` verifies each package by building it from the
+    reviewed `Cargo.lock`, so in `release` a dependency's build script can read `GITHUB_TOKEN`
+    (contents write) and the crates.io token release-plz hands to cargo, and any step can request an
+    OIDC token (`ACTIONS_ID_TOKEN_REQUEST_*`), all for the job's duration, until a package build in
+    CI (t-1629) lets `publish_no_verify` skip that build. Each push to `main` runs the job, so each
+    records a deployment to `release`, though most publish nothing. The user's part (t-1633), before
+    any release PR is merged (one merged earlier fails to publish): restrict the `release`
+    environment to the `main` branch, with no required reviewers (else every push to `main` waits),
+    before adding the trusted publishers, since crates.io checks the repository, workflow and
+    environment, not the branch, and GitHub creates a missing environment unprotected; publish
+    `a2ui-runtime` then `a2ui-catalog-basic` once by hand with a short-lived token scoped to
+    publishing new crates (crates.io cannot publish a new crate through trusted publishing), and tag
+    them in release-plz's form (`a2ui-runtime-v0.1.0`) or accept that release-plz's first tag is the
+    next version; add a trusted publisher on crates.io for each crate (`oku-theory/a2ui-rs`,
+    workflow `release-plz.yml`, environment `release`); then revoke that token and delete any
+    `CARGO_REGISTRY_TOKEN` secret. Not verified: a release on GitHub.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

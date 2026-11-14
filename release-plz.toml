@@ -5,6 +5,9 @@ release_always = false
 changelog_update = true
 git_release_enable = true
 git_tag_enable = true
+# cargo-semver-checks resolves and builds the crates outside Cargo.lock, so unreviewed releases
+# would run beside release-pr's write token; it waits for a read-only CI job (plan 2b, Decision 23).
+semver_check = false
 
 # Unpublished conformance harness.
 [[package]]
