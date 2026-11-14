@@ -1,6 +1,7 @@
 name: ci
 # Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
-# Renovate's included, runs once, through its pull request. Weekly on main, the msrv-resolved
+# Renovate's included, runs once, through its pull request, except release-plz's, which its
+# workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main, the msrv-resolved
 # job checks what new upstream releases change, the ci job's audit sees new crate advisories and
 # the zizmor job new action advisories.
 on:
@@ -9,6 +10,11 @@ on:
   pull_request:
   merge_group:
   workflow_dispatch:
+    inputs:
+      msrv_resolved:
+        description: Also run the msrv-resolved job, which builds unreviewed crate releases.
+        type: boolean
+        default: true
   schedule:
     - cron: "17 5 * * 1"
 # A new push to a pull request cancels its older run. Any other run has a group of its own,
@@ -86,11 +92,14 @@ jobs:
           cache-on-failure: true
       - run: just msrv
   # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are
-  # unreviewed releases, so it runs only weekly or on demand, without a cache to restore or
+  # unreviewed releases, so it runs only weekly or on demand (not on the release PR's
+  # dispatch, which passes msrv_resolved=false), without a cache to restore or
   # save, and its own job: on main a red result is mostly upstream drift, and a dependency change
   # shows here on a dispatched run of its branch or the next weekly one.
   msrv-resolved:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.msrv_resolved)
     runs-on: ubuntu-latest
     # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
     timeout-minutes: 60

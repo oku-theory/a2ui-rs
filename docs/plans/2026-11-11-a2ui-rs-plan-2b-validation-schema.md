@@ -309,7 +309,8 @@ upstream's reading would be unsafe:
     cancelled run saves none, so pushing again within a cold run of a toolchain bump starts the next
     one cold too. A `merge_group` trigger is there for a merge queue, should one be enabled. A
     branch without a pull request runs only on demand (`gh workflow run ci.yml --ref <branch>`).
-    Release-plz's pull request, opened with `GITHUB_TOKEN`, starts no workflow, as before (t-1627).
+    Release-plz's pull request, opened with `GITHUB_TOKEN`, starts no `pull_request` run; its
+    workflow dispatches CI on it (Decision 24).
 
 22. **zizmor (t-1625):** `just zizmor`, part of `just check`, audits all of `.github` (workflows,
     composite actions under `.github/actions`, flow-style `uses:` the `actions-pinned` grep
@@ -369,6 +370,32 @@ upstream's reading would be unsafe:
     next version; add a trusted publisher on crates.io for each crate (`oku-theory/a2ui-rs`,
     workflow `release-plz.yml`, environment `release`); then revoke that token and delete any
     `CARGO_REGISTRY_TOKEN` secret. Not verified: a release on GitHub.
+
+24. **CI on the release PR (t-1627):** release-plz opens and updates its release PR with
+    `GITHUB_TOKEN`, and GitHub starts no workflow for a push or pull request made with that token,
+    so the PR showed no checks and a version bump or regenerated `Cargo.lock` merged untested. A
+    dispatch is the exception. `release-pr` reads release-plz's `-o json` output (release-plz 0.4.3
+    prints `{"prs": [...]}` on stdout, its logs on stderr): an empty `prs` means nothing to release,
+    while any other shape, a second PR or a branch not named `release-plz-…` fails the job, since an
+    empty branch would silently drop CI again. A job of its own, `release-pr-ci`, holding only
+    `actions: write`, so release-plz's step never has it, checks the name again (it reaches a `gh`
+    command line, where it must not read as an option) and runs `gh workflow run ci.yml --ref
+    <branch> -f msrv_resolved=false`; if that fails, rerunning the job dispatches again. The run's
+    checks land on the branch's head commit, so they show on the PR and match required checks by job
+    name. No new secret: a GitHub App or personal token would trigger `pull_request` itself but is a
+    long-lived credential beside `contents: write`; gating `release` with `workflow_run` would put
+    no check on the PR, and zizmor flags that trigger. `ci.yml`'s dispatch gains a boolean
+    `msrv_resolved` input, true by default so a manual dispatch still runs that job; the release PR
+    skips it, since it builds unreviewed crate releases, which the weekly run covers. Each push to
+    `main` that moves the PR dispatches a new run on its new head; older runs are not cancelled
+    (their own concurrency group), which costs runner time only. The `release` job still does not
+    wait for CI on `main`. The user's part (t-1633): make `ci`, `msrv` and `zizmor` required checks
+    on `main`, never `msrv-resolved`, which this run skips, and require branches to be up to date
+    before merging (or use the merge queue, which `ci.yml` already runs on), so the commit `release`
+    publishes is the one CI tested; until then, and for an admin who bypasses them, a release PR can
+    merge before its run ends. A required `zizmor` also blocks merges during a GitHub API outage or
+    after a new advisory on a pinned action; rerun it, or update the pin. Not verified: a dispatch
+    from `release-pr-ci` on GitHub, and that its checks satisfy the required ones.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
