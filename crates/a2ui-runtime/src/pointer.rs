@@ -1,5 +1,9 @@
-//! Normalized JSON Pointers (RFC 6901) with A2UI's segment rules.
+//! Normalized JSON Pointers (RFC 6901) with A2UI's segment rules, and the token codec.
+//!
+//! [`escape_token`] and [`unescape_token`] are the crate's one RFC 6901 reference-token codec:
+//! `Pointer` adds its own rules on top, and `bundle` uses them for `$ref` pointers.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use crate::error::{Error, ForbiddenSegmentSnafu, InvalidPointerSnafu};
@@ -90,7 +94,7 @@ impl fmt::Display for Pointer {
             return f.write_str("/");
         }
         for segment in &self.segments {
-            write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
+            write!(f, "/{}", escape_token(segment))?;
         }
         Ok(())
     }
@@ -108,9 +112,37 @@ pub(crate) fn list_index(segment: &str) -> ListIndex {
     }
 }
 
+/// The RFC 6901 escape rule a token breaks when [`unescape_token`] returns `None`.
+pub(crate) const BAD_ESCAPE: &str = "'~' must be followed by '0' or '1'";
+
 fn unescape(path: &str, part: &str) -> Result<String, Error> {
-    let mut out = String::with_capacity(part.len());
-    let mut chars = part.chars();
+    unescape_token(part).map(Cow::into_owned).ok_or_else(|| {
+        let reason = BAD_ESCAPE;
+        InvalidPointerSnafu { path, reason }.build().into()
+    })
+}
+
+/// One reference token escaped for a JSON Pointer: `~` as `~0`, then `/` as `~1`.
+///
+/// RFC 6901, section 3; borrowed when the token holds neither character.
+pub(crate) fn escape_token(token: &str) -> Cow<'_, str> {
+    if token.contains(['~', '/']) {
+        Cow::Owned(token.replace('~', "~0").replace('/', "~1"))
+    } else {
+        Cow::Borrowed(token)
+    }
+}
+
+/// One JSON Pointer reference token with `~1` and `~0` unescaped, never twice.
+///
+/// RFC 6901, section 4: `~01` is `~1`, and `None` when a `~` is not followed by `0` or `1`.
+/// Borrowed when the token holds no `~`.
+pub(crate) fn unescape_token(token: &str) -> Option<Cow<'_, str>> {
+    if !token.contains('~') {
+        return Some(Cow::Borrowed(token));
+    }
+    let mut out = String::with_capacity(token.len());
+    let mut chars = token.chars();
     while let Some(c) = chars.next() {
         if c != '~' {
             out.push(c);
@@ -119,13 +151,10 @@ fn unescape(path: &str, part: &str) -> Result<String, Error> {
         match chars.next() {
             Some('0') => out.push('~'),
             Some('1') => out.push('/'),
-            _ => {
-                let reason = "'~' must be followed by '0' or '1'";
-                return Err(InvalidPointerSnafu { path, reason }.build().into());
-            }
+            _ => return None,
         }
     }
-    Ok(out)
+    Some(Cow::Owned(out))
 }
 
 #[cfg(test)]

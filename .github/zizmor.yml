@@ -1,0 +1,7 @@
+# zizmor's configuration (plan 2b, Decision 22): every action, actions/* included, by commit SHA,
+# stated here rather than left to the release's default policy.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin

@@ -1,8 +1,17 @@
 //! The runner for each conformance action.
 
+mod catalog_checks;
+mod catalog_input;
+mod common_type;
 mod data_model;
+mod derive;
 mod expression;
+mod from_json;
 mod resolve_path;
+mod round_trip;
+mod schema_doc;
+mod to_json;
+mod validation_schema;
 
 use crate::case::Case;
 
@@ -15,6 +24,14 @@ pub fn handler(action: &str) -> Option<Handler> {
         "data_model" => Some(data_model::run),
         "resolve_path" => Some(resolve_path::run),
         "parse_expression_template" => Some(expression::run),
+        "validate_common_type" => Some(common_type::run),
+        "common_types_schema" => Some(schema_doc::run_common_types),
+        "agent_to_renderer_schema" => Some(schema_doc::run_agent_to_renderer),
+        "round_trip" => Some(round_trip::run),
+        "from_json" => Some(from_json::run),
+        "to_json" => Some(to_json::run),
+        "derive" => Some(derive::run),
+        "validation_schema" => Some(validation_schema::run),
         _ => None,
     }
 }

@@ -2,46 +2,135 @@ name: release-plz
 on:
   push:
     branches: [main]
+# Each job grants itself what it needs, nothing more.
+permissions: {}
 
 jobs:
-  # Publishes to crates.io and tags a GitHub release when a release PR is merged.
+  # Publishes to crates.io and tags a GitHub release when a release PR is merged. No long-lived
+  # registry token: release-plz trades the job's OIDC token for a short-lived one (crates.io
+  # trusted publishing, plan 2b Decision 23). It builds nothing: `publish_no_verify` skips the
+  # package build the `package` job ran on this commit (Decision 25), so no dependency build
+  # script runs beside these tokens.
   release:
     if: ${{ github.repository_owner == 'oku-theory' }}
+    needs: package
     runs-on: ubuntu-latest
+    # The trusted publisher the user adds on crates.io names this environment, restricted to main.
+    environment: release
     permissions:
-      contents: write
+      contents: write # pushes the release tags, creates the GitHub releases
+      pull-requests: read # finds the merged release PR and its commits
+      id-token: write # mints the OIDC token crates.io trades for a short-lived publish token
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5.148
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
+      # release-plz from the pinned commit's manifest, its checksum verified (not cargo-binstall).
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          command: release
+          tool: release-plz
+          fallback: none
+      - name: release-plz release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          release-plz release --git-token "$GITHUB_TOKEN" --forge github
+
+  # Builds both packages on the very commit `release` publishes, with a read-only token and no
+  # OIDC, so `release` publishes without building them (Decision 25). No cache: a restored one
+  # could carry another run's build outputs into what is published.
+  package:
+    if: ${{ github.repository_owner == 'oku-theory' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checks out the commit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+          fallback: none
+      - run: just package
 
   # Opens or updates the release PR from the commits since the last release.
   release-pr:
     if: ${{ github.repository_owner == 'oku-theory' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
+    permissions:
+      contents: write # pushes the release PR's branch
+      pull-requests: write # opens and updates the release PR
+    outputs:
+      branch: ${{ steps.release-pr.outputs.branch }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5.148
+      # rust-toolchain.toml overrides any other toolchain in this checkout; install what it pins.
+      - run: rustup toolchain install
+      # release-plz from the pinned commit's manifest, its checksum verified (not cargo-binstall).
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          command: release-pr
+          tool: release-plz
+          fallback: none
+      # cargo-semver-checks, which built the crates beside this write token from dependencies
+      # outside Cargo.lock, is off in release-plz.toml (Decision 23): ci.yml's read-only
+      # semver-checks job runs it on the release PR instead (Decision 28).
+      - name: release-plz release-pr
+        id: release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          release-plz release-pr --git-token "$GITHUB_TOKEN" --forge github \
+            --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" -o json \
+            > "$RUNNER_TEMP/release-pr.json"
+          cat "$RUNNER_TEMP/release-pr.json"
+          # {"prs": []} when there is nothing to release. Any other shape fails: an empty branch
+          # would silently leave the release PR without CI again.
+          branch="$(jq -er '.prs
+            | if type != "array" then error("no prs array")
+              elif length == 0 then ""
+              elif length > 1 then error("more than one release PR")
+              else .[0].head_branch | strings end' "$RUNNER_TEMP/release-pr.json")"
+          if [ -n "$branch" ] && ! [[ "$branch" =~ ^release-plz-[A-Za-z0-9._-]+$ ]]; then
+            echo "unexpected release PR branch: $branch" >&2
+            exit 1
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+  # A push or pull request made with GITHUB_TOKEN starts no workflow, but a dispatch does: CI runs
+  # on the release PR's branch, and its checks land on the PR's head commit (Decision 24). Its own
+  # job, so `actions: write` stays away from release-plz's step. If it fails, rerun this job.
+  release-pr-ci:
+    needs: release-pr
+    if: ${{ needs.release-pr.outputs.branch != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # dispatches CI on the release PR's branch
+    steps:
+      - name: run CI on the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.release-pr.outputs.branch }}
+        run: |
+          # Checked again here: the value reaches a command line.
+          if ! [[ "$BRANCH" =~ ^release-plz-[A-Za-z0-9._-]+$ ]]; then
+            echo "unexpected release PR branch: $BRANCH" >&2
+            exit 1
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" \
+            -f msrv_resolved=false -f minimal_versions=false -f semver_checks=true

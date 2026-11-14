@@ -1,13 +1,5 @@
 # Actions not implemented yet, each with the plan that implements it.
 [actions]
-from_json = "Plan 2: catalogs and schemas"
-to_json = "Plan 2: catalogs and schemas"
-round_trip = "Plan 2: catalogs and schemas"
-validation_schema = "Plan 2: catalogs and schemas"
-derive = "Plan 2: catalogs and schemas"
-common_types_schema = "Plan 2: catalogs and schemas"
-validate_common_type = "Plan 2: catalogs and schemas"
-agent_to_renderer_schema = "Plan 2: catalogs and schemas"
 validate = "Plan 3: validation and message processing"
 process_messages = "Plan 3: validation and message processing"
 get_renderer_capabilities = "Plan 3: validation and message processing"
@@ -24,3 +16,10 @@ accessibility_check = "framework adapter suite: run by a2ui-leptos in the browse
 
 # Individual cases skipped on purpose.
 [cases]
+
+# Protocol versions this runtime does not implement (written without the leading `v`); the
+# version-neutral data_model, resolve_path and parse_expression_template run whatever version.
+[versions]
+"0.8" = "protocol v0.8: a2ui-rs implements v1.0 only"
+"0.9" = "protocol v0.9 (also upstream's default for a catalog that declares no version): a2ui-rs implements v1.0 only"
+"0.9.1" = "protocol v0.9.1: a2ui-rs implements v1.0 only"

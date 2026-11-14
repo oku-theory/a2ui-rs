@@ -1,15 +1,207 @@
 name: ci
-on: [push, pull_request]
+# Runs on pushes to main, pull requests, a merge queue and on demand: a pull request's branch,
+# Renovate's included, runs once, through its pull request, except release-plz's, which its
+# workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main,
+# the msrv-resolved job checks what new upstream releases change, the minimal-versions job checks
+# our lower bounds, the ci job's audit sees new crate advisories and the zizmor job new action
+# advisories.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      msrv_resolved:
+        description: Also run the msrv-resolved job, which builds unreviewed crate releases.
+        type: boolean
+        default: true
+      minimal_versions:
+        description: Also run the minimal-versions job, which builds unreviewed crate releases.
+        type: boolean
+        default: true
+      # Off by default: before release-plz's bump, a branch carries the released version, so any
+      # API break, allowed between releases, fails it.
+      semver_checks:
+        description: Also run cargo-semver-checks, which builds unreviewed crate releases.
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 5 * * 1"
+# A new push to a pull request cancels its older run. Any other run has a group of its own,
+# since a group keeps one pending run only: every push to main runs to the end.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# Builds run third-party build scripts: the token only reads.
+permissions:
+  contents: read
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
-      - uses: taiki-e/install-action@v2
+          persist-credentials: false
+      # Installs what rust-toolchain.toml pins: the compiler, rustfmt, clippy, the wasm target
+      # (rustup 1.28 or later reads the file when given no toolchain).
+      - run: rustup toolchain install
+      # Caches the registry and dependency artifacts, including trybuild's own build under
+      # target/tests/trybuild (~400 s cold). The key holds the rustc version, so a toolchain
+      # bump starts from an empty cache.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          tool: cargo-nextest,just,cargo-deny,cargo-audit
+          # A red first run (a reworded .stderr) still warms the cache for the fix.
+          cache-on-failure: true
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest,just,cargo-deny,cargo-audit,zizmor
+          # Each tool from the pinned commit's manifest, its checksum verified, or the step fails.
+          fallback: none
       - run: just ci
+  # What a pull request's Cargo.lock change adds, removes and updates, each new release with its
+  # crates.io publish date, on the run's summary page (t-1636): in the raw diff a new crate is one
+  # [[package]] block among many. It builds nothing and only reads crates.io's API.
+  lock-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # HEAD is the merge commit; its first parent is the base the pull request merges into.
+          fetch-depth: 2
+      - name: summarize the Cargo.lock change
+        # Named, bash runs with pipefail: a failing script fails the step despite `tee`.
+        shell: bash
+        # The base's own script, so a pull request cannot rewrite the summary of its own lock.
+        run: |
+          base="$(git rev-parse HEAD^1)"
+          # Plain assignments, so a git error fails the step (bash -e); empty when absent.
+          base_script="$(git ls-tree --name-only "$base" -- scripts/lock_diff.py)"
+          head_script="$(git ls-tree --name-only HEAD -- scripts/lock_diff.py)"
+          if git diff --quiet "$base" HEAD -- Cargo.lock; then
+            echo "Cargo.lock unchanged"
+          elif [ -z "$base_script" ] && [ -n "$head_script" ]; then
+            # Only the pull request that brings the script in: its base cannot summarize it. A
+            # main that lost the script fails at `git show` below.
+            echo "No summary: the base has no scripts/lock_diff.py yet." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            git show "$base:scripts/lock_diff.py" > "$RUNNER_TEMP/lock_diff.py"
+            python3 -B "$RUNNER_TEMP/lock_diff.py" "$base" HEAD | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+  # zizmor's online audits (impostor commits, tag and SHA mismatch, known advisories), in a job
+  # that builds nothing and restores no cache, so its token is beyond any build script's reach,
+  # and whose red result, a finding or a GitHub API outage, leaves the ci job's own.
+  zizmor:
+    runs-on: ubuntu-latest
+    # A stalled GitHub API call ends here, not after six hours.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,zizmor
+          fallback: none
+      - run: just zizmor-online
+        env:
+          GH_TOKEN: ${{ github.token }}
+  # The declared MSRV (`rust-version`) for users, apart from the pinned compiler above:
+  # RUSTUP_TOOLCHAIN overrides rust-toolchain.toml for every rustup proxy in this job.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest,just,cargo-audit
+          fallback: none
+      # The lock's advisories and yanked releases, before this job builds it (the ci job's audit
+      # runs in parallel).
+      - run: cargo audit --deny yanked
+      # Set before rust-cache, so its key holds the MSRV's rustc, not the pinned one.
+      - run: |
+          version="$(just msrv-version)"
+          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+      # Installed before rust-cache, which reads its rustc for the key; just msrv's install is then
+      # a no-op.
+      - run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+      - run: just msrv
+  # What a user's crate resolves on the MSRV (t-1621), not our Cargo.lock: its crates are
+  # unreviewed releases, so it runs only weekly or on demand (not on the release PR's
+  # dispatch, which passes msrv_resolved=false), without a cache to restore or
+  # save, and its own job: on main a red result is mostly upstream drift, and a dependency change
+  # shows here on a dispatched run of its branch or the next weekly one.
+  msrv-resolved:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.msrv_resolved)
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The pinned toolchain packages the crates; the recipe installs the MSRV for the rest.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-audit
+          fallback: none
+      - run: just msrv-resolved
+  # Our lower bounds (t-1634): each direct dependency at its lowest allowed release, resolved by
+  # nightly cargo, audited, then checked on the MSRV. Unreviewed releases again, so like
+  # msrv-resolved: weekly or on demand (not on the release PR's dispatch), no cache, its own job.
+  minimal-versions:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.minimal_versions)
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The recipe installs nightly, for the resolver only, and the MSRV, for the checks.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-audit
+          fallback: none
+      - run: just minimal-versions
+  # cargo-semver-checks against crates.io's releases (t-1632): on release-plz's release PR, whose
+  # dispatch sets semver_checks, where the bumped versions must cover the API changes, or on demand
+  # with semver_checks=true. Not on other pull requests: a breaking change waits for the release
+  # PR's bump. Both sides resolve outside Cargo.lock, so it builds unreviewed releases: a job of its
+  # own with this read-only token, no cache step and no secret, and never on main, whose cache
+  # scope every pull request restores (plan 2b, Decision 28).
+  semver-checks:
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.semver_checks
+      && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # cargo-semver-checks builds rustdoc JSON with the toolchain rust-toolchain.toml pins.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,cargo-semver-checks
+          fallback: none
+      - run: just semver-checks

@@ -19,9 +19,46 @@ pub fn json_eq(a: &Value, b: &Value) -> bool {
     }
 }
 
+/// [`json_eq`], except that arrays under `enum` and `required` compare as multisets.
+pub fn schema_eq(a: &Value, b: &Value) -> bool {
+    schema_eq_at(a, b, false)
+}
+
+fn schema_eq_at(a: &Value, b: &Value, unordered: bool) -> bool {
+    match (a, b) {
+        (Value::Array(xs), Value::Array(ys)) if unordered => same_multiset(xs, ys),
+        (Value::Array(xs), Value::Array(ys)) => {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| schema_eq_at(x, y, false))
+        }
+        (Value::Object(xs), Value::Object(ys)) => {
+            xs.len() == ys.len()
+                && xs.iter().all(|(key, x)| {
+                    let unordered = key == "enum" || key == "required";
+                    ys.get(key).is_some_and(|y| schema_eq_at(x, y, unordered))
+                })
+        }
+        _ => json_eq(a, b),
+    }
+}
+
+fn same_multiset(xs: &[Value], ys: &[Value]) -> bool {
+    let mut left: Vec<&Value> = ys.iter().collect();
+    xs.len() == ys.len()
+        && xs
+            .iter()
+            .all(|x| match left.iter().position(|y| json_eq(x, y)) {
+                Some(index) => {
+                    left.swap_remove(index);
+                    true
+                }
+                None => false,
+            })
+}
+
 /// Checks `actual` against an `expectError` / `expect_error` value `{category, message?}`.
 ///
-/// `message` is a regular expression matched against the error's message.
+/// `message` matches as a case-insensitive substring or regular expression, as upstream's
+/// reference harness does (`_exception_matches_expected_message`).
 pub fn expect_error(
     actual: &a2ui_runtime::Error,
     expected: &Value,
@@ -43,12 +80,18 @@ pub fn expect_error(
         Some(Value::String(pattern)) => pattern,
         Some(other) => return Err(format!("{at}: message must be a string, got {other}")),
     };
-    let regex =
-        regex::Regex::new(pattern).map_err(|err| format!("{at}: bad message regex: {err}"))?;
-    if regex.is_match(&actual.to_string()) {
+    let text = actual.to_string();
+    let substring = text.to_lowercase().contains(&pattern.to_lowercase());
+    let regex = regex::RegexBuilder::new(pattern)
+        .case_insensitive(true)
+        .build()
+        .is_ok_and(|regex| regex.is_match(&text));
+    if substring || regex {
         Ok(())
     } else {
-        Err(format!("{at}: message {actual} does not match /{pattern}/"))
+        Err(format!(
+            "{at}: message {actual} does not match {pattern:?} as a substring or a regex"
+        ))
     }
 }
 

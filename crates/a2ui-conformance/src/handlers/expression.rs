@@ -10,7 +10,7 @@ use crate::keys::assert_case_keys;
 /// Parses `input` and compares the parts with `expect`, or the error with `expect_error`.
 pub fn run(case: &Case) -> Result<(), String> {
     assert_case_keys(case, &["input", "expect", "expect_error"])?;
-    let at = format!("{}#{}", case.suite, case.name);
+    let at = case.at();
     let input = case
         .get("input")
         .and_then(Value::as_str)

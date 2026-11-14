@@ -1,0 +1,21 @@
+[package]
+name = "a2ui-catalog-basic"
+description = "The A2UI v1.0 basic catalog for a2ui-runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+# NOTICE-A2UI exists only while upstream has a NOTICE (vendor/sync.sh copies it); listed so that it
+# ships the day it does. `just package` builds the crate from these files alone.
+include = ["src/**", "catalog.json", "LICENSE-A2UI", "NOTICE-A2UI", "Cargo.toml"]
+
+[dependencies]
+a2ui-runtime.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+speculoos.workspace = true
+
+[lints]
+workspace = true

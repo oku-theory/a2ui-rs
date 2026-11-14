@@ -1,0 +1,57 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Bumps the pinned compiler, the SHA-pinned actions and Cargo.lock (plan 2b, Decisions 20, 21, 26).",
+  "enabledManagers": ["rust-toolchain", "github-actions", "cargo"],
+  "semanticCommits": "enabled",
+  "timezone": "Etc/UTC",
+  "dependencyDashboard": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "A bump is its own build(toolchain) pull request that a person finishes.",
+      "matchManagers": ["rust-toolchain"],
+      "semanticCommitType": "build",
+      "semanticCommitScope": "toolchain",
+      "schedule": ["before 6am on monday"],
+      "minimumReleaseAge": "7 days",
+      "automerge": false,
+      "prBodyNotes": [
+        "Finish this bump in the branch, then squash-merge it (plan 2b, Decision 20):",
+        "1. `TRYBUILD=overwrite cargo test -p a2ui-runtime --test reason_compile_fail`, then re-read each `crates/a2ui-runtime/tests/ui/*.stderr`: each must still fail with E0277 on the `Piece` bound or E0597 on the borrowed `document`.",
+        "2. Fix the new `clippy -D warnings` lints, then run `just ci`. CI's cache starts cold on the new rustc.",
+        "Renovate stops updating this branch once a person pushes to it: if a newer rustc ships first, close this pull request and Renovate opens a fresh one."
+      ]
+    },
+    {
+      "description": "Actions stay pinned to a commit SHA, the release in a comment; one ci(deps) PR for all.",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true,
+      "groupName": "GitHub Actions",
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps",
+      "schedule": ["before 6am on monday"],
+      "minimumReleaseAge": "7 days",
+      "automerge": false
+    },
+    {
+      "description": "Cargo only refreshes Cargo.lock: requirements in Cargo.toml stay a person's change.",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["!lockFileMaintenance"],
+      "enabled": false
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"],
+    "semanticCommitType": "build",
+    "semanticCommitScope": "deps",
+    "automerge": false,
+    "rebaseWhen": "conflicted",
+    "prBodyNotes": [
+      "This lock takes the newest compatible releases, with no 7-day wait (plan 2b, Decision 26): read each crate the diff adds; if a release in it is under a week old, close this and take next week's.",
+      "CI's lock-diff job lists, on its run's summary page, each crate added, removed or updated, with each new release's publish date (Decision 30).",
+      "CI audits the lock before building it, and the msrv job builds it `--locked` on rust-version. Renovate rewrites this branch only on a conflict, so what you reviewed is what merges."
+    ]
+  }
+}

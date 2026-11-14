@@ -24,7 +24,16 @@ fn trials() -> Result<Vec<Trial>, String> {
     )?;
     let manifest = Manifest::from_env()?.map(Arc::new);
     let cases = all_cases(&root)?;
-    let unused = skips.unused(&cases);
+    let versions: Vec<Result<Option<String>, String>> = cases
+        .iter()
+        .map(|case| case.effective_version(&root))
+        .collect();
+    let classified: Vec<(&Case, Option<&str>)> = cases
+        .iter()
+        .zip(&versions)
+        .filter_map(|(case, version)| Some((case, version.as_ref().ok()?.as_deref())))
+        .collect();
+    let unused = skips.unused(&classified);
     let mut trials = vec![Trial::test(
         "skips_toml_entries_all_match_a_case",
         move || {
@@ -35,8 +44,8 @@ fn trials() -> Result<Vec<Trial>, String> {
             }
         },
     )];
-    for case in cases {
-        trials.push(trial(case, &skips, manifest.clone())?);
+    for (case, version) in cases.into_iter().zip(versions) {
+        trials.push(trial(case, version, &skips, manifest.clone())?);
     }
     Ok(trials)
 }
@@ -60,9 +69,25 @@ fn all_cases(root: &std::path::Path) -> Result<Vec<Case>, String> {
     Ok(cases)
 }
 
-fn trial(case: Case, skips: &Skips, manifest: Option<Arc<Manifest>>) -> Result<Trial, String> {
+fn trial(
+    case: Case,
+    version: Result<Option<String>, String>,
+    skips: &Skips,
+    manifest: Option<Arc<Manifest>>,
+) -> Result<Trial, String> {
     let name = format!("{}::{}", case.suite.trim_end_matches(".yaml"), case.name);
-    if let Some(reason) = skips.reason(&case) {
+    let version = match version {
+        Ok(version) => version,
+        Err(message) => {
+            return Ok(Trial::test(name, move || {
+                if let Some(manifest) = &manifest {
+                    manifest.record(&case.suite, &case.name, Status::Failed, None)?;
+                }
+                Err(Failed::from(message))
+            }));
+        }
+    };
+    if let Some(reason) = skips.reason(&case, version.as_deref()) {
         if let Some(manifest) = &manifest {
             manifest.record(&case.suite, &case.name, Status::Skipped, Some(&reason))?;
         }
@@ -74,10 +99,7 @@ fn trial(case: Case, skips: &Skips, manifest: Option<Arc<Manifest>>) -> Result<T
     Ok(Trial::test(name, move || {
         let outcome = match handlers::handler(&case.action) {
             Some(run) => run(&case),
-            None => Err(format!(
-                "Unknown action '{}' in {}#{}",
-                case.action, case.suite, case.name
-            )),
+            None => Err(format!("Unknown action '{}' in {}", case.action, case.at())),
         };
         if let Some(manifest) = &manifest {
             let status = if outcome.is_ok() {

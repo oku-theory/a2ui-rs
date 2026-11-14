@@ -7,18 +7,35 @@
 //! (pointer-addressed JSON), [`Write`] (one committed change), [`Error`]
 //! (classified by [`Category`]), [`Watchers`] (observers a write notifies),
 //! [`resolve_path`] (scoped relative paths) and [`parse_template`] (`${...}`
-//! expression templates).
+//! expression templates), [`common_types_schema`] and [`agent_to_renderer_schema`] (the
+//! embedded v1.0 schemas), [`validate_common_type`] (a value against one common type) and
+//! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
+//! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
+//! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
+//! [`Derivation`].
 
+mod bundle;
+mod catalog;
 mod context;
 mod data;
 mod error;
 mod expression;
+mod ident;
+mod limits;
 mod pointer;
+mod quoted;
+mod schema;
 mod subscribe;
+mod validator;
 pub use subscribe::Watchers;
 
+pub use catalog::{
+    AllowedCallers, Catalog, CatalogLookup, ComponentDef, ComponentShape, Derivation, DeriveEntry,
+    FunctionDef,
+};
 pub use context::resolve_path;
 pub use data::{DataModel, Write};
 pub use error::{Category, Error};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
 pub use pointer::{MAX_LIST_INDEX, Pointer};
+pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};

@@ -6,6 +6,7 @@ checked against the upstream conformance suites, with a Leptos renderer.
 | Crate | Role |
 |---|---|
 | `a2ui-runtime` | Protocol state: data model, expressions, surfaces, catalogs (pure Rust) |
+| `a2ui-catalog-basic` | The published v1.0 basic catalog, loaded with `a2ui-runtime` |
 | `a2ui-conformance` | Runs the vendored upstream suites (not published) |
 
 `vendor/a2ui` is a copy of upstream files (Apache-2.0) at the commit in `vendor/UPSTREAM`;
@@ -13,6 +14,9 @@ refresh it with `just vendor-sync <commit>`.
 
 ## Status
 
-Conformance: stage C1 (data model, paths, expression parsing) passes; later stages are listed in crates/a2ui-conformance/skips.toml.
+Conformance: stages C1 (data model, paths, expression parsing) and C2 (catalogs, common types,
+agent-to-renderer schema) pass; later stages are listed in
+crates/a2ui-conformance/skips.toml.
 
-Licensed under MIT or Apache-2.0, at your option.
+Licensed under MIT or Apache-2.0, at your option, except `a2ui-catalog-basic`, which is
+Apache-2.0 only, as the upstream catalog it embeds.
