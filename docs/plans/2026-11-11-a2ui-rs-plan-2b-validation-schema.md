@@ -304,14 +304,15 @@ upstream's reading would be unsafe:
     (t-1622). The config was checked against Renovate's published JSON schema only. `ci.yml` runs on
     pushes to `main`, on pull requests, on demand (t-1623) and weekly on `main` (t-1621), so a
     branch with a pull request runs once, not once per event. A newer push to a pull request cancels
-    its older run; every other run has its own concurrency group (`run_id`), since a group keeps
-    only one pending run and would drop a queued push to `main`. A pull-request run restores its own
-    cache, else `main`'s, so the trybuild build is warm only once a run on `main` saved it; a
-    cancelled run saves none, so pushing again within a cold run of a toolchain bump starts the next
-    one cold too. A `merge_group` trigger is there for a merge queue, should one be enabled. A
-    branch without a pull request runs only on demand (`gh workflow run ci.yml --ref <branch>`).
-    Release-plz's pull request, opened with `GITHUB_TOKEN`, starts no `pull_request` run; its
-    workflow dispatches CI on it (Decision 24).
+    its older run, and so does a new dispatch on a `release-plz-*` branch (Decision 32); every other
+    run has its own concurrency group (`run_id`), since a group keeps only one pending run and would
+    drop a queued push to `main`. A pull-request run restores its own cache, else `main`'s, so the
+    trybuild build is warm only once a run on `main` saved it; a cancelled run saves none, so
+    pushing again within a cold run of a toolchain bump starts the next one cold too. A
+    `merge_group` trigger is there for a merge queue, should one be enabled. A branch without a pull
+    request runs only on demand (`gh workflow run ci.yml --ref <branch>`). Release-plz's pull
+    request, opened with `GITHUB_TOKEN`, starts no `pull_request` run; its workflow dispatches CI on
+    it (Decision 24).
 
 22. **zizmor (t-1625):** `just zizmor`, part of `just check`, audits all of `.github` (workflows,
     composite actions under `.github/actions`, flow-style `uses:` the `actions-pinned` grep
@@ -381,25 +382,25 @@ upstream's reading would be unsafe:
     empty branch would silently drop CI again. A job of its own, `release-pr-ci`, holding only
     `actions: write`, so release-plz's step never has it, checks the name again (it reaches a `gh`
     command line, where it must not read as an option) and runs `gh workflow run ci.yml --ref
-    <branch> -f msrv_resolved=false -f minimal_versions=false -f semver_checks=true` (Decisions 28,
-    29); if that fails, rerunning the job dispatches again. The run's
+    <branch> -f msrv_resolved=true -f minimal_versions=true -f semver_checks=true` (Decisions 28,
+    32); if that fails, rerunning the job dispatches again. The run's
     checks land on the branch's head commit, so they show on the PR and match required checks by job
     name. No new secret: a GitHub App or personal token would trigger `pull_request` itself but is a
     long-lived credential beside `contents: write`; gating `release` with `workflow_run` would put
     no check on the PR, and zizmor flags that trigger. `ci.yml`'s dispatch gains a boolean
     `msrv_resolved` input (and later `minimal_versions`, Decision 29), true by default so a manual
-    dispatch still runs that job; the release PR skips it, since it builds unreviewed crate releases,
-    which the weekly run covers. Each push to
-    `main` that moves the PR dispatches a new run on its new head; older runs are not cancelled
-    (their own concurrency group), which costs runner time only. The `release` job still does not
-    wait for CI on `main`. The user's part (t-1633): make `ci`, `msrv` and `zizmor` required checks
-    on `main`, never `msrv-resolved` or `minimal-versions`, which this run skips, and require
-    branches to be up to date
-    before merging (or use the merge queue, which `ci.yml` already runs on), so the commit `release`
-    publishes is the one CI tested; until then, and for an admin who bypasses them, a release PR can
-    merge before its run ends. A required `zizmor` also blocks merges during a GitHub API outage or
-    after a new advisory on a pinned action; rerun it, or update the pin. Not verified: a dispatch
-    from `release-pr-ci` on GitHub, and that its checks satisfy the required ones.
+    dispatch still runs that job; the release PR first skipped it, since it builds unreviewed crate
+    releases, which the weekly run was taken to cover, and runs it since Decision 32. Each push to
+    `main` that moves the PR dispatches a new run on its new head; since Decision 32 it cancels the
+    older one. The `release` job still does not wait for CI on `main`. The user's part (t-1633):
+    make `ci`, `msrv`, `zizmor`, `semver-checks`, `msrv-resolved` and `minimal-versions` required
+    checks on `main` (other pull requests' runs skip the last three, which satisfies a required
+    check; Decision 32), and require branches to be up to date before merging (or use the merge
+    queue, which `ci.yml` already runs on), so the commit `release` publishes is the one CI tested;
+    until then, and for an admin who bypasses them, a release PR can merge before its run ends. A
+    required `zizmor` also blocks merges during a GitHub API outage or after a new advisory on a
+    pinned action; rerun it, or update the pin. Not verified: a dispatch from `release-pr-ci` on
+    GitHub, and that its checks satisfy the required ones.
 
 25. **Packaged crates (t-1629):** `just package`, in `just ci` right after `check` (before any test
     can write a file under a crate), runs `cargo package --locked` on both libraries, which builds
@@ -517,18 +518,18 @@ upstream's reading would be unsafe:
     published, and dev-dependencies) only resolve, and nothing runs tests there, so behaviour at the
     minimum, such as jsonschema's error texts (Decision 26), is not covered. The job is t-1634's
     regression guard. Accepted gap: a pull request may start using an API newer than a bound after a
-    lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch skips
-    it, so a release made in between could publish a bound that does not compile (t-1639). Nightly
-    only resolves, unpinned, as `-Z` flags need it; a nightly that breaks the flag fails the job,
-    not a release. Like `msrv-resolved` it builds unreviewed releases: `ci.yml`'s `minimal-versions`
-    job runs weekly on `main` and on a dispatch (`minimal_versions`, on by default, off on the
-    release PR's), with the read-only token, no cache step and its own 60-minute bound; it accepts
-    `msrv-resolved`'s exposure of `main`'s cache scope. Checked locally: the resolution fails on the
-    old bounds and passes on the new ones, the audit passes (one allowed warning, `unsafe-libyaml`
-    unmaintained, through `serde_yaml_ng` as in our lock), and the recipe runs to the end with
-    `cargo check` stubbed; the checks themselves, which build those releases, were not run (t-1622).
-    Before merging, `gh workflow run ci.yml --ref <branch>` (AGENTS.md), which runs the job; the
-    schedule shows only once it is on `main`.
+    lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch now
+    runs it too (Decision 32, t-1639). Nightly only resolves, unpinned, as `-Z` flags need it; a
+    nightly that breaks the flag fails the job, and the release PR with it, until nightly is fixed
+    or the recipe pins a dated nightly. Like `msrv-resolved` it builds unreviewed releases:
+    `ci.yml`'s `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
+    on by default, the release PR's included since Decision 32), with the read-only token, no cache
+    step and its own 60-minute bound; it accepts `msrv-resolved`'s exposure of `main`'s cache scope.
+    Checked locally: the resolution fails on the old bounds and passes on the new ones, the audit
+    passes (one allowed warning, `unsafe-libyaml` unmaintained, through `serde_yaml_ng` as in our
+    lock), and the recipe runs to the end with `cargo check` stubbed; the checks themselves, which
+    build those releases, were not run (t-1622). Before merging, `gh workflow run ci.yml --ref
+    <branch>` (AGENTS.md), which runs the job; the schedule shows only once it is on `main`.
 
 30. **Cargo.lock change summary (t-1636):** in a raw lock diff, a new transitive crate, the riskiest
     change, is one `[[package]]` block among many version and checksum lines. `scripts/lock_diff.py
@@ -590,6 +591,37 @@ upstream's reading would be unsafe:
     JSON for `a2ui-runtime`. Not run: the recipe with the real tool (not installed locally); its
     first run is the next CI run on GitHub (t-1622), which should show the fixture checked and no
     lint.
+
+32. **The release PR checks its lower bounds (t-1639):** `minimal-versions` (Decision 29) and
+    `msrv-resolved` (t-1621) ran weekly on `main` and on a dispatch, not on the release PR's, so a
+    pull request using an API above a bound without changing it, merged after the weekly run, could
+    be published before the next one with a range that does not compile at its bottom. Both jobs,
+    and `semver-checks` (Decision 28), now run on every run of a `release-plz-*` branch, whatever
+    the event or inputs (`startsWith(github.head_ref || github.ref_name, 'release-plz-')`):
+    `release-pr-ci`'s dispatch (which also passes the inputs as true), a manual dispatch with them
+    off, and a `pull_request` run a person starts by pushing to or reopening the PR, so no run there
+    reports them skipped over a red result on the same head. They check the commit to be published,
+    its version bump included, given t-1633's up-to-date branches. They build unreviewed releases,
+    the exposure Decision 28 already accepts for `semver-checks` there: the read-only token, no
+    cache step, 60 minutes each; such a run writes only the release branch's cache scope (it reads
+    `main`'s too), which only that branch's later `ci` and `msrv` runs restore, and nothing in
+    `release-plz.yml` restores a cache or reads an artifact. Each push to `main` updates the release
+    PR (same branch) and dispatches again, so `ci.yml`'s `concurrency` groups dispatches on a
+    `release-plz-*` branch by ref and cancels the older one, as for a pull request; pushes under an
+    hour apart keep restarting them, so a release waits for a quiet `main`. A red result holds the
+    release once the jobs are required checks (t-1633, Decision 24's list): a bound to raise on
+    `main` (release-plz then updates the PR); upstream drift `msrv-resolved` reports, which users
+    would hit too (a temporary `<` bound on `main`, or an admin merge after reading the failure);
+    or a nightly that broke `-Z direct-minimal-versions`, until it is fixed or the recipe pins a
+    dated nightly (t-1641). A merge queue's `merge_group` run skips them: the PR's head result is
+    the gate there. Not taken: `scripts/release_gate.py`, a first design reviewed for this task
+    that read `main`'s latest weekly or dispatched result through the API and refused a red or
+    stale one (its review showed a green run from before the offending merge passes it, and tying
+    it to the release's base commit meant one more manual dispatch per release); a release
+    checklist step; and taiki-e's `cargo-minimal-versions`, which drops dev-dependencies through
+    cargo-hack, while our recipe already checks only the two libraries on the MSRV and adds no
+    tool. Checked locally: actionlint and zizmor. Not verified: a release-branch run on GitHub
+    (t-1622); the release PR open today (#3, v0.2.0) was dispatched before this change.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
