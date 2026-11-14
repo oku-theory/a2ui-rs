@@ -5,12 +5,15 @@ use snafu::{OptionExt, ensure};
 
 use super::{AllowedCallers, Catalog};
 use crate::error::{
-    AgentOnlyCallSnafu, BadIdentifierSnafu, CallShapeSnafu, ComponentShapeSnafu, Error,
-    MissingComponentTypeSnafu, ReservedKeySnafu, SystemFunctionCatalogSnafu, UnknownComponentSnafu,
-    UnknownFunctionSnafu, ValueLimitSnafu,
+    AgentOnlyCallSnafu, BadIdentifierSnafu, CallShapeSnafu, ComponentLimitSnafu,
+    ComponentShapeSnafu, Error, MissingComponentTypeSnafu, ReservedKeySnafu,
+    SystemFunctionCatalogSnafu, UnknownComponentSnafu, UnknownFunctionSnafu, ValueLimitSnafu,
 };
 use crate::ident::is_identifier;
-use crate::limits::{MAX_JSON_DEPTH, deeper_than};
+use crate::limits::{
+    ComponentOversize, MAX_COMPONENT_CALLS, MAX_COMPONENT_NODES, MAX_JSON_DEPTH,
+    component_oversize, deeper_than,
+};
 use crate::quoted::{Quoted, reason};
 use crate::schema::{validate_common_type, validate_component_metadata};
 use crate::validator::check;
@@ -48,12 +51,24 @@ impl Catalog {
     /// surface's). When that catalog is this one or `catalogs` finds it, the call is checked
     /// against its function there: the function exists, is not `agentOnly`, and the call
     /// matches its schema. A call into a catalog not found is checked only for its identifiers.
+    ///
+    /// Before any of that, the instance must hold at most `MAX_COMPONENT_NODES` (65 536) JSON
+    /// nodes and `MAX_COMPONENT_CALLS` (1 024) calls (`@call` objects, nested ones included), then
+    /// nest at most `MAX_JSON_DEPTH` (64) levels, so one component runs a bounded number of
+    /// validators.
     pub fn validate_component(
         &self,
         component: &Value,
         default_catalog: &str,
         catalogs: &(impl CatalogLookup + ?Sized),
     ) -> Result<(), Error> {
+        if let Some(oversize) = component_oversize(component) {
+            let (what, limit) = match oversize {
+                ComponentOversize::Nodes => ("JSON nodes", MAX_COMPONENT_NODES),
+                ComponentOversize::Calls => ("function calls", MAX_COMPONENT_CALLS),
+            };
+            return Err(ComponentLimitSnafu { what, limit }.build().into());
+        }
         ensure!(
             !deeper_than(component, MAX_JSON_DEPTH),
             ValueLimitSnafu {

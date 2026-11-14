@@ -176,6 +176,13 @@ pub(crate) enum Inner {
     #[snafu(display("Value nesting exceeds {limit} levels"))]
     ValueLimit { limit: usize, backtrace: Backtrace },
 
+    #[snafu(display("Component exceeds {limit} {what}"))]
+    ComponentLimit {
+        what: &'static str,
+        limit: usize,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("Catalog document is not valid JSON: {message}"))]
     CatalogJson {
         message: Quoted,
@@ -341,6 +348,7 @@ impl Inner {
             | Self::SchemaViolation { .. }
             | Self::UnknownDefinition { .. }
             | Self::ValueLimit { .. }
+            | Self::ComponentLimit { .. }
             | Self::ComponentShape { .. }
             | Self::MissingComponentType { .. }
             | Self::UnknownComponent { .. }

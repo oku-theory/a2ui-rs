@@ -90,6 +90,19 @@ fn oversize_long_string_outside_ref_is_accepted() {
     assert_that!(oversize(&value, 100)).is_none();
 }
 
+#[rstest]
+#[case::small(json!({"@call": "f", "args": {"x": 1}}), None)]
+#[case::non_string_call(json!(vec![json!({"@call": 1}); MAX_COMPONENT_CALLS + 1]), Some(ComponentOversize::Calls))]
+#[case::calls_at_the_cap(json!(vec![json!({"@call": "f"}); MAX_COMPONENT_CALLS]), None)]
+#[case::nodes_past_the_cap(json!(vec![0; MAX_COMPONENT_NODES]), Some(ComponentOversize::Nodes))]
+#[case::nodes_at_the_cap(json!(vec![0; MAX_COMPONENT_NODES - 1]), None)]
+fn component_oversize_counts_nodes_and_calls(
+    #[case] value: Value,
+    #[case] expected: Option<ComponentOversize>,
+) {
+    assert_that!(component_oversize(&value)).is_equal_to(expected);
+}
+
 fn fan_out_document(levels: usize) -> Value {
     json!({"$defs": fan_out(levels, false)})
 }

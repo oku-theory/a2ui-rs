@@ -29,7 +29,7 @@ It builds for `wasm32-unknown-unknown`.
   its unions list and the authored document (`to_json`), compiles each entry against a bundle
   pruned to what it reaches (the validator lives in its `ComponentDef`/`FunctionDef`), then builds
   `validation_schema` in upstream's flattened shape, output only, each `$ref` naming a schema.
-  `validate_component` checks an instance: depth, reserved `@` keys, undeclared envelope keys
+  `validate_component` checks an instance: depth, nodes, calls, reserved `@` keys, envelope keys
   removed, its validator, then each nested call in its catalog (via `CatalogLookup`): exists, not
   `agentOnly`, matches the function's validator; `@index` as `IndexSystemFunction`; unknown
   catalogs only for identifiers. `derive`: a new-id catalog from a `Derivation` (source's version,
@@ -39,11 +39,11 @@ It builds for `wasm32-unknown-unknown`.
   `ref_pointer`: a `$ref`'s decoded tokens, `locate`; `target`; `position`: schema vs data keywords;
   `check`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`, RFC 6901 escapes, data
   `$ref`s as the runtime writes them; no anchors, dynamic refs, nested `$id`, entry interiors).
-- `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog nodes, 256-byte keys,
-  4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site resolved once), charges each
-  reached entry whole, weighs strings and keys one more node per 64 bytes (so the caps bound
-  retained string bytes), and rejects cycles, depth past 128 and oversized or pattern-heavy
-  entries before any compile.
+- `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog and component nodes,
+  component calls, 256-byte keys, 4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site
+  resolved once), charges each reached entry whole, weighs strings and keys one more node per 64
+  bytes (so the caps bound retained string bytes), and rejects cycles, depth past 128 and oversized
+  or pattern-heavy entries before any compile.
 
 ## Dependencies
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;

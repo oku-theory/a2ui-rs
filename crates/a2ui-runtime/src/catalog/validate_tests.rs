@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use speculoos::prelude::*;
 
 use super::super::test_support::{load, nested};
-use crate::limits::MAX_JSON_DEPTH;
+use crate::limits::{MAX_COMPONENT_CALLS, MAX_COMPONENT_NODES, MAX_JSON_DEPTH};
 use crate::{Catalog, Category, Error};
 
 const ID: &str = "https://example.com/catalog";
@@ -330,4 +330,73 @@ fn validate_component_value_past_the_depth_cap_is_rejected() {
     let component = any("data", nested(MAX_JSON_DEPTH));
     let message = validation_message(validate(&component));
     assert_that!(message).is_equal_to("Value nesting exceeds 64 levels".to_owned());
+}
+
+/// An `Any` component of exactly `nodes` JSON nodes: itself, `id`, `component`, `data` and items.
+fn with_nodes(nodes: usize) -> Value {
+    any("data", Value::Array(vec![Value::Null; nodes - 4]))
+}
+
+/// An `Any` component holding `calls` calls of `both`, which takes no arguments.
+fn with_calls(calls: usize) -> Value {
+    any("items", Value::Array(vec![json!({"@call": "both"}); calls]))
+}
+
+#[test]
+fn validate_component_nodes_at_the_cap_is_accepted() {
+    assert_that!(validate(&with_nodes(MAX_COMPONENT_NODES))).is_ok();
+}
+
+#[test]
+fn validate_component_nodes_past_the_cap_is_rejected() {
+    let message = validation_message(validate(&with_nodes(MAX_COMPONENT_NODES + 1)));
+    assert_that!(message).is_equal_to(format!(
+        "Component exceeds {MAX_COMPONENT_NODES} JSON nodes"
+    ));
+}
+
+#[test]
+fn validate_component_calls_at_the_cap_is_accepted() {
+    assert_that!(validate(&with_calls(MAX_COMPONENT_CALLS))).is_ok();
+}
+
+#[test]
+fn validate_component_calls_past_the_cap_is_rejected() {
+    let message = validation_message(validate(&with_calls(MAX_COMPONENT_CALLS + 1)));
+    assert_that!(message).is_equal_to(format!(
+        "Component exceeds {MAX_COMPONENT_CALLS} function calls"
+    ));
+}
+
+#[test]
+fn validate_component_nested_calls_count_toward_the_cap() {
+    let pair = json!({"@call": "upper", "args": {"value": {"@call": "both"}}});
+    let mut items = vec![pair; MAX_COMPONENT_CALLS / 2];
+    items.push(json!({"@call": "both"}));
+    let message = validation_message(validate(&any("items", Value::Array(items))));
+    assert_that!(message).is_equal_to(format!(
+        "Component exceeds {MAX_COMPONENT_CALLS} function calls"
+    ));
+}
+
+#[test]
+fn validate_component_calls_past_the_cap_are_refused_before_they_are_checked() {
+    let component = any(
+        "items",
+        Value::Array(vec![json!({"@call": 1}); MAX_COMPONENT_CALLS + 1]),
+    );
+    let message = validation_message(validate(&component));
+    assert_that!(message).is_equal_to(format!(
+        "Component exceeds {MAX_COMPONENT_CALLS} function calls"
+    ));
+}
+
+#[test]
+fn validate_component_too_deep_and_too_large_reports_the_size_cap() {
+    let mut component = with_nodes(MAX_COMPONENT_NODES + 1);
+    component["deep"] = nested(MAX_JSON_DEPTH + 1);
+    let message = validation_message(validate(&component));
+    assert_that!(message).is_equal_to(format!(
+        "Component exceeds {MAX_COMPONENT_NODES} JSON nodes"
+    ));
 }

@@ -113,6 +113,11 @@ fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expec
     Category::Validation,
     ErrorCode::ValidationFailed
 )]
+#[case::component_limit(
+    ComponentLimitSnafu { what: "function calls", limit: 1024_usize }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
 #[case::agent_only_call(
     AgentOnlyCallSnafu { function: "f" }.build(),
     Category::Validation,

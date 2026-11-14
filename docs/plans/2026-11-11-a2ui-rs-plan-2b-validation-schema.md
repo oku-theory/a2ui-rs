@@ -693,6 +693,27 @@ upstream's reading would be unsafe:
     only: the cases with a `rendererError` code are message-processor cases, skipped until Plan 3
     runs them and compares codes too (t-1643).
 
+34. **Component size and call caps (t-1567):** `validate_component` refuses, before any other
+    check, its depth cap included, an instance holding more than 65 536 JSON nodes or 1 024 calls,
+    as `ComponentLimit` (`ValidationError`, `VALIDATION_FAILED`; the message names the cap, the
+    code stays coarse as Decision 33's codes are). The depth cap bounded recursion, not work: a
+    flat array of a million calls ran a million function validators. A call is any object holding
+    an `@call` key, nested ones, calls into unknown catalogs, non-string `@call`s and ones under an
+    envelope key the walk skips included: counting more than is checked errs on the safe side.
+    Both caps are counted in one iterative pass that stops at the first node past a cap, the walk
+    `oversize` (load rule 1) now shares as `first_oversize`, so refusing costs at most the cap in
+    work; it runs first so the depth walk, which has no node bound, then sees at most the cap.
+    Accepted work stays bounded but not linear: a call's validator checks its whole subtree, so the
+    about 32 calls the depth cap lets nest revisit shared nodes, about 32 × 65 536 node visits at
+    worst. The values are generous: the basic catalog's components hold tens of nodes, and a
+    literal list of 60 000 child ids still passes; the conformance suites hold no component near
+    either. They are fixed constants, like the catalog caps (t-1566 decides whether hosts may set
+    them). A string is one node whatever its length, so string bytes are the message processor's
+    to cap, per message rather than per component (Plan 3, t-1644), as `Catalog::parse` caps
+    catalog text; `validate_component` must not face agent traffic before that cap exists.
+    Instances it accepted before can now be refused: a behavioural tightening to note in the
+    release notes, which `cargo-semver-checks` does not see.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
