@@ -151,11 +151,27 @@ fuzz-check:
         exit 1
     fi
 
-# Rebuilds fuzz/Cargo.lock from the root lock, so shared crates keep the reviewed versions.
+# Rebuilds fuzz/Cargo.lock from the root lock, so shared crates keep the reviewed versions; the
+# crates only the fuzz workspace uses keep the versions its old lock pinned, new ones resolve.
 fuzz-lock:
     #!/usr/bin/env bash
     set -euo pipefail
-    cp Cargo.lock fuzz/Cargo.lock
+    # The root lock's packages, then the old fuzz lock's others; cargo drops what is unused.
+    python3 -I - Cargo.lock fuzz/Cargo.lock <<'EOF'
+    import re, sys
+    def packages(path):
+        text = open(path).read()
+        blocks = re.findall(r"\[\[package\]\]\n.*?(?=\n\[\[|\Z)", text, re.S)
+        return text[: text.index("[[package]]")], blocks
+    def key(block):
+        field = lambda name: re.search(rf"^{name} = (.*)$", block, re.M)[1]
+        return field("name"), field("version")
+    header, root = packages(sys.argv[1])
+    _, old = packages(sys.argv[2])
+    kept = {key(block) for block in root}
+    blocks = root + [block for block in old if key(block) not in kept]
+    open(sys.argv[2], "w").write(header + "\n".join(block.rstrip("\n") + "\n" for block in blocks))
+    EOF
     cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
     entries() { awk '/^name =/{n=$3}/^version =/{print n, $3}' "$1" | sort; }
     echo "fuzz/Cargo.lock adds, beyond Cargo.lock (review each new release):"
