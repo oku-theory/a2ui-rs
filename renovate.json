@@ -4,9 +4,7 @@
   "enabledManagers": ["rust-toolchain", "github-actions", "cargo"],
   "semanticCommits": "enabled",
   "timezone": "Etc/UTC",
-  "dependencyDashboard": {
-    "enabled": true
-  },
+  "dependencyDashboard": true,
   "packageRules": [
     {
       "description": "A bump is its own build(toolchain) pull request that a person finishes.",
