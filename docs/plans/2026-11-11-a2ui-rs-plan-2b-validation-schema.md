@@ -732,6 +732,43 @@ upstream's reading would be unsafe:
     named (a renderer on a hot path) has not arrived; the change is small and every caller in
     the workspace already only borrowed it.
 
+36. **The wasm cost of `jsonschema` (t-1573):** measured on 2026-11-14 with Rust 1.99.0, each
+    case a `cdylib` for `wasm32-unknown-unknown` built `--release` with `opt-level = "s"`,
+    `lto = true`, `codegen-units = 1`, `panic = "abort"` and `strip = true`, without `wasm-opt`
+    (not installed); compressed with `gzip -9`. Rows 2 and 4 compile a schema read from the
+    input and check an instance against it:
+
+    | Build | `.wasm` | gzip -9 |
+    |---|---|---|
+    | `serde_json` alone, parsing a value | 55 KiB | 24 KiB |
+    | plus `jsonschema` 0.61.1 (no default features), compiling and checking | 2.52 MiB | 787 KiB |
+    | runtime and catalog: `catalog()`/`from_json`, `validate_component`, `parse_template` | 2.81 MiB | 883 KiB |
+    | `boon` 0.6.1 in place of `jsonschema` in row 2 | 1.37 MiB | 459 KiB |
+
+    The `jsonschema` build is about 90 % of the runtime's wasm (88 % net of `serde_json`): the
+    runtime and the embedded catalogs add about 300 KiB raw and 100 KiB compressed on top of it.
+    Exact bytes: 56 554, 2 639 724, 2 945 437 and 1 434 223 (gzip 24 819, 805 682, 904 663 and 470
+    278). By crate, from the v0 symbol names of the same runtime build left unstripped (code section
+    2.22 MiB, data section 579 KiB, the embedded schemas and catalogs included): `jsonschema` 838
+    KiB; the linear regex stack the runtime selects (`regex-automata`, `regex-syntax`,
+    `aho-corasick`, `regex`, `memchr`, `jsonschema-regex`) 441 KiB; `fancy-regex` 126 KiB, linked
+    although the runtime never selects it (`jsonschema` chooses the engine at run time);
+    `referencing` 72 KiB; `num-bigint` 39 KiB; `fluent-uri` 19 KiB; `ahash` 15 KiB; `a2ui-runtime`
+    103 KiB; `serde_json` 47 KiB; `core`, `alloc` and `hashbrown` generics, mostly instantiated by
+    `jsonschema`, 493 KiB. No single dependency is a cheap cut: dropping `fancy-regex` would need an
+    upstream feature gate and saves 5 %. `boon` does the same work in a little over half the bytes
+    (-1.15 MiB raw, -328 KiB gzip). Both bring `getrandom`, and so `wasm-bindgen`, on wasm32:
+    `jsonschema` directly and through `ahash`, `boon` through `ahash`; it only seeds hashing and
+    reaches no result. We keep `jsonschema` for now: no wasm size budget exists yet (Plan 6 sets one
+    with the Leptos renderer and `wasm-opt`, and re-measures), and a switch is not only bytes. The
+    evaluation, t-1646, gated on that budget, must keep the agent-catalog protections as hard
+    requirements: a non-backtracking regex engine whose compiled size is capped at
+    `MAX_PATTERN_BYTES` (`size_limit`/`dfa_size_limit` today, not the pattern's length), and no
+    network or file loader (a `file:` or remote `$ref` refused, with a test). Then the conformance
+    suites must pass unchanged, error codes and locations included; the swap is local to
+    `validator.rs` and `catalog/compile.rs`. The measurement crates were throwaway, a dozen lines
+    each; Plan 6's budget should come with a committed size check instead.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +

@@ -7439,7 +7439,10 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
   the error boundary.
 - Done (t-1572, Plan 2b Decision 35): a shared basic catalog; `a2ui_catalog_basic::catalog()`
   compiles it once, in a `std::sync::OnceLock`.
-- wasm bundle size: measure what `jsonschema` adds (`fancy-regex`, `num-*`, `ahash`); if too
-  large, evaluate `boon` as the validator.
+- Done (t-1573, Plan 2b Decision 36): wasm bundle size measured; `jsonschema` is 2.52 MiB of the
+  runtime's 2.81 MiB, `boon` would be 1.37 MiB; the swap waits for Plan 6's size budget
+  (t-1646).
+- Plan 6: set a wasm size budget for the renderer, measured after `wasm-opt` and checked in CI;
+  if the runtime exceeds it, evaluate `boon` (t-1646, Plan 2b Decision 36).
 - A wasm runtime smoke test that builds and runs a catalog validator in a browser (Plan 6,
   `wasm-bindgen-test`): today wasm32 is only built, never run.
