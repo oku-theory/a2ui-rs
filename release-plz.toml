@@ -18,11 +18,3 @@ publish_no_verify = true
 [[package]]
 name = "a2ui-conformance"
 release = false
-
-# Its first release is published by hand: trusted publishing cannot create a crate, and 0.1.0
-# does not build against a2ui-runtime 0.1.0. release-plz tags it and publishes a2ui-runtime only;
-# remove this once a2ui-catalog-basic is on crates.io with its trusted publisher (plan 2b,
-# Decision 33).
-[[package]]
-name = "a2ui-catalog-basic"
-publish = false

@@ -652,7 +652,12 @@ upstream's reading would be unsafe:
     `publish-new` token scoped to the crate, adds its trusted publisher, revokes the token, and a
     second change removes `publish = false`. Not taken: merging the release PR as is, which leaves a
     red `release` job after the runtime is published, with its tags uncertain; and publishing both
-    crates by hand, which leaves trusted publishing untried until the next release.
+    crates by hand, which leaves trusted publishing untried until the next release. Done on
+    2026-11-14: release run 43604416240 published `a2ui-runtime` 0.2.0 by trusted publishing
+    (crates.io records the run and commit d984cc4) and tagged `a2ui-catalog-basic-v0.2.0` git-only;
+    the user published `a2ui-catalog-basic` 0.2.0 by hand from that tag, after its dry run passed
+    against the published runtime, added its trusted publisher and revoked the token; `publish =
+    false` is gone, so the next release publishes both crates by trusted publishing.
 
 ## The algorithm (reference for Tasks 1 and 2)
 
