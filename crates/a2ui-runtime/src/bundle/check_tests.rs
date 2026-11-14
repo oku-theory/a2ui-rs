@@ -158,7 +158,10 @@ fn check_references_target_the_validation_schema_drops_is_catalog_error(#[case] 
 #[case::def("catalog.json#/$defs/A")]
 #[case::def_named_empty("#/$defs/")]
 #[case::component_named_empty("#/components/")]
-#[case::absolute_common_type("https://a2ui.org/specification/v1_0/common_types.json#/$defs/Weight")]
+#[case::escaped_common_type("common_types.json#/%24defs/Dynamic%53tring")]
+#[case::absolute_common_type(
+    "https://a2ui.org/specification/v1_0/common_types.json#/$defs/DynamicString"
+)]
 fn check_references_target_the_validation_schema_keeps_passes(#[case] reference: &str) {
     let document = json!({"$defs": {"x": {"$ref": reference}}});
     assert_that!(references(document)).is_ok();
@@ -284,4 +287,42 @@ fn check_references_data_ref_in_any_entry_is_catalog_error(#[case] document: Val
 )]
 fn check_references_data_ref_the_rewrite_keeps_passes(#[case] document: Value) {
     assert_that!(references(document)).is_ok();
+}
+
+#[rstest]
+#[case::relative("common_types.json#/$defs/Weight")]
+#[case::dot_relative("./common_types.json#/$defs/Weight")]
+#[case::below_the_name("common_types.json#/$defs/Weight/properties")]
+#[case::absolute("https://a2ui.org/specification/v1_0/common_types.json#/$defs/Weight")]
+fn check_references_common_types_ref_to_no_common_type_is_catalog_error(#[case] reference: &str) {
+    let document = json!({"$defs": {"Weight": {}, "x": {"$ref": reference}}});
+    assert_that!(reference_error(document)).contains(format!(
+        "$ref '{reference}' at /$defs/x/$ref names 'Weight' in common_types.json, which defines \
+         no such type"
+    ));
+}
+
+#[rstest]
+#[case::local("#/$defs/ChildList")]
+#[case::catalog("catalog.json#/$defs/DynamicString")]
+#[case::below_the_type("#/$defs/DynamicString/oneOf/0")]
+fn check_references_self_ref_to_a_common_type_passes(#[case] reference: &str) {
+    let document = json!({"components": {"A": {"properties": {"t": {"$ref": reference}}}}});
+    assert_that!(references(document)).is_ok();
+}
+
+#[test]
+fn check_references_theme_common_types_ref_to_no_common_type_is_catalog_error() {
+    let reference = "common_types.json#/$defs/Missing";
+    let document = json!({"theme": {"properties": {"brand": {"$ref": reference}}}});
+    assert_that!(reference_error(document)).contains(
+        "at /theme/properties/brand/$ref names 'Missing' in common_types.json, which defines no \
+         such type",
+    );
+}
+
+#[test]
+fn check_references_common_types_ref_to_a_common_type_in_data_asks_for_the_local_form() {
+    let document = json!({"$defs": {"X": {"const": {"$ref": "common_types.json#/$defs/Action"}}}});
+    assert_that!(reference_error(document)).ends_with("write it '#/$defs/Action'");
 }

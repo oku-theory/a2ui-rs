@@ -37,8 +37,8 @@ It builds for `wasm32-unknown-unknown`.
   `entries`, `compile`, `document`, `shape`, `validate`, `derive`, `flatten`, `validation_schema`.
 - `bundle`: `local_ref`s, common types, `written_ref`; `walk`: `$ref` walks, data included;
   `ref_pointer`: a `$ref`'s decoded tokens, `locate`; `target`; `position`: schema vs data keywords;
-  `check`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`, RFC 6901 escapes, data
-  `$ref`s as the runtime writes them; no anchors, dynamic refs, nested `$id`, entry interiors).
+  `check`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json` naming common types,
+  RFC 6901 escapes, data `$ref`s as written; no anchor, dynamic ref, inner `$id`, interior).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog and component nodes,
   component calls, 256-byte keys, 4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site
   resolved once), charges each reached entry whole, weighs strings and keys one more node per 64

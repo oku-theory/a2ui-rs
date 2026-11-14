@@ -769,6 +769,20 @@ upstream's reading would be unsafe:
     `validator.rs` and `catalog/compile.rs`. The measurement crates were throwaway, a dozen lines
     each; Plan 6's budget should come with a committed size check instead.
 
+37. **A `common_types.json` `$ref` names a common type (t-1575):** localizing drops the document
+    part of a `$ref`, so `common_types.json#/$defs/Weight` resolved to the catalog's own
+    `Weight`: lenient, not unsafe (the caps applied), but the reference meant one document and
+    reached another. Load rule 4 now refuses a `common_types.json` reference (any of its three
+    URIs) whose `$defs` name is not a common type; `common_types.json#/components/X` was already
+    refused (only `$defs` is kept there). The task also proposed refusing a self-reference that
+    lands on a copied common type (`#/$defs/DynamicString`); review found upstream's own v1.0
+    conformance catalogs write that form in schema positions (`composition_constraints.yaml`,
+    `multi_catalog.yaml`, run from Plan 3), and it is not ambiguous: `check_defs` refuses a
+    definition named like a common type, so such a name can only mean the common type. It stays
+    accepted, pinned by a test. A dangling `common_types.json` pointer below a real type
+    (`#/$defs/DynamicString/oneOf/99`) is still the validation schema's check to report. The
+    commit is marked breaking: a catalog that loaded before can be refused.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +

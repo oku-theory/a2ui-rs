@@ -144,6 +144,16 @@ fn from_json_external_ref_is_catalog_error() {
 }
 
 #[test]
+fn from_json_defs_shadowing_a_common_type_referenced_by_itself_reports_the_shadowing() {
+    let document = v10(json!({"$defs": {
+        "DynamicString": {"type": "string"},
+        "x": {"$ref": "#/$defs/DynamicString"}
+    }}));
+    assert_that!(catalog_error(load(document)))
+        .contains("$defs 'DynamicString' shadows the common type");
+}
+
+#[test]
 fn from_json_defs_shadowing_a_common_type_is_catalog_error() {
     let document = v10(json!({"$defs": {"DynamicString": {"type": "string"}}}));
     assert_that!(catalog_error(load(document))).contains("'DynamicString'");
