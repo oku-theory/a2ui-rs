@@ -1,3 +1,4 @@
+use rstest::rstest;
 use speculoos::prelude::*;
 
 use super::*;
@@ -55,4 +56,73 @@ fn error_debug_large_field_is_capped() {
     let debug = format!("{error:?}");
     assert_that!(debug.contains(&"f".repeat(MAX_QUOTED_CHARS + 1))).is_false();
     assert_that!(debug.contains("characters elided")).is_true();
+}
+
+#[rstest]
+#[case::data(ErrorCode::DataError, "DATA_ERROR")]
+#[case::expression(ErrorCode::ExpressionError, "EXPRESSION_ERROR")]
+#[case::catalog(ErrorCode::CatalogError, "CATALOG_ERROR")]
+#[case::validation(ErrorCode::ValidationFailed, "VALIDATION_FAILED")]
+fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expected: &str) {
+    assert_that!(code.as_str()).is_equal_to(expected);
+}
+
+#[rstest]
+#[case::forbidden_segment(
+    ForbiddenSegmentSnafu { path: "/__proto__", segment: "__proto__" }.build(),
+    Category::Data,
+    ErrorCode::DataError
+)]
+#[case::traverse_primitive(
+    TraversePrimitiveSnafu { path: "/a/b", segment: "a" }.build(),
+    Category::Data,
+    ErrorCode::DataError
+)]
+#[case::invalid_pointer(
+    InvalidPointerSnafu { path: "not_a_pointer", reason: "must start with '/'" }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
+#[case::expression_syntax(
+    ExpressionSyntaxSnafu { message: "unterminated", offset: 2_usize }.build(),
+    Category::Parse,
+    ErrorCode::ExpressionError
+)]
+#[case::expression_limit(
+    ExpressionLimitSnafu { limit: "parts" }.build(),
+    Category::Expression,
+    ErrorCode::ExpressionError
+)]
+#[case::catalog_json(
+    CatalogJsonSnafu { message: "EOF" }.build(),
+    Category::Catalog,
+    ErrorCode::CatalogError
+)]
+#[case::embedded_schema(
+    EmbeddedSchemaSnafu { name: "common_types.json", message: "broken" }.build(),
+    Category::Catalog,
+    ErrorCode::CatalogError
+)]
+#[case::unknown_component(
+    UnknownComponentSnafu { component: "Nope" }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
+#[case::unknown_function(
+    UnknownFunctionSnafu { function: "unknownFunc" }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
+#[case::agent_only_call(
+    AgentOnlyCallSnafu { function: "f" }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
+fn error_class_of_variant_is_its_upstream_category_and_code(
+    #[case] inner: Inner,
+    #[case] category: Category,
+    #[case] code: ErrorCode,
+) {
+    let error: Error = inner.into();
+    assert_that!((error.category(), error.code())).is_equal_to((category, code));
 }

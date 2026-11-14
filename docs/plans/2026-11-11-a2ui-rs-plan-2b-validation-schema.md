@@ -658,6 +658,40 @@ upstream's reading would be unsafe:
     the user published `a2ui-catalog-basic` 0.2.0 by hand from that tag, after its dry run passed
     against the published runtime, added its trusted publisher and revoked the token; `publish =
     false` is gone, so the next release publishes both crates by trusted publishing.
+33. **`Error::code()` (t-1565):** each error carries an `ErrorCode` beside its `Category`, the
+    `code` a renderer `error` message or surface diagnostic reports. It lands ahead of Plan 3's
+    message processor, against Plan 2's deferral, so each variant's code is fixed where the
+    variant is. One private match decides both per variant (`Inner::class`), so a new variant must
+    pick its code where it picks its category; codes mapped from categories would have put a
+    future `UNALLOWED_PARENT` (a validation error) under `VALIDATION_FAILED`. The code is the one
+    of the stage that raises the variant: upstream gives one fault different codes at different
+    stages (an unknown component is `VALIDATION_FAILED` when validated, `UNKNOWN_COMPONENT_TYPE`
+    as a surface diagnostic; an `agentOnly` call or an unknown `@` function is `VALIDATION_FAILED`
+    when validated, `EXPRESSION_ERROR` when evaluated), so Plan 3 raises its own variants for
+    evaluation and rendering rather than reusing `UnknownComponent`, `UnknownFunction` or
+    `AgentOnlyCall`, which only `validate_component` raises. Today's variants map to four codes:
+    data path errors to `DATA_ERROR` (`error_responses.yaml`, prototype pollution); template
+    syntax and template limits to `EXPRESSION_ERROR` (the protocol reports a local evaluation
+    failure so, and a `regex` pattern that does not parse); every validation error, an unknown
+    component or function and an `agentOnly` call from a component included, to
+    `VALIDATION_FAILED` (every `validator_v1_0.yaml` `rendererError`). `InvalidPointer` moves from
+    `DataError` to `ValidationError`, `VALIDATION_FAILED`: upstream's one malformed-pointer case
+    (`test_error_response_update_data_model_invalid_json_pointer`) expects both, and no case
+    expects `DataError` for one. Catalog load, compile and embedded-schema errors map to
+    `CATALOG_ERROR` by analogy only: upstream's `CATALOG_ERROR` cases
+    (`agent_function_routing.yaml`) are calls naming a catalog the surface lacks, and no case
+    reports a catalog that fails to load; `EmbeddedSchema` is a defect of this crate, which a
+    renderer should log rather than blame on the agent, and `UserActivation` is a catalog
+    declaring a function inconsistently, not the evaluation-time refusal (`EXPRESSION_ERROR`). The
+    enum is `#[non_exhaustive]` and gains `UNALLOWED_PARENT`, `INTEGRITY_ERROR`,
+    `CATALOG_NOT_FOUND`, `INVALID_FUNCTION_CALL` and the others with the first error that raises
+    them (Plan 3), not before: a variant no error maps to would document a code the runtime never
+    reports. `UNKNOWN_FUNCTION` is the agent's reply to `callAgentFunction`, which the renderer
+    reads. Only `ErrorCode::as_str` is meant for the wire; `Display`, English and quoting capped
+    input, is for logs. A `VALIDATION_FAILED` message also needs `path` and `surfaceId`, which
+    `Error` does not expose yet (Plan 3). The harness's `expect_error` still compares categories
+    only: the cases with a `rendererError` code are message-processor cases, skipped until Plan 3
+    runs them and compares codes too (t-1643).
 
 ## The algorithm (reference for Tasks 1 and 2)
 

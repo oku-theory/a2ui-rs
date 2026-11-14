@@ -42,8 +42,9 @@ fn parse_forbidden_segment_message_names_it() {
 #[case("relative")]
 #[case("/bad~2escape")]
 #[case("/trailing~")]
-fn parse_malformed_pointer_is_data_error(#[case] input: &str) {
-    assert_that!(Pointer::parse(input).unwrap_err().category()).is_equal_to(Category::Data);
+fn parse_malformed_pointer_is_validation_error(#[case] input: &str) {
+    let category = Pointer::parse(input).unwrap_err().category();
+    assert_that!(category).is_equal_to(Category::Validation);
 }
 
 #[rstest]

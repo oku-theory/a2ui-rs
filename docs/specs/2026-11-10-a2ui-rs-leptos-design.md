@@ -91,7 +91,10 @@ One concept per module:
 
 Errors: opaque Snafu `Error` with a backtrace in every variant, exposing `code() -> ErrorCode` (the
 A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRITY_ERROR`,
-`INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `UNKNOWN_FUNCTION`) and
+`INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `CATALOG_NOT_FOUND`, and the
+`DATA_ERROR` and `CATALOG_ERROR` the conformance suites expect; `UNKNOWN_FUNCTION` is the agent's
+reply, which the renderer reads, not one it raises; a `#[non_exhaustive]` enum that gains each code
+with the first error raising it, and a code per stage, plan 2b Decision 33) and
 `category()` matching the harness taxonomy (`Parse`, `Validation`, `Integrity`, `Recursion`,
 `Catalog`, `Data`, `Expression`, `State`, `Compilation`). `Display` is English for logs; the
 application localizes from the code. Input an error quotes (paths, names, `$ref`s, schema

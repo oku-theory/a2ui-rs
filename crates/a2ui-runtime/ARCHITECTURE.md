@@ -5,7 +5,7 @@ It builds for `wasm32-unknown-unknown`.
 
 ## Modules
 
-- `error`: one opaque `Error` (Snafu, backtrace per variant), `category()`; stable English.
+- `error`: opaque `Error` (Snafu, backtrace per variant), `category()`, `code()`; stable English.
 - `quoted`: `Quoted` input, escaped and capped; `reason!` joins fixed text and `Quoted` only.
 - `pointer`: the crate's one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`,
   absolute, empty segments dropped, `__proto__`/`constructor`/`prototype` refused; list indices
