@@ -82,7 +82,7 @@ test:
     cargo test --doc --workspace
     just lock-diff-test
 
-# scripts/lock_diff.py's unit tests, offline; -B leaves no __pycache__ behind.
+# The unit tests in scripts/ (lock_diff, fuzz_lock, fuzz_targets), offline; -B: no __pycache__.
 lock-diff-test:
     python3 -B -m unittest discover -s scripts -p '*_test.py'
 
@@ -95,42 +95,54 @@ lock-diff base="origin/main":
 wasm:
     cargo build -p a2ui-runtime -p a2ui-catalog-basic --target wasm32-unknown-unknown
 
-# Fuzzes `target` (catalog_parse, validate_component) for `seconds` with libFuzzer, on the pinned
-# toolchain: cargo-fuzz's coverage flags, without its AddressSanitizer (nightly-only; our crates
-# forbid unsafe). Seeds come from vendor/a2ui; a crash lands in fuzz/artifacts/<target>/, fails the
-# recipe, and becomes a tests/regressions/issue_NNNN_*.rs test with its fix.
+# Fuzzes `target` for `seconds` with libFuzzer and fuzz/a2ui.dict, from the corpus in
+# fuzz/corpus/<target>, seeded from vendor/a2ui; scripts/fuzz_targets.py holds each target's
+# limits and seeds. A crash, a slow input or a broken oracle lands in fuzz/artifacts/<target>/,
+# fails the recipe, and becomes a tests/regressions/issue_NNNN_*.rs test with its fix
+# (plan 2b, Decision 46).
 [positional-arguments]
 fuzz target seconds="60":
     #!/usr/bin/env bash
     set -euo pipefail
     target="$1"
     seconds="$2"
-    case "$target" in
-        catalog_parse) max_len=1048576 timeout=2 ;;
-        validate_component) max_len=262144 timeout=1 ;;
-        *) echo "unknown fuzz target '$target': catalog_parse or validate_component" >&2; exit 2 ;;
-    esac
+    read -r max_len timeout < <(python3 -B scripts/fuzz_targets.py limits "$target")
     [[ "$seconds" =~ ^[0-9]+$ ]] || { echo "seconds must be a whole number" >&2; exit 2; }
-    corpus="fuzz/corpus/$target"
-    mkdir -p "$corpus" "fuzz/artifacts/$target"
-    # One seed per catalog for catalog_parse, one per component instance for validate_component.
-    python3 -I - "$target" "$corpus" <<'EOF'
-    import glob, hashlib, json, pathlib, sys
-    target, corpus = sys.argv[1], pathlib.Path(sys.argv[2])
-    if target == "catalog_parse":
-        files = glob.glob("vendor/a2ui/catalogs/*/v1/catalog.json")
-        files += glob.glob("vendor/a2ui/conformance/test_data/catalogs/*.json")
-        seeds = [pathlib.Path(f).read_bytes() for f in sorted(files)]
-    else:
-        seeds = []
-        for f in sorted(glob.glob("vendor/a2ui/catalogs/basic/v1/examples/*.json")):
-            for message in json.loads(pathlib.Path(f).read_text()).get("messages", []):
-                for component in (message.get("updateComponents") or {}).get("components", []):
-                    seeds.append(json.dumps(component, sort_keys=True).encode())
-    for seed in seeds:
-        (corpus / ("seed-" + hashlib.sha256(seed).hexdigest()[:16])).write_bytes(seed)
-    print(f"{len(seeds)} seeds for {target}")
-    EOF
+    mkdir -p "fuzz/artifacts/$target"
+    python3 -B scripts/fuzz_targets.py seed "$target" "fuzz/corpus/$target"
+    binary="$(just fuzz-build "$target")"
+    [[ -x "$binary" ]] || { echo "no fuzz binary at $binary" >&2; exit 1; }
+    cd fuzz
+    "$binary" -max_total_time="$seconds" -max_len="$max_len" -timeout="$timeout" \
+        -dict=a2ui.dict -report_slow_units=1 -artifact_prefix="artifacts/$target/" \
+        "corpus/$target"
+
+# Minimizes fuzz/corpus/<target> in place: libFuzzer keeps the inputs that add coverage, under
+# the target's own limits, so an input `just fuzz` would cut or time out is not kept.
+[positional-arguments]
+fuzz-minimize target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="$1"
+    read -r max_len timeout < <(python3 -B scripts/fuzz_targets.py limits "$target")
+    binary="$(just fuzz-build "$target")"
+    [[ -x "$binary" ]] || { echo "no fuzz binary at $binary" >&2; exit 1; }
+    cd fuzz
+    rm -rf "corpus/$target.min"
+    mkdir -p "corpus/$target" "corpus/$target.min"
+    "$binary" -merge=1 -max_len="$max_len" -timeout="$timeout" "corpus/$target.min" \
+        "corpus/$target"
+    rm -rf "corpus/$target"
+    mv "corpus/$target.min" "corpus/$target"
+    echo "$(find "corpus/$target" -type f | wc -l | tr -d ' ') inputs left in" \
+        "fuzz/corpus/$target" >&2
+
+# Builds one fuzz target and prints its path: cargo-fuzz's coverage flags on the pinned
+# toolchain, without its AddressSanitizer (nightly-only, t-1660; our crates forbid unsafe).
+[positional-arguments]
+fuzz-build target: fuzz-lockfile
+    #!/usr/bin/env bash
+    set -euo pipefail
     cd fuzz
     triple="$(rustc -vV | sed -n 's/^host: //p')"
     export CARGO_TARGET_DIR="$PWD/target"
@@ -138,54 +150,28 @@ fuzz target seconds="60":
         -Cllvm-args=-sanitizer-coverage-inline-8bit-counters \
         -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares \
         -Cdebug-assertions -Coverflow-checks" \
-        cargo build --release --locked --target "$triple" --bin "$target"
-    "target/$triple/release/$target" -max_total_time="$seconds" -max_len="$max_len" \
-        -timeout="$timeout" -report_slow_units=1 -artifact_prefix="artifacts/$target/" \
-        "corpus/$target"
+        cargo build --release --locked --target "$triple" --bin "$1" >&2
+    echo "$PWD/target/$triple/release/$1"
 
-# The fuzz workspace: formatted, lint-clean, building `--locked`, and fuzzing the releases that
-# ship (a2ui-runtime's dependencies at the root lock's versions).
-fuzz-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
+# The fuzz workspace: formatted, lint-clean and its lib tested, on its generated lock.
+fuzz-check: fuzz-lockfile
     cargo fmt --manifest-path fuzz/Cargo.toml --check
-    cargo clippy --manifest-path fuzz/Cargo.toml --locked --bins -- -D warnings
-    tree() { cargo tree --manifest-path "$1" --locked -p a2ui-runtime -e normal --prefix none \
-        | sed 's/ (.*//' | sort -u; }
-    if ! diff <(tree Cargo.toml) <(tree fuzz/Cargo.toml); then
-        echo "fuzz/Cargo.lock resolves a2ui-runtime apart from Cargo.lock: run just fuzz-lock" >&2
-        exit 1
-    fi
+    cargo clippy --manifest-path fuzz/Cargo.toml --locked --all-targets -- -D warnings
+    cargo test --manifest-path fuzz/Cargo.toml --locked --lib
 
-# Rebuilds fuzz/Cargo.lock from the root lock, so shared crates keep the reviewed versions; the
-# crates only the fuzz workspace uses keep the versions its old lock pinned, new ones resolve.
-fuzz-lock:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The root lock's packages, then the old fuzz lock's others; cargo drops what is unused.
-    python3 -I - Cargo.lock fuzz/Cargo.lock <<'EOF'
-    import re, sys
-    def packages(path):
-        text = open(path).read()
-        blocks = re.findall(r"\[\[package\]\]\n.*?(?=\n\[\[|\Z)", text, re.S)
-        return text[: text.index("[[package]]")], blocks
-    def key(block):
-        field = lambda name: re.search(rf"^{name} = (.*)$", block, re.M)[1]
-        return field("name"), field("version")
-    def line(name, version):
-        major, minor = version.strip('"').split(".")[:2]
-        return name, major if major != "0" else "0." + minor
-    header, root = packages(sys.argv[1])
-    _, old = packages(sys.argv[2])
-    # An old package the root lock holds a semver-compatible version of takes the root's.
-    kept = {line(*key(block)) for block in root}
-    blocks = root + [block for block in old if line(*key(block)) not in kept]
-    open(sys.argv[2], "w").write(header + "\n".join(block.rstrip("\n") + "\n" for block in blocks))
-    EOF
+# Generates fuzz/Cargo.lock (not committed): Cargo.lock's packages, so fuzz/ builds the reviewed
+# releases that ship and a root lock change needs nothing here, then fuzz/fuzz-only.lock's pins
+# for what fuzz/ alone uses. Fails if fuzz/ needs a release neither holds (plan 2b, Decision 45).
+fuzz-lockfile:
+    python3 -B scripts/fuzz_lock.py assemble
     cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
-    entries() { awk '/^name =/{n=$3}/^version =/{print n, $3}' "$1" | sort; }
-    echo "fuzz/Cargo.lock adds, beyond Cargo.lock (review each new release):"
-    comm -13 <(entries Cargo.lock) <(entries fuzz/Cargo.lock)
+    python3 -B scripts/fuzz_lock.py verify
+
+# Resolves what fuzz/ alone needs and rewrites fuzz/fuzz-only.lock, listing each release to review.
+fuzz-lock:
+    python3 -B scripts/fuzz_lock.py assemble
+    cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
+    python3 -B scripts/fuzz_lock.py pin
 
 # The declared minimum Rust version, `rust-version` in the workspace Cargo.toml.
 msrv-version:
@@ -532,6 +518,8 @@ semver-checks-tool:
 audit:
     cargo deny check licenses sources
     cargo audit --deny yanked
+    # fuzz/'s lock as assembled from Cargo.lock and the pins, by Python alone: no build script.
+    python3 -B scripts/fuzz_lock.py assemble
     cargo audit --deny yanked --file fuzz/Cargo.lock
 
 # Packages both libraries as crates.io receives them, each built from its package alone, so a

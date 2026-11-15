@@ -1,3 +1,5 @@
 /target
 /corpus
 /artifacts
+# Generated from Cargo.lock and fuzz-only.lock by `just fuzz-lockfile` (plan 2b, Decision 45).
+/Cargo.lock

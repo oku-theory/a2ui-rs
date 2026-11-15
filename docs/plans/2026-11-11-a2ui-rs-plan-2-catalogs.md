@@ -7429,8 +7429,9 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
 - Done (t-1568): `Catalog::from_json` documents that untrusted text is capped before parsing;
   `fuzz/` holds libFuzzer targets for `Catalog::parse` and `validate_component`, run by
   `just fuzz <target> [seconds]` on the pinned toolchain without cargo-fuzz; `just check`
-  builds them and keeps their lock on the root's versions, `just audit` audits it; deeper
-  targets (agent catalogs, oracles, ASan, a schedule) are t-1649.
+  builds them on a lock generated from the root's (Plan 2b, Decision 45), `just audit` audits
+  it; t-1649 added agent catalogs, overrides, templates, pointers, oracles, a dictionary and a
+  twice-weekly CI run (Plan 2b, Decision 46); ASan is t-1660.
 - Decided (t-1569, Plan 2b Decision 40): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
   `AllowedCallers`, bound to the host-loaded catalog; the spec is amended; open points t-1648.
 - Decided (t-1570, Plan 2b Decision 39): common type names are reserved per protocol version;

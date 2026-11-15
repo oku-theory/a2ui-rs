@@ -16,6 +16,7 @@ use crate::bundle::{
     def_names, first_not_a_schema, node_at, pointer, rewrite_refs, whole_def_name, written_ref,
 };
 use crate::error::{Error, MalformedCatalogSnafu};
+use crate::keys::CALL_KEY;
 use crate::quoted::{Quoted, reason};
 use crate::validator::DRAFT_2020_12;
 
@@ -266,7 +267,8 @@ fn close_args(schema: &mut Value) {
     let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
         return;
     };
-    if !properties.contains_key("@call") && !properties.contains_key("call") {
+    // v0.9's unprefixed `call` too: a catalog may still name its function so (Task 2).
+    if !properties.contains_key(CALL_KEY) && !properties.contains_key("call") {
         return;
     }
     let Some(Value::Object(args)) = properties.get_mut("args") else {

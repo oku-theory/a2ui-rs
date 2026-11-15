@@ -10,6 +10,7 @@ use crate::error::{
     SystemFunctionCatalogSnafu, UnknownComponentSnafu, UnknownFunctionSnafu, ValueLimitSnafu,
 };
 use crate::ident::is_identifier;
+use crate::keys::{CALL_KEY, PATH_KEY};
 use crate::limits::{
     ComponentOversize, MAX_COMPONENT_CALLS, MAX_COMPONENT_NODES, MAX_JSON_DEPTH,
     component_oversize, deeper_than,
@@ -130,7 +131,7 @@ impl<'a, L: CatalogLookup + ?Sized> Walk<'a, L> {
         match node {
             Value::Object(map) => {
                 map.keys().map(String::as_str).try_for_each(unreserved)?;
-                if map.contains_key("@call") {
+                if map.contains_key(CALL_KEY) {
                     self.call(node, map)?;
                 }
                 map.values().try_for_each(|value| self.node(value))
@@ -152,7 +153,7 @@ impl<'a, L: CatalogLookup + ?Sized> Walk<'a, L> {
     /// Checks the call `node`, whose entries are `call`, in the catalog it runs in.
     fn call(&self, node: &Value, call: &Map<String, Value>) -> Result<(), Error> {
         let name = call
-            .get("@call")
+            .get(CALL_KEY)
             .and_then(Value::as_str)
             .context(CallShapeSnafu {
                 reason: "@call must be a string",
@@ -210,7 +211,7 @@ fn identifier(what: &'static str, name: &str) -> Result<(), Error> {
 /// Rejects a key starting with one `@` other than `@path` and `@call`, bare `@` included.
 fn unreserved(key: &str) -> Result<(), Error> {
     let reserved =
-        key.starts_with('@') && !key.starts_with("@@") && key != "@path" && key != "@call";
+        key.starts_with('@') && !key.starts_with("@@") && key != PATH_KEY && key != CALL_KEY;
     ensure!(!reserved, ReservedKeySnafu { key });
     Ok(())
 }

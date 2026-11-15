@@ -916,6 +916,83 @@ upstream's reading would be unsafe:
     both crates on 1.88 from the packages. Not run: its audit and builds, which build unreviewed
     releases (CI).
 
+45. **fuzz/'s lock is generated from the root's (t-1650):** `fuzz/` is its own workspace (t-1568),
+    so `libfuzzer-sys` and its C++ build stay out of the published crates' lock, MSRV and
+    minimal-versions builds. Its committed `fuzz/Cargo.lock` had to follow `Cargo.lock` by hand
+    (`just fuzz-lock`), and `fuzz-check` failed whenever the root lock moved alone: every weekly
+    `lockFileMaintenance` pull request (Decision 26), since Renovate ignores `fuzz/**` and the
+    hosted app cannot run `postUpgradeTasks`, went red until a person pushed to it. Weighed:
+    - (a) Keep the manual step, documented in the pull request's body: a weekly red PR. Refused.
+    - (b) A workflow on Renovate's branch running `just fuzz-lock` and pushing: `contents: write`
+      in a job resolving crates, and a push stops Renovate updating the branch (`rebaseWhen`),
+      while Decision 26 wants the lock a person reviewed to be the one that merges. Refused.
+    - (d) Warn only on lock-maintenance branches: `main` would then fuzz releases nobody
+      reviewed against it, the drift the check exists to stop. Refused.
+    - (c) One lock, the fuzz crate in the root workspace behind a feature: `libfuzzer-sys` would
+      enter `Cargo.lock`, and with it the `msrv`, `minimal-versions` and audit jobs. Refused.
+    - **Chosen: (e), one reviewed lock by generation**, the task's (c) without a second
+      committed lock. `fuzz/Cargo.lock` is ignored by git and generated (`just fuzz-lockfile`,
+      run by `fuzz-check` and `fuzz`): `scripts/fuzz_lock.py assemble` writes `Cargo.lock`'s
+      packages, then the pins of the committed `fuzz/fuzz-only.lock`, the releases
+      `a2ui-fuzz`'s registry dependencies reach, each kept only when `Cargo.lock` holds no
+      release on its caret line (the leftmost non-zero part; a pre-release is its own line).
+      A bare dependency entry that the other file makes ambiguous gets its version. Cargo then
+      drops what is unused, and `verify` fails naming each registry release (name, version,
+      source) the assembled lock did not hold: a fuzz-only crate no pin covers, or a shared
+      crate fuzz/ needs at another release than `Cargo.lock`'s, which the old `cargo tree`
+      comparison caught and which needs a root lock change. So the shared crates are the
+      reviewed root releases by construction, a root lock change needs nothing in `fuzz/`, and
+      every release fuzz/ builds was in the assembled lock that `just audit` and CI's `msrv`
+      job audit, made by Python alone before any build script. The pins reach `serde_json`'s
+      and `cc`'s dependencies too, so a root lock dropping `libc` still builds. `cargo
+      metadata` may fetch a newly resolved release's source before `verify` fails, running
+      nothing. `just fuzz-lock` rewrites the pins and lists each release `Cargo.lock` lacks,
+      to review; to bump one, `cargo update --manifest-path fuzz/Cargo.toml -p <crate>`, then
+      `python3 -B scripts/fuzz_lock.py pin`. Tested: the generated lock equals PR #11's
+      committed one byte for byte; moving `itoa` and `memchr` in `Cargo.lock` alone left
+      `fuzz-check` green on the moved releases; removing the `shlex` pin made it fail naming
+      `shlex 2.0.1`; requiring `itoa 1.0.19` in fuzz/ while `Cargo.lock` held 1.0.15 failed
+      naming both; `scripts/fuzz_lock_test.py` covers assembly, caret lines, verification and
+      pinning. Pins age until a person re-pins (Renovate ignores `fuzz/**`), with no publish
+      dates or licence check: t-1653.
+
+46. **Deeper fuzzing (t-1649):** t-1568's two targets fuzzed one text and one component. Now:
+    - Inputs carry several parts split at NUL bytes (`a2ui_fuzz::fields`): JSON text never holds
+      a raw NUL, so a seed of whole documents and ids keeps each part whole. Small parts come
+      first and the catalog last, since libFuzzer's mutations mostly land near an input's start:
+      `catalog_parse` takes [`catalog_id`, [`protocol_version`,]] then the text;
+      `validate_component` a component, then a default catalog id, which may name no loaded
+      catalog; the new `parse_then_validate` a component, [a default id,] then an agent catalog,
+      validating the component in the agent's catalog (the basic one found through a `Catalog`
+      lookup) and in the basic one (the agent's through a `[Catalog]` lookup).
+      `template_parse` and `pointer_parse` fuzz `parse_template` and `Pointer::parse`. Plan 3's
+      message layer gets a target when it lands.
+    - Oracles, beyond "no panic, hang or out-of-memory": a loaded catalog's `to_json` loads again,
+      with no override, to the same id, version and document; the agent catalog, parsed twice
+      from one text, writes the same JSON and validates the component to the same outcome
+      (value, or error code, category and message: the runtime's results hold no randomness,
+      and two loads catch state kept from the text's hashing order); no parsed pointer holds a
+      forbidden or empty segment, and its written text parses to the same pointer. Indices are
+      checked on data access, not by `Pointer::parse`, so no index oracle.
+    - `scripts/fuzz_targets.py` holds each target's `max_len` and timeout (1 or 2 s: no input
+      took a second here, so a slower one is a finding) and its seeds: vendor/a2ui's catalogs,
+      examples and test cases, plus components just within and past the node, call and depth
+      caps. Its tests check the table against `fuzz/Cargo.toml` and the workflow's matrix.
+      `fuzz/a2ui.dict` gives libFuzzer JSON and A2UI tokens (`-dict=`).
+    - `.github/workflows/fuzz.yml` runs each target five minutes on Mondays and Thursdays and on
+      demand, from the corpus the last run left in the Actions cache (twice a week, so an entry
+      is read again before 7 idle days evict it); `just fuzz-minimize` (libFuzzer's `-merge=1`,
+      under the target's limits) keeps the inputs that add coverage, saved even after a crash; a
+      crash fails the job and uploads its input for 30 days. The token only reads, actions are
+      SHA-pinned, the matrix target reaches `run` only through `env`; zizmor reports nothing.
+      Scheduled on `main` only: a pull request would wait on it and fuzz unreviewed crates no
+      faster.
+    - AddressSanitizer needs a nightly (`-Zsanitizer`): t-1660, after t-1641's dated pin.
+    Measured on 2026-11-15 (Apple M-series, 60 s each, from the seeds): `catalog_parse` 139 838
+    runs, `validate_component` 520 895, `parse_then_validate` 69 089, `template_parse` 623 997,
+    `pointer_parse` 618 729; no crash, no slow input and no oracle failed. Not verified: the workflow itself (it runs on `main` once
+    pushed).
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
