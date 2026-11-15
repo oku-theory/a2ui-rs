@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-runtime-v0.2.0...a2ui-runtime-v0.3.0) - 2026-11-15
+
+### Added
+
+- *(runtime)* cap the nodes and calls one component may hold (t-1567)
+- *(runtime)* report a stable A2UI code with each error (t-1565)
+
+### Fixed
+
+- *(runtime)* [**breaking**] refuse a common_types.json $ref to no common type (t-1575)
+
+### Other
+
+- *(fuzz)* fuzz agent catalogs, templates and pointers with oracles (t-1649)
+- *(runtime)* name the @call and @path keys once (t-1645)
+- *(package)* ship no tests/, read each crate's version (t-1635)
+- *(plan-2b)* renumber this branch's decisions after main's Decision 33
+- *(fuzz)* fuzz catalog parsing and component validation (t-1568)
+- *(plan-2b)* reserve common type names per protocol version (t-1570)
+
 ## [0.2.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-runtime-v0.1.0...a2ui-runtime-v0.2.0) - 2026-11-14
 
 ### Added
