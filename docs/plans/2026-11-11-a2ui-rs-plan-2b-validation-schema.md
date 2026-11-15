@@ -657,7 +657,13 @@ upstream's reading would be unsafe:
     (crates.io records the run and commit d984cc4) and tagged `a2ui-catalog-basic-v0.2.0` git-only;
     the user published `a2ui-catalog-basic` 0.2.0 by hand from that tag, after its dry run passed
     against the published runtime, added its trusted publisher and revoked the token; `publish =
-    false` is gone, so the next release publishes both crates by trusted publishing.
+    false` is gone, so the next release publishes both crates by trusted publishing. The 0.3.0
+    release (run 43707676954) showed the catalog still had no trusted publisher: release-plz
+    published `a2ui-runtime` 0.3.0, then crates.io refused the catalog with 403 "The provided
+    access token is not valid for crate `a2ui-catalog-basic`". A crate published by hand needs its
+    own trusted publisher (`oku-theory/a2ui-rs`, `release-plz.yml`, environment `release`) before
+    release-plz can publish it; once the user added it on 2026-11-15, rerunning the failed jobs
+    published `a2ui-catalog-basic` 0.3.0 by trusted publishing and tagged it.
 34. **`Error::code()` (t-1565):** each error carries an `ErrorCode` beside its `Category`, the
     `code` a renderer `error` message or surface diagnostic reports. It lands ahead of Plan 3's
     message processor, against Plan 2's deferral, so each variant's code is fixed where the
