@@ -1,0 +1,69 @@
+name: fuzz
+# Twice a week on main, and on demand: each libFuzzer target runs five minutes from the corpus
+# the last run left, minimized, in the Actions cache (plan 2b, Decision 46). A crash or a broken
+# oracle fails the job and uploads its input, which becomes a tests/regressions test with its fix.
+on:
+  schedule:
+    # Twice, so a corpus entry is read again before the Actions cache drops it after 7 idle days.
+    - cron: "41 4 * * 1,4"
+  workflow_dispatch:
+# One run at a time per ref: a second one would race on the same corpus caches.
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+# The token only reads; the cache and the artifact use the runner's own credentials.
+permissions:
+  contents: read
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    # Five minutes of fuzzing, a cold build and the minimization fit well within this.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - catalog_parse
+          - validate_component
+          - parse_then_validate
+          - template_parse
+          - pointer_parse
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs what rust-toolchain.toml pins.
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+          fallback: none
+      # The newest corpus of this target; a cache entry is immutable, so each run saves its own.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - run: just fuzz "$TARGET" 300
+        env:
+          TARGET: ${{ matrix.target }}
+      # Kept after a crash too, so the next run starts from what this one found.
+      - if: ${{ !cancelled() }}
+        run: just fuzz-minimize "$TARGET"
+        env:
+          TARGET: ${{ matrix.target }}
+      - if: ${{ !cancelled() }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 30

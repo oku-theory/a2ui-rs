@@ -956,6 +956,43 @@ upstream's reading would be unsafe:
       pinning. Pins age until a person re-pins (Renovate ignores `fuzz/**`), with no publish
       dates or licence check: t-1653.
 
+46. **Deeper fuzzing (t-1649):** t-1568's two targets fuzzed one text and one component. Now:
+    - Inputs carry several parts split at NUL bytes (`a2ui_fuzz::fields`): JSON text never holds
+      a raw NUL, so a seed of whole documents and ids keeps each part whole. Small parts come
+      first and the catalog last, since libFuzzer's mutations mostly land near an input's start:
+      `catalog_parse` takes [`catalog_id`, [`protocol_version`,]] then the text;
+      `validate_component` a component, then a default catalog id, which may name no loaded
+      catalog; the new `parse_then_validate` a component, [a default id,] then an agent catalog,
+      validating the component in the agent's catalog (the basic one found through a `Catalog`
+      lookup) and in the basic one (the agent's through a `[Catalog]` lookup).
+      `template_parse` and `pointer_parse` fuzz `parse_template` and `Pointer::parse`. Plan 3's
+      message layer gets a target when it lands.
+    - Oracles, beyond "no panic, hang or out-of-memory": a loaded catalog's `to_json` loads again,
+      with no override, to the same id, version and document; the agent catalog, parsed twice
+      from one text, writes the same JSON and validates the component to the same outcome
+      (value, or error code, category and message: the runtime's results hold no randomness,
+      and two loads catch state kept from the text's hashing order); no parsed pointer holds a
+      forbidden or empty segment, and its written text parses to the same pointer. Indices are
+      checked on data access, not by `Pointer::parse`, so no index oracle.
+    - `scripts/fuzz_targets.py` holds each target's `max_len` and timeout (1 or 2 s: no input
+      took a second here, so a slower one is a finding) and its seeds: vendor/a2ui's catalogs,
+      examples and test cases, plus components just within and past the node, call and depth
+      caps. Its tests check the table against `fuzz/Cargo.toml` and the workflow's matrix.
+      `fuzz/a2ui.dict` gives libFuzzer JSON and A2UI tokens (`-dict=`).
+    - `.github/workflows/fuzz.yml` runs each target five minutes on Mondays and Thursdays and on
+      demand, from the corpus the last run left in the Actions cache (twice a week, so an entry
+      is read again before 7 idle days evict it); `just fuzz-minimize` (libFuzzer's `-merge=1`,
+      under the target's limits) keeps the inputs that add coverage, saved even after a crash; a
+      crash fails the job and uploads its input for 30 days. The token only reads, actions are
+      SHA-pinned, the matrix target reaches `run` only through `env`; zizmor reports nothing.
+      Scheduled on `main` only: a pull request would wait on it and fuzz unreviewed crates no
+      faster.
+    - AddressSanitizer needs a nightly (`-Zsanitizer`): t-1660, after t-1641's dated pin.
+    Measured on 2026-11-15 (Apple M-series, 60 s each, from the seeds): `catalog_parse` 139 838
+    runs, `validate_component` 520 895, `parse_then_validate` 69 089, `template_parse` 623 997,
+    `pointer_parse` 618 729; no crash, no slow input and no oracle failed. Not verified: the workflow itself (it runs on `main` once
+    pushed).
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +

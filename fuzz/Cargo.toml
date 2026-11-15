@@ -12,18 +12,24 @@ publish = false
 [workspace]
 members = ["."]
 
-# serde_json mirrors the root Cargo.toml's requirement.
+# serde_json, rstest and speculoos mirror the root Cargo.toml's requirements.
 [workspace.dependencies]
 a2ui-catalog-basic = { path = "../crates/a2ui-catalog-basic" }
 a2ui-runtime = { path = "../crates/a2ui-runtime" }
 libfuzzer-sys = "0.4.13"
+rstest = "0.28.0"
 serde_json = "1.0.154"
+speculoos = "0.13.0"
 
 [dependencies]
 a2ui-catalog-basic.workspace = true
 a2ui-runtime.workspace = true
 libfuzzer-sys.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+speculoos.workspace = true
 
 # The root workspace's lints; a harness may expect, with a reason (a panic is the finding).
 [lints.rust]
@@ -45,6 +51,27 @@ bench = false
 [[bin]]
 name = "validate_component"
 path = "fuzz_targets/validate_component.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_then_validate"
+path = "fuzz_targets/parse_then_validate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "template_parse"
+path = "fuzz_targets/template_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pointer_parse"
+path = "fuzz_targets/pointer_parse.rs"
 test = false
 doc = false
 bench = false

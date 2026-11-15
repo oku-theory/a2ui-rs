@@ -16,7 +16,8 @@ just minimal-versions   # our lower bounds on rust-version; builds unreviewed re
 just lock-diff [base]   # what Cargo.lock added, removed and updated since base (origin/main), with publish dates
 just semver-checks   # cargo-semver-checks against crates.io's releases; builds unreviewed releases: CI or a disposable machine
 just semver-checks-tool   # whether cargo-semver-checks reads this toolchain's rustdoc JSON, on a fixture crate with no dependency
-just fuzz <target> [seconds]   # libFuzzer: catalog_parse or validate_component
+just fuzz <target> [seconds]   # libFuzzer: catalog_parse, validate_component, parse_then_validate, template_parse, pointer_parse
+just fuzz-minimize <target>   # keeps the corpus inputs that add coverage; CI's weekly fuzz workflow runs both
 just fuzz-lock   # re-pins fuzz/fuzz-only.lock; fuzz/Cargo.lock is generated from Cargo.lock
 just conformance-manifest <dir>   # executed-case manifest for upstream's comparer
 ```
