@@ -166,10 +166,14 @@ fuzz-lock:
     def key(block):
         field = lambda name: re.search(rf"^{name} = (.*)$", block, re.M)[1]
         return field("name"), field("version")
+    def line(name, version):
+        major, minor = version.strip('"').split(".")[:2]
+        return name, major if major != "0" else "0." + minor
     header, root = packages(sys.argv[1])
     _, old = packages(sys.argv[2])
-    kept = {key(block) for block in root}
-    blocks = root + [block for block in old if key(block) not in kept]
+    # An old package the root lock holds a semver-compatible version of takes the root's.
+    kept = {line(*key(block)) for block in root}
+    blocks = root + [block for block in old if line(*key(block)) not in kept]
     open(sys.argv[2], "w").write(header + "\n".join(block.rstrip("\n") + "\n" for block in blocks))
     EOF
     cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
