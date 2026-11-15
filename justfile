@@ -1,3 +1,9 @@
+# The dated nightly that `-Z` flags need, never a build we ship. Renovate's custom manager moves it
+# weekly to the newest nightly 14 days old or more; it reads the next two lines exactly as written,
+# which scripts/nightly_pin_test.py checks (plan 2b, Decision 41).
+# renovate: datasource=rust-version versioning=rust-release-channel
+nightly := "nightly-2026-10-31"
+
 # Formatting, lints, dependency rules, pinned and audited actions, and the wasm build.
 check:
     cargo fmt --all --check
@@ -304,15 +310,31 @@ msrv-compile-fail:
         exit 1
     fi
 
+# Prints workspace member `crate`'s version, as cargo packages it, from cargo metadata.
+[private]
+crate-version crate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    crate={{ quote(crate) }}
+    version="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r --arg name "$crate" '.packages[] | select(.name == $name) | .version')"
+    # Empty for an unknown name, which jq does not fail on.
+    if [ -z "$version" ]; then
+        echo "no workspace member named $crate" >&2
+        exit 1
+    fi
+    echo "$version"
+
 # On the MSRV, a user's crate resolves the packaged libraries afresh: builds unreviewed releases.
 msrv-resolved:
     #!/usr/bin/env bash
     set -euo pipefail
-    version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)"
-    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "Cargo.toml needs one workspace version such as 0.1.0, found: $version" >&2
-        exit 1
-    fi
+    # The pinned toolchain reads the versions and packages the crates (the MSRV's cargo cannot
+    # package a crate whose sibling is not yet published).
+    unset RUSTUP_TOOLCHAIN
+    # Each crate's own version, as cargo packages it: a pre-release or a per-crate one included.
+    runtime="$(just crate-version a2ui-runtime)"
+    catalog="$(just crate-version a2ui-catalog-basic)"
     # Cargo.lock proves our versions only. A crate of its own, with no lock, no dev-dependencies
     # and no rust-version, resolves the newest versions this rustc accepts (resolver 3, as in an
     # edition 2024 crate), the way a user's does; its `[workspace]` keeps it out of ours. A
@@ -321,14 +343,12 @@ msrv-resolved:
     user="$(mktemp -d target/msrv-user.XXXXXX)"
     trap 'rm -rf "$user"' EXIT
     # It depends on the packages crates.io would get, unpacked, not on our sources: a file missing
-    # from `include` fails here too. The pinned toolchain packages them (the MSRV's cargo cannot
-    # package a crate whose sibling is not yet published); --no-verify, as nothing is built yet.
-    unset RUSTUP_TOOLCHAIN
+    # from `include` fails here too; --no-verify, as nothing is built yet.
     cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked --no-verify --allow-dirty \
         --target-dir "$PWD/$user/package"
     mkdir "$user/packages" "$user/src"
-    for crate in a2ui-runtime a2ui-catalog-basic; do
-        tar -xzf "$user/package/package/$crate-$version.crate" -C "$user/packages"
+    for package in "a2ui-runtime-$runtime" "a2ui-catalog-basic-$catalog"; do
+        tar -xzf "$user/package/package/$package.crate" -C "$user/packages"
     done
     : > "$user/src/lib.rs"
     # [patch.crates-io] stands the packages in for releases crates.io may not have yet;
@@ -341,12 +361,12 @@ msrv-resolved:
     publish = false
 
     [dependencies]
-    a2ui-runtime = "=$version"
-    a2ui-catalog-basic = "=$version"
+    a2ui-runtime = "=$runtime"
+    a2ui-catalog-basic = "=$catalog"
 
     [patch.crates-io]
-    a2ui-runtime = { path = "packages/a2ui-runtime-$version" }
-    a2ui-catalog-basic = { path = "packages/a2ui-catalog-basic-$version" }
+    a2ui-runtime = { path = "packages/a2ui-runtime-$runtime" }
+    a2ui-catalog-basic = { path = "packages/a2ui-catalog-basic-$catalog" }
 
     [workspace]
     exclude = ["packages"]
@@ -374,9 +394,10 @@ msrv-resolved:
 
 # Our lower bounds, each direct dependency at its lowest allowed release, checked on the MSRV.
 # Nightly cargo resolves them (-Z direct-minimal-versions), so it builds unreviewed releases.
-minimal-versions:
+minimal-versions: nightly-toolchain
     #!/usr/bin/env bash
     set -euo pipefail
+    nightly={{ quote(nightly) }}
     # A copy of the workspace, so Cargo.lock stays ours; a killed run leaves it under target/.
     mkdir -p target
     copy="$(mktemp -d target/minimal-versions.XXXXXX)"
@@ -388,11 +409,10 @@ minimal-versions:
     RUSTUP_TOOLCHAIN="$(just msrv-version)"
     export RUSTUP_TOOLCHAIN
     just msrv-toolchain
-    # Only the resolver runs on nightly (`+nightly` beats RUSTUP_TOOLCHAIN): nothing builds with it.
-    rustup toolchain install nightly --profile minimal
-    # Its version, for the log: nightly is not pinned.
-    cargo +nightly -V
-    cargo +nightly generate-lockfile --manifest-path "$copy/Cargo.toml" -Z direct-minimal-versions
+    # Only the resolver runs on the pinned nightly, installed by `nightly-toolchain` (`+` beats
+    # RUSTUP_TOOLCHAIN): nothing builds with it.
+    cargo "+$nightly" generate-lockfile --manifest-path "$copy/Cargo.toml" \
+        -Z direct-minimal-versions
     # Resolving runs no crate's code: known advisories, known-malicious crates included, and
     # yanked releases stop the run before any build script does.
     cargo audit --file "$copy/Cargo.lock" --deny yanked
@@ -404,6 +424,20 @@ minimal-versions:
     cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic
     cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic \
         --target wasm32-unknown-unknown
+
+# Checks the pinned nightly is dated, installs it and logs its cargo's version.
+[private]
+nightly-toolchain:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nightly={{ quote(nightly) }}
+    # Plain `nightly` would float again, and Renovate bumps only a dated name.
+    if ! [[ "$nightly" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        echo "nightly must be a dated nightly-YYYY-MM-DD, found: $nightly" >&2
+        exit 1
+    fi
+    rustup toolchain install "$nightly" --profile minimal
+    cargo "+$nightly" -V
 
 # cargo-semver-checks against our libraries' crates.io releases: builds unreviewed releases.
 semver-checks:
@@ -513,6 +547,8 @@ package:
     # one.
     notice=()
     if [ -f vendor/a2ui/NOTICE ]; then notice=(NOTICE-A2UI); fi
+    # Nor does it ship tests/, which nothing builds from a package (trybuild's cases hold the
+    # pinned rustc's wording; plan 2b, Decision 42).
     shipped() {
         local crate="$1" listed
         shift
@@ -523,6 +559,10 @@ package:
                 exit 1
             fi
         done
+        if grep '^tests/' <<< "$listed" >&2; then
+            echo "$crate's package ships the files above from tests/" >&2
+            exit 1
+        fi
     }
     shipped a2ui-runtime LICENSE-MIT LICENSE-APACHE schemas/v1_0/LICENSE \
         ${notice[@]+"${notice[@]/#/schemas/v1_0/}"}

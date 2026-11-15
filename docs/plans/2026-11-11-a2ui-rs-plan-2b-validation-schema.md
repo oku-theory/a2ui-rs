@@ -421,8 +421,8 @@ upstream's reading would be unsafe:
     sibling is unpublished), unpacks them, and its user crate depends on `=<version>` with
     `[patch.crates-io]` pointing at the unpacked packages and `exclude` keeping them out of its
     workspace, so their dev-dependencies stay unresolved; it fails if its lock takes either crate
-    from a registry, since cargo only warns about an unused patch. The version is the workspace's,
-    one `X.Y.Z`: a pre-release or a crate with its own version fails it loudly. Checked locally:
+    from a registry, since cargo only warns about an unused patch. Each crate's version comes from
+    `cargo metadata` since Decision 42 (it was the workspace's, read by `sed`). Checked locally:
     `just package` passes, fails without `catalog.json` in `include`, and with `CI` set refuses a
     dirty tree; the user crate's resolution and audit against the unpacked packages pass. Not run:
     its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds were
@@ -519,10 +519,10 @@ upstream's reading would be unsafe:
     minimum, such as jsonschema's error texts (Decision 26), is not covered. The job is t-1634's
     regression guard. Accepted gap: a pull request may start using an API newer than a bound after a
     lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch now
-    runs it too (Decision 32, t-1639). Nightly only resolves, unpinned, as `-Z` flags need it; a
-    nightly that breaks the flag fails the job, and the release PR with it, until nightly is fixed
-    or the recipe pins a dated nightly. Like `msrv-resolved` it builds unreviewed releases:
-    `ci.yml`'s `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
+    runs it too (Decision 32, t-1639). Nightly only resolves, as `-Z` flags need it, on the dated
+    nightly the justfile pins since Decision 41, so a nightly that breaks the flag fails only
+    Renovate's bump of it. Like `msrv-resolved` it builds unreviewed releases: `ci.yml`'s
+    `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
     on by default, the release PR's included since Decision 32), with the read-only token, no cache
     step and its own 60-minute bound; it accepts `msrv-resolved`'s exposure of `main`'s cache scope.
     Checked locally: the resolution fails on the old bounds and passes on the new ones, the audit
@@ -632,8 +632,8 @@ upstream's reading would be unsafe:
     release once the jobs are required checks (t-1633, Decision 24's list): a bound to raise on
     `main` (release-plz then updates the PR); upstream drift `msrv-resolved` reports, which users
     would hit too (a temporary `<` bound on `main`, or an admin merge after reading the failure);
-    or a nightly that broke `-Z direct-minimal-versions`, until it is fixed or the recipe pins a
-    dated nightly (t-1641). A merge queue's `merge_group` run skips them: the PR's head result is
+    or, before Decision 41 pinned a dated one, a nightly that broke `-Z direct-minimal-versions`. A
+    merge queue's `merge_group` run skips them: the PR's head result is
     the gate there. Not taken: `scripts/release_gate.py`, a first design reviewed for this task
     that read `main`'s latest weekly or dispatched result through the API and refused a red or
     stale one (its review showed a green run from before the offending merge passes it, and tying
@@ -849,6 +849,72 @@ upstream's reading would be unsafe:
     `requiresUserActivation`. Left to Plan 4, tracked as t-1648: what re-registering an id
     does to the old bindings, and two catalogs sharing an id. The design spec's `function`
     module now says so.
+
+41. **A dated nightly (t-1641):** `just minimal-versions` installed unpinned nightly for `-Z
+    direct-minimal-versions`, so since Decision 32 a nightly that broke the flag would hold every
+    release until nightly was fixed. The justfile now pins one, `nightly := "nightly-YYYY-MM-DD"`,
+    which a private `nightly-toolchain` recipe checks is dated, installs and logs (`cargo
+    +<nightly> -V`); `minimal-versions` depends on it, so a command-line override reaches both, and
+    t-1649's opt-in AddressSanitizer is to reuse both. Renovate bumps it: a `custom.regex` manager
+    reads the `# renovate:` comment above it with the `rust-version` datasource and
+    `rust-release-channel` versioning, the pair its own `rust-toolchain` manager uses, which takes
+    dated nightlies from static.rust-lang.org's `manifests.txt`, dates each one (so
+    `minimumReleaseAge: "14 days"` holds) and compares a nightly with nightlies only. A bump that
+    came out undated would fail the recipe's check on its own pull request. Its rule opens a
+    `ci(nightly)` pull request on branch `renovate/rust-nightly`, weekly like the others, and
+    `ci.yml` runs the `minimal-versions` job on that branch's runs too, since the pin serves that
+    job only: the bump is checked before its merge, with the exposure Decision 32 accepts there (a
+    fork's pull request may name its branch so, with the same read-only token and no cache). A hand
+    edit of the pin is dispatched like a dependency change (AGENTS.md). Both ends fail silently: an
+    edit the pattern no longer matches leaves the pin stale, and a branch name `ci.yml` does not
+    expect skips the job, which leaves the checks green. So `scripts/nightly_pin_test.py`, in `just
+    test`, applies renovate.json's own pattern to the justfile and requires exactly the one
+    assignment, and requires the job's condition to name `renovate/` and the rule's `branchTopic`
+    with no prefix, branch name or group overriding them. The first pin, `nightly-2026-10-31`, was a
+    fortnight old when set. Not taken: a second `rust-toolchain.toml` in a subdirectory, which
+    Renovate's own manager would bump, but under the pinned compiler's rule, and which rustup would
+    apply to commands run there; a dated nightly in `ci.yml` alone, which a local run would not
+    share; and the pinned stable cargo with `RUSTC_BOOTSTRAP=1`, which drops the second toolchain
+    and its pull requests but leans on a discouraged switch and does not serve t-1649's sanitizer.
+    Each bump leaves the previous nightly installed locally (`rustup toolchain list`). Checked
+    locally: the recipe refuses `nightly` and a name carrying a shell command, and `just
+    nightly=nightly minimal-versions` stops there before any copy; the pin installs (cargo
+    1.101.0-nightly, 2026-10-27) and resolves `-Z direct-minimal-versions` on a copy of the
+    workspace to our bounds; the pattern, run with Node's RegExp, extracts the pin; the new test
+    passes and fails on a respaced assignment, a blank line under the comment, and a renamed
+    `branchTopic`. Not verified: Renovate's own run (running Renovate locally was not allowed),
+    whose Dependency Dashboard should list `rust-nightly`, nor the job on its first bump pull
+    request, which should log the nightly's cargo (t-1652).
+
+42. **Package gaps after the first release (t-1635):** three points Decision 25 left open, checked
+    now that both crates are on crates.io at 0.2.0. (1) `cargo package -p a2ui-runtime -p
+    a2ui-catalog-basic --locked` builds `a2ui-catalog-basic` against `a2ui-runtime`'s local
+    package, not crates.io's release of the same version: with a function added to the runtime and
+    called from the catalog, which 0.2.0 on crates.io lacks, the catalog's verification unpacked
+    the runtime from cargo's temporary registry and passed, with no checksum error. Nothing to
+    change. (2) `a2ui-runtime`'s package shipped `tests/` (the trybuild cases), which nothing builds
+    from the package, and whose `.stderr` files hold the pinned rustc's wording, so any other rustc
+    fails them: its manifest now has `exclude = ["/tests/"]` (anchored, as `exclude` follows
+    gitignore rules and `tests/` would also drop a nested `tests` directory), and `just package`
+    fails when either crate's package lists a `tests/` file (seen failing before the exclude). The
+    packaged manifest then has no test target. The unit tests under `src/` still ship, since anyone
+    running `cargo test` from the package needs their `#[path]` modules; they read no file outside
+    the package and are not built from it here either. The changed file list likely makes
+    release-plz propose a runtime release at the next release PR even with no code change. An
+    `include` allowlist like the catalog's, which would also keep a stray local file out of a
+    `--allow-dirty` package, is t-1651. Building
+    the packaged tests once was set aside: the catalog's package resolves the runtime from
+    crates.io outside `cargo package`, so it would need its own `[patch]` and an unlocked
+    resolution of the dev-dependencies, unreviewed releases for a check of files we already test.
+    (3) `just msrv-resolved` read one workspace version from the root `Cargo.toml` with `sed`; it
+    now reads each crate's own version from `cargo metadata`, through a private `crate-version`
+    recipe, so a pre-release or a per-crate version no longer stops it; `crate-version` fails on an
+    unknown name.
+    Checked locally on a copy with `a2ui-runtime` at `0.3.0-alpha.1`: `sed` read `0.2.0`,
+    `crate-version` read `0.3.0-alpha.1` and `0.2.0`, the names `cargo package` gave the two
+    `.crate` files; on the tree, `msrv-resolved` up to its audit packaged, unpacked and resolved
+    both crates on 1.88 from the packages. Not run: its audit and builds, which build unreviewed
+    releases (CI).
 
 ## The algorithm (reference for Tasks 1 and 2)
 

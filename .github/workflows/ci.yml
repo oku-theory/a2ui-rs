@@ -4,7 +4,7 @@ name: ci
 # workflow dispatches since a pull request it opens starts no run (Decision 24). Weekly on main,
 # the msrv-resolved job checks what new upstream releases change, the minimal-versions job checks
 # our lower bounds, the ci job's audit sees new crate advisories and the zizmor job new action
-# advisories.
+# advisories. The minimal-versions job also checks Renovate's bump of the justfile's nightly.
 on:
   push:
     branches: [main]
@@ -175,11 +175,15 @@ jobs:
   # Our lower bounds (t-1634): each direct dependency at its lowest allowed release, resolved by
   # nightly cargo, audited, then checked on the MSRV. Unreviewed releases again, so like
   # msrv-resolved: weekly, on demand and always on release-plz's branch, no cache, its own job.
+  # Also on Renovate's branch that bumps the justfile's dated nightly, which only this job uses:
+  # renovate.json's `branchTopic`, which scripts/nightly_pin_test.py ties to this line (plan 2b,
+  # Decision 41).
   minimal-versions:
     if: >-
       github.event_name == 'schedule'
       || (github.event_name == 'workflow_dispatch' && inputs.minimal_versions)
       || startsWith(github.head_ref || github.ref_name, 'release-plz-')
+      || (github.head_ref || github.ref_name) == 'renovate/rust-nightly'
     runs-on: ubuntu-latest
     # It builds unreviewed crates cold: bounded, so a stuck build script cannot hold the runner.
     timeout-minutes: 60
@@ -187,7 +191,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The recipe installs nightly, for the resolver only, and the MSRV, for the checks.
+      # The recipe installs the justfile's dated nightly, for the resolver only, and the MSRV, for
+      # the checks.
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-audit
