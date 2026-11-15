@@ -900,18 +900,24 @@ upstream's reading would be unsafe:
     the runtime from cargo's temporary registry and passed, with no checksum error. Nothing to
     change. (2) `a2ui-runtime`'s package shipped `tests/` (the trybuild cases), which nothing builds
     from the package, and whose `.stderr` files hold the pinned rustc's wording, so any other rustc
-    fails them: its manifest now has `exclude = ["/tests/"]` (anchored, as `exclude` follows
+    fails them: its manifest then got `exclude = ["/tests/"]` (anchored, as `exclude` follows
     gitignore rules and `tests/` would also drop a nested `tests` directory), and `just package`
     fails when either crate's package lists a `tests/` file (seen failing before the exclude). The
     packaged manifest then has no test target. The unit tests under `src/` still ship, since anyone
     running `cargo test` from the package needs their `#[path]` modules; they read no file outside
     the package and are not built from it here either. The changed file list likely makes
-    release-plz propose a runtime release at the next release PR even with no code change. An
-    `include` allowlist like the catalog's, which would also keep a stray local file out of a
-    `--allow-dirty` package, is t-1651. Building
-    the packaged tests once was set aside: the catalog's package resolves the runtime from
-    crates.io outside `cargo package`, so it would need its own `[patch]` and an unlocked
-    resolution of the dev-dependencies, unreviewed releases for a check of files we already test.
+    release-plz propose a runtime release at the next release PR even with no code change. Since
+    t-1651 the runtime's manifest has an `include` allowlist like the catalog's instead (`src/**`,
+    the two schemas, their `LICENSE` and `NOTICE-A2UI`, `LICENSE-MIT`, `LICENSE-APACHE`,
+    `Cargo.toml`; `README.md` ships through `readme`), so trybuild's `wip/`, a stray local file
+    under `--allow-dirty`, or a future `benches/` stays out too. `cargo package --list` lost
+    `ARCHITECTURE.md` and `CHANGELOG.md` (contributor documents, not the catalog's either) and
+    nothing else; `scripts/package_include_test.py` fails when a published crate has no `include`
+    or an `exclude` (seen failing on the denylist), and `just package` also checks `README.md`
+    ships. Building the packaged tests once was set aside: the catalog's package resolves the
+    runtime from crates.io outside `cargo package`, so it would need its own `[patch]` and an
+    unlocked resolution of the dev-dependencies, unreviewed releases for a check of files we
+    already test.
     (3) `just msrv-resolved` read one workspace version from the root `Cargo.toml` with `sed`; it
     now reads each crate's own version from `cargo metadata`, through a private `crate-version`
     recipe, so a pre-release or a per-crate version no longer stops it; `crate-version` fails on an
