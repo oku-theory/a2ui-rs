@@ -6,6 +6,7 @@ check:
     just actions-pinned
     just zizmor
     just wasm
+    just fuzz-check
 
 # Every workflow step's action is a full commit SHA, its release in a comment for Renovate.
 # Checks the form only, offline: `just zizmor-online` checks each SHA against its tag.
@@ -87,6 +88,98 @@ lock-diff base="origin/main":
 # The runtime must build for the browser.
 wasm:
     cargo build -p a2ui-runtime -p a2ui-catalog-basic --target wasm32-unknown-unknown
+
+# Fuzzes `target` (catalog_parse, validate_component) for `seconds` with libFuzzer, on the pinned
+# toolchain: cargo-fuzz's coverage flags, without its AddressSanitizer (nightly-only; our crates
+# forbid unsafe). Seeds come from vendor/a2ui; a crash lands in fuzz/artifacts/<target>/, fails the
+# recipe, and becomes a tests/regressions/issue_NNNN_*.rs test with its fix.
+[positional-arguments]
+fuzz target seconds="60":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="$1"
+    seconds="$2"
+    case "$target" in
+        catalog_parse) max_len=1048576 timeout=2 ;;
+        validate_component) max_len=262144 timeout=1 ;;
+        *) echo "unknown fuzz target '$target': catalog_parse or validate_component" >&2; exit 2 ;;
+    esac
+    [[ "$seconds" =~ ^[0-9]+$ ]] || { echo "seconds must be a whole number" >&2; exit 2; }
+    corpus="fuzz/corpus/$target"
+    mkdir -p "$corpus" "fuzz/artifacts/$target"
+    # One seed per catalog for catalog_parse, one per component instance for validate_component.
+    python3 -I - "$target" "$corpus" <<'EOF'
+    import glob, hashlib, json, pathlib, sys
+    target, corpus = sys.argv[1], pathlib.Path(sys.argv[2])
+    if target == "catalog_parse":
+        files = glob.glob("vendor/a2ui/catalogs/*/v1/catalog.json")
+        files += glob.glob("vendor/a2ui/conformance/test_data/catalogs/*.json")
+        seeds = [pathlib.Path(f).read_bytes() for f in sorted(files)]
+    else:
+        seeds = []
+        for f in sorted(glob.glob("vendor/a2ui/catalogs/basic/v1/examples/*.json")):
+            for message in json.loads(pathlib.Path(f).read_text()).get("messages", []):
+                for component in (message.get("updateComponents") or {}).get("components", []):
+                    seeds.append(json.dumps(component, sort_keys=True).encode())
+    for seed in seeds:
+        (corpus / ("seed-" + hashlib.sha256(seed).hexdigest()[:16])).write_bytes(seed)
+    print(f"{len(seeds)} seeds for {target}")
+    EOF
+    cd fuzz
+    triple="$(rustc -vV | sed -n 's/^host: //p')"
+    export CARGO_TARGET_DIR="$PWD/target"
+    RUSTFLAGS="--cfg fuzzing -Cpasses=sancov-module -Cllvm-args=-sanitizer-coverage-level=4 \
+        -Cllvm-args=-sanitizer-coverage-inline-8bit-counters \
+        -Cllvm-args=-sanitizer-coverage-pc-table -Cllvm-args=-sanitizer-coverage-trace-compares \
+        -Cdebug-assertions -Coverflow-checks" \
+        cargo build --release --locked --target "$triple" --bin "$target"
+    "target/$triple/release/$target" -max_total_time="$seconds" -max_len="$max_len" \
+        -timeout="$timeout" -report_slow_units=1 -artifact_prefix="artifacts/$target/" \
+        "corpus/$target"
+
+# The fuzz workspace: formatted, lint-clean, building `--locked`, and fuzzing the releases that
+# ship (a2ui-runtime's dependencies at the root lock's versions).
+fuzz-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo fmt --manifest-path fuzz/Cargo.toml --check
+    cargo clippy --manifest-path fuzz/Cargo.toml --locked --bins -- -D warnings
+    tree() { cargo tree --manifest-path "$1" --locked -p a2ui-runtime -e normal --prefix none \
+        | sed 's/ (.*//' | sort -u; }
+    if ! diff <(tree Cargo.toml) <(tree fuzz/Cargo.toml); then
+        echo "fuzz/Cargo.lock resolves a2ui-runtime apart from Cargo.lock: run just fuzz-lock" >&2
+        exit 1
+    fi
+
+# Rebuilds fuzz/Cargo.lock from the root lock, so shared crates keep the reviewed versions; the
+# crates only the fuzz workspace uses keep the versions its old lock pinned, new ones resolve.
+fuzz-lock:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The root lock's packages, then the old fuzz lock's others; cargo drops what is unused.
+    python3 -I - Cargo.lock fuzz/Cargo.lock <<'EOF'
+    import re, sys
+    def packages(path):
+        text = open(path).read()
+        blocks = re.findall(r"\[\[package\]\]\n.*?(?=\n\[\[|\Z)", text, re.S)
+        return text[: text.index("[[package]]")], blocks
+    def key(block):
+        field = lambda name: re.search(rf"^{name} = (.*)$", block, re.M)[1]
+        return field("name"), field("version")
+    def line(name, version):
+        major, minor = version.strip('"').split(".")[:2]
+        return name, major if major != "0" else "0." + minor
+    header, root = packages(sys.argv[1])
+    _, old = packages(sys.argv[2])
+    # An old package the root lock holds a semver-compatible version of takes the root's.
+    kept = {line(*key(block)) for block in root}
+    blocks = root + [block for block in old if line(*key(block)) not in kept]
+    open(sys.argv[2], "w").write(header + "\n".join(block.rstrip("\n") + "\n" for block in blocks))
+    EOF
+    cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
+    entries() { awk '/^name =/{n=$3}/^version =/{print n, $3}' "$1" | sort; }
+    echo "fuzz/Cargo.lock adds, beyond Cargo.lock (review each new release):"
+    comm -13 <(entries Cargo.lock) <(entries fuzz/Cargo.lock)
 
 # The declared minimum Rust version, `rust-version` in the workspace Cargo.toml.
 msrv-version:
@@ -405,6 +498,7 @@ semver-checks-tool:
 audit:
     cargo deny check licenses sources
     cargo audit --deny yanked
+    cargo audit --deny yanked --file fuzz/Cargo.lock
 
 # Packages both libraries as crates.io receives them, each built from its package alone, so a
 # file missing from `include` fails here rather than for a user; their license texts must ship.

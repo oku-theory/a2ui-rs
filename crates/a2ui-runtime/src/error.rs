@@ -1,4 +1,4 @@
-//! Errors raised by the runtime, each tagged with a conformance category.
+//! Runtime errors, each tagged with a conformance category and an A2UI code.
 //!
 //! Input a message quotes is held as [`Quoted`] (escaped, capped) from the moment the error is
 //! built, alone or as a piece of runtime wording, a [`Reason`] that only `reason!` composes.
@@ -19,7 +19,7 @@ pub enum Category {
     Expression,
     /// A catalog that cannot be loaded, or an embedded schema that is broken.
     Catalog,
-    /// A value that breaks a schema, such as a component its catalog rejects.
+    /// A value that breaks a schema, such as a rejected component or a malformed pointer.
     Validation,
 }
 
@@ -36,7 +36,40 @@ impl Category {
     }
 }
 
-/// An error raised by the runtime; [`Error::category`] classifies it.
+/// The A2UI error code a renderer reports for an [`Error`].
+///
+/// It is the `code` of a renderer `error` message (`renderer_to_agent.json`) or of a surface
+/// diagnostic, for the stage that raises the error: upstream gives one fault different codes at
+/// different stages (an unknown component is `VALIDATION_FAILED` when a component is validated,
+/// `UNKNOWN_COMPONENT_TYPE` when a surface renders it), so each stage raises its own variants.
+/// [`ErrorCode::as_str`] is the text to send; [`Error`]'s `Display`, English and quoting
+/// (escaped, capped) input, is for logs, and applications localize from the code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ErrorCode {
+    /// A data model path that cannot be read or written, such as `/__proto__`.
+    DataError,
+    /// An expression that does not parse or exceeds its limits.
+    ExpressionError,
+    /// A catalog that cannot be loaded, or an embedded schema that is broken.
+    CatalogError,
+    /// A rejected component or value, or a malformed JSON Pointer.
+    ValidationFailed,
+}
+
+impl ErrorCode {
+    /// The code as the protocol spells it, such as `"VALIDATION_FAILED"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::DataError => "DATA_ERROR",
+            Self::ExpressionError => "EXPRESSION_ERROR",
+            Self::CatalogError => "CATALOG_ERROR",
+            Self::ValidationFailed => "VALIDATION_FAILED",
+        }
+    }
+}
+
+/// An error raised by the runtime; [`Error::category`] and [`Error::code`] classify it.
 #[derive(Debug, Snafu)]
 pub struct Error(Inner);
 
@@ -52,7 +85,14 @@ const _: () = {
 impl Error {
     /// The conformance category this error belongs to.
     pub fn category(&self) -> Category {
-        self.0.category()
+        let (category, _) = self.0.class();
+        category
+    }
+
+    /// The A2UI code a renderer reports for this error.
+    pub fn code(&self) -> ErrorCode {
+        let (_, code) = self.0.class();
+        code
     }
 }
 
@@ -135,6 +175,13 @@ pub(crate) enum Inner {
 
     #[snafu(display("Value nesting exceeds {limit} levels"))]
     ValueLimit { limit: usize, backtrace: Backtrace },
+
+    #[snafu(display("Component exceeds {limit} {what}"))]
+    ComponentLimit {
+        what: &'static str,
+        limit: usize,
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("Catalog document is not valid JSON: {message}"))]
     CatalogJson {
@@ -273,15 +320,15 @@ pub(crate) enum Inner {
 }
 
 impl Inner {
-    fn category(&self) -> Category {
+    /// The category and code of this error, decided per variant.
+    fn class(&self) -> (Category, ErrorCode) {
         match self {
             Self::ForbiddenSegment { .. }
-            | Self::InvalidPointer { .. }
             | Self::TraversePrimitive { .. }
             | Self::NonNumericSegment { .. }
-            | Self::IndexOutOfRange { .. } => Category::Data,
-            Self::ExpressionSyntax { .. } => Category::Parse,
-            Self::ExpressionLimit { .. } => Category::Expression,
+            | Self::IndexOutOfRange { .. } => (Category::Data, ErrorCode::DataError),
+            Self::ExpressionSyntax { .. } => (Category::Parse, ErrorCode::ExpressionError),
+            Self::ExpressionLimit { .. } => (Category::Expression, ErrorCode::ExpressionError),
             Self::EmbeddedSchema { .. }
             | Self::SchemaBuild { .. }
             | Self::CatalogJson { .. }
@@ -296,10 +343,12 @@ impl Inner {
             | Self::DeriveDuplicateEntry { .. }
             | Self::ReservedComponent { .. }
             | Self::InvalidIdentifier { .. }
-            | Self::UserActivation { .. } => Category::Catalog,
-            Self::SchemaViolation { .. }
+            | Self::UserActivation { .. } => (Category::Catalog, ErrorCode::CatalogError),
+            Self::InvalidPointer { .. }
+            | Self::SchemaViolation { .. }
             | Self::UnknownDefinition { .. }
             | Self::ValueLimit { .. }
+            | Self::ComponentLimit { .. }
             | Self::ComponentShape { .. }
             | Self::MissingComponentType { .. }
             | Self::UnknownComponent { .. }
@@ -308,7 +357,7 @@ impl Inner {
             | Self::CallShape { .. }
             | Self::SystemFunctionCatalog { .. }
             | Self::UnknownFunction { .. }
-            | Self::AgentOnlyCall { .. } => Category::Validation,
+            | Self::AgentOnlyCall { .. } => (Category::Validation, ErrorCode::ValidationFailed),
         }
     }
 }

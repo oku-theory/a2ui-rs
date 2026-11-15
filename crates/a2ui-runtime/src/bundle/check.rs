@@ -12,6 +12,7 @@ use super::{
 use crate::error::{Error, ExternalRefSnafu, ForbiddenKeywordSnafu, MalformedCatalogSnafu};
 use crate::pointer::BAD_ESCAPE;
 use crate::quoted::{Quoted, reason};
+use crate::schema::common_type_defs;
 
 /// The keywords the reference check reads when they hold a scalar.
 const KEYWORDS: [&str; 7] = [
@@ -43,13 +44,17 @@ const NESTED: &str = "only the catalog's top level may declare it";
 /// data must also be written as the validation schema writes it. A numeric `$anchor` or `$id`
 /// is left to the schema build, whose meta-schema check rejects it.
 ///
+/// A common types reference must name a common type, not a catalog definition it would land
+/// on once localized (Plan 2b, Decision 38).
+///
 /// `#` and `catalog.json#` name the whole document, which the validation schema does not keep,
 /// so they are refused like `#/title`. Pointers are built only for an error. The document is at
 /// most `MAX_JSON_DEPTH` deep; it walks with [`find_member_in`], which recurses.
 pub(crate) fn check_references(document: &Map<String, Value>) -> Result<(), Error> {
+    let common = common_type_defs()?;
     let first_error = find_member_in(document, &mut Vec::new(), &mut |key, value, path| {
         let checked = match value {
-            Value::String(reference) if key == REF_KEY => check_ref(reference, path),
+            Value::String(reference) if key == REF_KEY => check_ref(reference, path, common),
             _ if key == REF_KEY => Err(MalformedCatalogSnafu {
                 reason: reason!["$ref at ", Quoted::new(&pointer(path)), " must be a string"],
             }
@@ -115,7 +120,11 @@ fn check_data_refs(document: &Map<String, Value>) -> Result<(), Error> {
     first_error.map_or(Ok(()), Err)
 }
 
-fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
+fn check_ref(
+    reference: &str,
+    path: &[Segment<'_>],
+    common: &Map<String, Value>,
+) -> Result<(), Error> {
     ensure!(
         is_supported_ref(reference),
         ExternalRefSnafu {
@@ -190,7 +199,47 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
             ],
         }
     );
+    check_common_type(reference, &target, path, common)
+}
+
+/// Checks that a `common_types.json` reference names a common type.
+///
+/// Localizing drops the document part, so `common_types.json#/$defs/Weight` would land on the
+/// catalog's own `Weight`. A self-reference to a common type's name (`#/$defs/ChildList`, as
+/// upstream's catalogs write it) lands on the copy, since `check_defs` refuses a definition
+/// named like one.
+fn check_common_type(
+    reference: &str,
+    target: &RefPointer<'_>,
+    path: &[Segment<'_>],
+    common: &Map<String, Value>,
+) -> Result<(), Error> {
+    // `is_kept_target` already holds a common types reference to `$defs` and a name.
+    let [_, name, ..] = target.tokens() else {
+        return Ok(());
+    };
+    ensure!(
+        !is_common_types_ref(reference) || common.contains_key(name.as_ref()),
+        MalformedCatalogSnafu {
+            reason: reason![
+                "$ref '",
+                Quoted::new(reference),
+                "' at ",
+                Quoted::new(&pointer(path)),
+                " names '",
+                Quoted::new(name),
+                "' in common_types.json, which defines no such type",
+            ],
+        }
+    );
     Ok(())
+}
+
+/// Whether `reference` names a node of `common_types.json`, by any URI v1.0 allows.
+fn is_common_types_ref(reference: &str) -> bool {
+    reference
+        .split_once('#')
+        .is_some_and(|(document, _)| COMMON_TYPES_URIS.contains(&document))
 }
 
 /// Whether a supported `reference` to `pointer` names a node the validation schema keeps.
@@ -200,13 +249,10 @@ fn check_ref(reference: &str, path: &[Segment<'_>]) -> Result<(), Error> {
 /// document (`#`), a bare section (`#/$defs`) and any other top-level key (`#/title`) are not
 /// kept as they are, so a `$ref` to them would dangle or change meaning there.
 fn is_kept_target(reference: &str, pointer: &RefPointer) -> bool {
-    let from_common_types = reference
-        .split_once('#')
-        .is_some_and(|(document, _)| COMMON_TYPES_URIS.contains(&document));
     let [section, rest @ ..] = pointer.tokens() else {
         return false;
     };
-    if from_common_types {
+    if is_common_types_ref(reference) {
         return section == "$defs" && !rest.is_empty();
     }
     section == "theme" || (ENTRY_SECTIONS.contains(&section.as_ref()) && !rest.is_empty())

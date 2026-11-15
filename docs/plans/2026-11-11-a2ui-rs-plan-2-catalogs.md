@@ -7426,20 +7426,24 @@ Found by the review of this plan and left out of its scope; each is an Oku backl
 - Instance size and call caps for `validate_component` (Plan 3, in the message layer that
   receives components): a cap on a component's JSON nodes and on the nested calls one
   component holds, beside the depth cap it already has.
-- `Catalog::from_json(&Value)` precondition: document that a caller parsing untrusted text
-  must bound it first (as `Catalog::parse` does with `MAX_CATALOG_BYTES`), since the node cap
-  runs after parsing; and fuzz `Catalog::parse` and `validate_component` (`cargo-fuzz`).
-- Spec: the function registry of Plan 4 (`FunctionRegistry`) reuses `FunctionDef` and
-  `AllowedCallers` rather than a second function description; amend the design spec.
-- `$defs` shadowing: a catalog `$defs` named like a common type is rejected, so a 1.0.x
-  `common_types.json` adding a type can reject a catalog valid under 1.0.0; decide between
-  version-scoped common types and namespacing before the first 1.0.x schema update.
+- Done (t-1568): `Catalog::from_json` documents that untrusted text is capped before parsing;
+  `fuzz/` holds libFuzzer targets for `Catalog::parse` and `validate_component`, run by
+  `just fuzz <target> [seconds]` on the pinned toolchain without cargo-fuzz; `just check`
+  builds them and keeps their lock on the root's versions, `just audit` audits it; deeper
+  targets (agent catalogs, oracles, ASan, a schedule) are t-1649.
+- Decided (t-1569, Plan 2b Decision 40): Plan 4's `FunctionRegistry` reuses `FunctionDef` and
+  `AllowedCallers`, bound to the host-loaded catalog; the spec is amended; open points t-1648.
+- Decided (t-1570, Plan 2b Decision 39): common type names are reserved per protocol version;
+  a test pins the 1.0.0 names until the first 1.0.x `common_types.json` arrives.
 - Truncate `SchemaViolation` messages: jsonschema embeds the offending instance in its
   message, so one large invalid value makes a large error; cap the text (with a marker) at
   the error boundary.
-- A shared basic catalog in a `std::sync::LazyLock` (`a2ui_catalog_basic::catalog()`
-  recompiles it on each call, about 20 ms) once the renderer loads it on a hot path.
-- wasm bundle size: measure what `jsonschema` adds (`fancy-regex`, `num-*`, `ahash`); if too
-  large, evaluate `boon` as the validator.
+- Done (t-1572, Plan 2b Decision 36): a shared basic catalog; `a2ui_catalog_basic::catalog()`
+  compiles it once, in a `std::sync::OnceLock`.
+- Done (t-1573, Plan 2b Decision 37): wasm bundle size measured; `jsonschema` is 2.52 MiB of the
+  runtime's 2.81 MiB, `boon` would be 1.37 MiB; the swap waits for Plan 6's size budget
+  (t-1646).
+- Plan 6: set a wasm size budget for the renderer, measured after `wasm-opt` and checked in CI;
+  if the runtime exceeds it, evaluate `boon` (t-1646, Plan 2b Decision 37).
 - A wasm runtime smoke test that builds and runs a catalog validator in a browser (Plan 6,
   `wasm-bindgen-test`): today wasm32 is only built, never run.

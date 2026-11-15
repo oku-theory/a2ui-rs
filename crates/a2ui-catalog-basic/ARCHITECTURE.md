@@ -6,7 +6,8 @@ The A2UI v1.0 basic catalog: 18 components and 14 functions, as published upstre
   `LICENSE-A2UI` (and `NOTICE-A2UI` when upstream has a `NOTICE`); never edit it by hand.
   The crate is licensed Apache-2.0 only, as that document is.
 - `src/lib.rs`: `CATALOG_ID`, `CATALOG_JSON` and `catalog()`, which loads it with
-  `Catalog::parse` on every call.
+  `Catalog::parse` once, keeps it in a `OnceLock`, and returns the shared `&'static Catalog`;
+  only success is kept, so a load error is owned and fresh on each call.
 
 Plan 4 adds the renderer-side implementations of the basic functions here.
 

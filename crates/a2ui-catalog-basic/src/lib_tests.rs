@@ -10,6 +10,29 @@ fn catalog_published_document_loads_with_its_id() {
 }
 
 #[test]
+fn catalog_two_calls_share_one_loaded_catalog() {
+    assert_that!(std::ptr::eq(catalog().unwrap(), catalog().unwrap())).is_true();
+}
+
+#[test]
+fn catalog_threads_racing_on_first_load_get_the_same_catalog() {
+    let start = std::sync::Arc::new(std::sync::Barrier::new(4));
+    let addresses: Vec<usize> = (0..4)
+        .map(|_| {
+            let start = std::sync::Arc::clone(&start);
+            std::thread::spawn(move || {
+                start.wait();
+                std::ptr::from_ref(catalog().unwrap()) as usize
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect();
+    assert_that!(addresses.iter().all(|&a| a == addresses[0])).is_true();
+}
+
+#[test]
 fn catalog_eighteen_basic_components_are_kept() {
     assert_that!(catalog().unwrap().components().count()).is_equal_to(18);
 }
@@ -30,7 +53,7 @@ fn open_url_button(args: Value) -> Value {
 fn catalog_button_calling_open_url_is_valid() {
     let basic = catalog().unwrap();
     let button = open_url_button(json!({"url": "https://example.com"}));
-    assert_that!(basic.validate_component(&button, CATALOG_ID, &basic)).is_ok();
+    assert_that!(basic.validate_component(&button, CATALOG_ID, basic)).is_ok();
 }
 
 #[test]
@@ -38,7 +61,7 @@ fn catalog_open_url_extra_argument_is_invalid() {
     let basic = catalog().unwrap();
     let button = open_url_button(json!({"url": "https://example.com", "target": "_blank"}));
     let err = basic
-        .validate_component(&button, CATALOG_ID, &basic)
+        .validate_component(&button, CATALOG_ID, basic)
         .unwrap_err();
     assert_that!(err.category()).is_equal_to(Category::Validation);
     assert_that!(err.to_string()).contains("'target' was unexpected");
@@ -49,7 +72,7 @@ fn catalog_text_field_without_value_is_invalid() {
     let basic = catalog().unwrap();
     let field = json!({"id": "f1", "component": "TextField", "label": "Email"});
     let err = basic
-        .validate_component(&field, CATALOG_ID, &basic)
+        .validate_component(&field, CATALOG_ID, basic)
         .unwrap_err();
     assert_that!(err.to_string()).contains("\"value\" is a required property");
 }

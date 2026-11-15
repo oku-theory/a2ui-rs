@@ -70,9 +70,14 @@ One concept per module:
   write returns the paths it touched.
 - `dynamic`: `Dynamic<T>` (literal, `@path`, `@call`) and an `Evaluator` resolving in a scope; a
   failed binding yields `null` plus an `EXPRESSION_ERROR`, siblings keep rendering.
-- `function`: `FunctionRegistry` (`returnType`, `allowedCallers`, `requiresUserActivation`, local
-  vs `callAgentFunction` routing); implementations are `Fn(&Args, &Ctx) -> Result<Value>` registered
-  per catalog.
+- `function`: `FunctionRegistry` binds implementations, `Fn(&Args, &Ctx) -> Result<Value>`, to the
+  functions of the catalogs the host loaded, sharing each catalog, never copying it. It describes
+  no function itself: the return type, `allowedCallers` (`AllowedCallers`),
+  `requiresUserActivation` and argument validator are the catalog's `FunctionDef`, read through
+  `Catalog::function`. A call runs locally when an implementation is registered (`@` functions
+  always), else goes to the agent as `callAgentFunction`, schema-only declarations included;
+  `AllowedCallers` and `requires_user_activation()` gate both routes. A catalog the agent sends
+  never rebinds or loosens a host implementation (Plan 2b, Decision 40).
 - `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
   size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
   backtracking regex.
@@ -91,7 +96,10 @@ One concept per module:
 
 Errors: opaque Snafu `Error` with a backtrace in every variant, exposing `code() -> ErrorCode` (the
 A2UI codes: `VALIDATION_FAILED`, `UNALLOWED_PARENT`, `UNALLOWED_CHILD`, `INTEGRITY_ERROR`,
-`INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `UNKNOWN_FUNCTION`) and
+`INVALID_FUNCTION_CALL`, `EXPRESSION_ERROR`, `EXECUTION_ERROR`, `CATALOG_NOT_FOUND`, and the
+`DATA_ERROR` and `CATALOG_ERROR` the conformance suites expect; `UNKNOWN_FUNCTION` is the agent's
+reply, which the renderer reads, not one it raises; a `#[non_exhaustive]` enum that gains each code
+with the first error raising it, and a code per stage, plan 2b Decision 34) and
 `category()` matching the harness taxonomy (`Parse`, `Validation`, `Integrity`, `Recursion`,
 `Catalog`, `Data`, `Expression`, `State`, `Compilation`). `Display` is English for logs; the
 application localizes from the code. Input an error quotes (paths, names, `$ref`s, schema

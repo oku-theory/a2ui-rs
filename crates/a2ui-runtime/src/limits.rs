@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ptr;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::bundle::{Located, REF_KEY, RefPointer};
 
@@ -72,6 +72,15 @@ pub(crate) const MAX_KEY_BYTES: usize = 256;
 /// Longest `$ref` string a catalog document may hold, in bytes.
 pub(crate) const MAX_REF_BYTES: usize = 4096;
 
+/// Most JSON nodes, of any kind, one component instance may hold.
+pub(crate) const MAX_COMPONENT_NODES: usize = 65_536;
+
+/// Most function calls (`@call` objects, nested ones included) one component instance may hold.
+///
+/// Each call is checked against its function's validator, so this bounds the validators one
+/// component runs, whatever the calls nest in.
+pub(crate) const MAX_COMPONENT_CALLS: usize = 1024;
+
 /// Most input characters an error keeps of one quoted value.
 ///
 /// Longer input keeps its first and last halves around an elision marker. Each character it
@@ -94,47 +103,91 @@ pub(crate) enum Oversize {
 
 /// The first of the node, key and `$ref` caps `value` breaks, with at most `max_nodes` nodes.
 ///
-/// Each object, array and scalar is one node. The walk is iterative and counts a container's
-/// children before queuing them, so it stops as soon as the count passes `max_nodes`; it
-/// checks each key, and each `$ref` string, as it counts it. Every later walk of the document
-/// thus reads strings of bounded length where it decodes or compares them.
+/// It walks as [`first_oversize`] does and checks each key, and each `$ref` string, as it counts
+/// it. Every later walk of the document thus reads strings of bounded length where it decodes or
+/// compares them.
 pub(crate) fn oversize(value: &Value, max_nodes: usize) -> Option<Oversize> {
+    first_oversize(value, max_nodes, Oversize::Nodes, |map| {
+        map.iter().find_map(|(key, child)| {
+            if key.len() > MAX_KEY_BYTES {
+                return Some(Oversize::Key);
+            }
+            match child {
+                Value::String(reference) if key == REF_KEY && reference.len() > MAX_REF_BYTES => {
+                    Some(Oversize::Ref)
+                }
+                _ => None,
+            }
+        })
+    })
+}
+
+/// The first cap `value` breaks: `nodes` past `max_nodes`, else what `object` finds.
+///
+/// Each object, array and scalar is one node. The walk is iterative and counts a container's
+/// children before queuing them, so it stops as soon as the count passes `max_nodes`; `object`
+/// sees each object once, before its children are queued.
+fn first_oversize<T>(
+    value: &Value,
+    max_nodes: usize,
+    nodes: T,
+    mut object: impl FnMut(&Map<String, Value>) -> Option<T>,
+) -> Option<T> {
     let mut count = 1;
+    if count > max_nodes {
+        return Some(nodes);
+    }
     let mut stack = vec![value];
     while let Some(node) = stack.pop() {
         match node {
             Value::Array(items) => {
                 count += items.len();
                 if count > max_nodes {
-                    return Some(Oversize::Nodes);
+                    return Some(nodes);
                 }
                 stack.extend(items);
             }
             Value::Object(map) => {
                 count += map.len();
                 if count > max_nodes {
-                    return Some(Oversize::Nodes);
+                    return Some(nodes);
                 }
-                for (key, child) in map {
-                    if key.len() > MAX_KEY_BYTES {
-                        return Some(Oversize::Key);
-                    }
-                    if let Value::String(reference) = child
-                        && key == REF_KEY
-                        && reference.len() > MAX_REF_BYTES
-                    {
-                        return Some(Oversize::Ref);
-                    }
+                if let Some(found) = object(map) {
+                    return Some(found);
                 }
                 stack.extend(map.values());
             }
             _ => {}
         }
-        if count > max_nodes {
-            return Some(Oversize::Nodes);
-        }
     }
     None
+}
+
+/// The first cap a component instance breaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ComponentOversize {
+    /// More than [`MAX_COMPONENT_NODES`] JSON nodes.
+    Nodes,
+    /// More than [`MAX_COMPONENT_CALLS`] objects holding an `@call` key.
+    Calls,
+}
+
+/// The first of the node and call caps the component instance `value` breaks.
+///
+/// Like [`oversize`], it counts before it queues, so it stops at the first node past a cap. It
+/// counts every object holding an `@call` key, a non-string one and one under an envelope key
+/// that `validate_component` does not walk included, so it may count more calls than are checked.
+pub(crate) fn component_oversize(value: &Value) -> Option<ComponentOversize> {
+    let mut calls = 0_usize;
+    first_oversize(
+        value,
+        MAX_COMPONENT_NODES,
+        ComponentOversize::Nodes,
+        |map| {
+            calls += usize::from(map.contains_key("@call"));
+            (calls > MAX_COMPONENT_CALLS).then_some(ComponentOversize::Calls)
+        },
+    )
 }
 
 /// Bytes of string that weigh one more schema node in [`expand`]'s count.

@@ -91,35 +91,35 @@ fn schema_eq_other_differences_are_detected(#[case] a: Value, #[case] b: Value) 
 #[test]
 fn expect_error_literal_message_with_regex_metacharacters_matches() {
     let err = Pointer::parse("$x").unwrap_err();
-    let expected = json!({"category": "DataError", "message": "Pointer '$x'"});
+    let expected = json!({"category": "ValidationError", "message": "Pointer '$x'"});
     assert_that!(expect_error(&err, &expected, "here")).is_ok();
 }
 
 #[test]
 fn expect_error_literal_message_is_case_insensitive() {
     let err = Pointer::parse("$x").unwrap_err();
-    let expected = json!({"category": "DataError", "message": "invalid json pointer"});
+    let expected = json!({"category": "ValidationError", "message": "invalid json pointer"});
     assert_that!(expect_error(&err, &expected, "here")).is_ok();
 }
 
 #[test]
 fn expect_error_regex_message_matches() {
     let err = Pointer::parse("$x").unwrap_err();
-    let expected = json!({"category": "DataError", "message": "^Invalid JSON Pointer '.x'"});
+    let expected = json!({"category": "ValidationError", "message": "^Invalid JSON Pointer '.x'"});
     assert_that!(expect_error(&err, &expected, "here")).is_ok();
 }
 
 #[test]
 fn expect_error_regex_message_is_case_insensitive() {
     let err = Pointer::parse("$x").unwrap_err();
-    let expected = json!({"category": "DataError", "message": "^INVALID json pointer '.x'"});
+    let expected = json!({"category": "ValidationError", "message": "^INVALID json pointer '.x'"});
     assert_that!(expect_error(&err, &expected, "here")).is_ok();
 }
 
 #[test]
 fn expect_error_invalid_regex_found_nowhere_is_reported() {
     let err = Pointer::parse("$x").unwrap_err();
-    let expected = json!({"category": "DataError", "message": "something else ("});
+    let expected = json!({"category": "ValidationError", "message": "something else ("});
     let result = expect_error(&err, &expected, "here");
     assert_that!(result.unwrap_err()).contains("does not match");
 }

@@ -18,7 +18,7 @@ caps have not passed: each component flattened into one object (`catalog/flatten
 `args` closed, common-type descriptions copied onto whole-entry `$ref`s, merged local mixins
 pruned, and the common-type closure recomputed (`catalog/validation_schema.rs`). The result is
 output only (nothing compiles it) and the `Catalog` stores it in place of the bundle. It is built
-eagerly in every `from_json`, `derive` and `a2ui_catalog_basic::catalog()` call: a lazy build
+eagerly in every `from_json` and `derive` call (once for `a2ui_catalog_basic::catalog()`): a lazy build
 would keep the bundle alive and hide `common_type_defs()`'s error.
 
 **Tech Stack:** Rust 2024 (MSRV 1.88, let-chains), `serde_json`, `snafu`, `speculoos`, `rstest`,
@@ -658,6 +658,197 @@ upstream's reading would be unsafe:
     the user published `a2ui-catalog-basic` 0.2.0 by hand from that tag, after its dry run passed
     against the published runtime, added its trusted publisher and revoked the token; `publish =
     false` is gone, so the next release publishes both crates by trusted publishing.
+34. **`Error::code()` (t-1565):** each error carries an `ErrorCode` beside its `Category`, the
+    `code` a renderer `error` message or surface diagnostic reports. It lands ahead of Plan 3's
+    message processor, against Plan 2's deferral, so each variant's code is fixed where the
+    variant is. One private match decides both per variant (`Inner::class`), so a new variant must
+    pick its code where it picks its category; codes mapped from categories would have put a
+    future `UNALLOWED_PARENT` (a validation error) under `VALIDATION_FAILED`. The code is the one
+    of the stage that raises the variant: upstream gives one fault different codes at different
+    stages (an unknown component is `VALIDATION_FAILED` when validated, `UNKNOWN_COMPONENT_TYPE`
+    as a surface diagnostic; an `agentOnly` call or an unknown `@` function is `VALIDATION_FAILED`
+    when validated, `EXPRESSION_ERROR` when evaluated), so Plan 3 raises its own variants for
+    evaluation and rendering rather than reusing `UnknownComponent`, `UnknownFunction` or
+    `AgentOnlyCall`, which only `validate_component` raises. Today's variants map to four codes:
+    data path errors to `DATA_ERROR` (`error_responses.yaml`, prototype pollution); template
+    syntax and template limits to `EXPRESSION_ERROR` (the protocol reports a local evaluation
+    failure so, and a `regex` pattern that does not parse); every validation error, an unknown
+    component or function and an `agentOnly` call from a component included, to
+    `VALIDATION_FAILED` (every `validator_v1_0.yaml` `rendererError`). `InvalidPointer` moves from
+    `DataError` to `ValidationError`, `VALIDATION_FAILED`: upstream's one malformed-pointer case
+    (`test_error_response_update_data_model_invalid_json_pointer`) expects both, and no case
+    expects `DataError` for one. Catalog load, compile and embedded-schema errors map to
+    `CATALOG_ERROR` by analogy only: upstream's `CATALOG_ERROR` cases
+    (`agent_function_routing.yaml`) are calls naming a catalog the surface lacks, and no case
+    reports a catalog that fails to load; `EmbeddedSchema` is a defect of this crate, which a
+    renderer should log rather than blame on the agent, and `UserActivation` is a catalog
+    declaring a function inconsistently, not the evaluation-time refusal (`EXPRESSION_ERROR`). The
+    enum is `#[non_exhaustive]` and gains `UNALLOWED_PARENT`, `INTEGRITY_ERROR`,
+    `CATALOG_NOT_FOUND`, `INVALID_FUNCTION_CALL` and the others with the first error that raises
+    them (Plan 3), not before: a variant no error maps to would document a code the runtime never
+    reports. `UNKNOWN_FUNCTION` is the agent's reply to `callAgentFunction`, which the renderer
+    reads. Only `ErrorCode::as_str` is meant for the wire; `Display`, English and quoting capped
+    input, is for logs. A `VALIDATION_FAILED` message also needs `path` and `surfaceId`, which
+    `Error` does not expose yet (Plan 3). The harness's `expect_error` still compares categories
+    only: the cases with a `rendererError` code are message-processor cases, skipped until Plan 3
+    runs them and compares codes too (t-1643).
+
+35. **Component size and call caps (t-1567):** `validate_component` refuses, before any other
+    check, its depth cap included, an instance holding more than 65 536 JSON nodes or 1 024 calls,
+    as `ComponentLimit` (`ValidationError`, `VALIDATION_FAILED`; the message names the cap, the
+    code stays coarse as Decision 34's codes are). The depth cap bounded recursion, not work: a
+    flat array of a million calls ran a million function validators. A call is any object holding
+    an `@call` key, nested ones, calls into unknown catalogs, non-string `@call`s and ones under an
+    envelope key the walk skips included: counting more than is checked errs on the safe side.
+    Both caps are counted in one iterative pass that stops at the first node past a cap, the walk
+    `oversize` (load rule 1) now shares as `first_oversize`, so refusing costs at most the cap in
+    work; it runs first so the depth walk, which has no node bound, then sees at most the cap.
+    Accepted work stays bounded but not linear: a call's validator checks its whole subtree, so the
+    about 32 calls the depth cap lets nest revisit shared nodes, about 32 × 65 536 node visits at
+    worst. The values are generous: the basic catalog's components hold tens of nodes, and a
+    literal list of 60 000 child ids still passes; the conformance suites hold no component near
+    either. They are fixed constants, like the catalog caps (t-1566 decides whether hosts may set
+    them). A string is one node whatever its length, so string bytes are the message processor's
+    to cap, per message rather than per component (Plan 3, t-1644), as `Catalog::parse` caps
+    catalog text; `validate_component` must not face agent traffic before that cap exists.
+    Instances it accepted before can now be refused: a behavioural tightening to note in the
+    release notes, which `cargo-semver-checks` does not see.
+
+36. **One shared basic catalog (t-1572):** `a2ui_catalog_basic::catalog()` returns
+    `Result<&'static Catalog, Error>` and keeps the loaded catalog in a `std::sync::OnceLock`
+    (stable since 1.70, under our 1.88 MSRV; on `wasm32-unknown-unknown` without threads it
+    is a cell). It parsed and compiled the catalog, about 20 ms, on every call; a renderer
+    creating surfaces would pay that per surface, and `validate_component` needs the basic
+    catalog as a `CatalogLookup` on each one. `Catalog` is `Send + Sync` (asserted in
+    `error.rs`), so it can be a static. Only success is kept, not a `LazyLock<Result<..>>`
+    (review): the error stays owned, so `catalog()?` composes with callers' errors, each
+    caller gets its own backtrace, and a panic while loading leaves the cell empty instead of
+    poisoning every later call. The cost, a re-parse per call while the build is broken and a
+    possible duplicate compile when threads race on the first load, falls only where nothing
+    else works. Owned copies are not offered: `Catalog` is immutable and `derive` borrows its
+    source, so a caller wanting a variant derives one. This is a breaking change to the
+    published 0.2 API (`Catalog` becomes `&'static Catalog`): the commit is marked `!` so
+    release-plz bumps to 0.3, and the release notes say callers borrow. The trigger the task
+    named (a renderer on a hot path) has not arrived; the change is small and every caller in
+    the workspace already only borrowed it.
+
+37. **The wasm cost of `jsonschema` (t-1573):** measured on 2026-11-14 with Rust 1.99.0, each
+    case a `cdylib` for `wasm32-unknown-unknown` built `--release` with `opt-level = "s"`,
+    `lto = true`, `codegen-units = 1`, `panic = "abort"` and `strip = true`, without `wasm-opt`
+    (not installed); compressed with `gzip -9`. Rows 2 and 4 compile a schema read from the
+    input and check an instance against it:
+
+    | Build | `.wasm` | gzip -9 |
+    |---|---|---|
+    | `serde_json` alone, parsing a value | 55 KiB | 24 KiB |
+    | plus `jsonschema` 0.61.1 (no default features), compiling and checking | 2.52 MiB | 787 KiB |
+    | runtime and catalog: `catalog()`/`from_json`, `validate_component`, `parse_template` | 2.81 MiB | 883 KiB |
+    | `boon` 0.6.1 in place of `jsonschema` in row 2 | 1.37 MiB | 459 KiB |
+
+    The `jsonschema` build is about 90 % of the runtime's wasm (88 % net of `serde_json`): the
+    runtime and the embedded catalogs add about 300 KiB raw and 100 KiB compressed on top of it.
+    Exact bytes: 56 554, 2 639 724, 2 945 437 and 1 434 223 (gzip 24 819, 805 682, 904 663 and 470
+    278). By crate, from the v0 symbol names of the same runtime build left unstripped (code section
+    2.22 MiB, data section 579 KiB, the embedded schemas and catalogs included): `jsonschema` 838
+    KiB; the linear regex stack the runtime selects (`regex-automata`, `regex-syntax`,
+    `aho-corasick`, `regex`, `memchr`, `jsonschema-regex`) 441 KiB; `fancy-regex` 126 KiB, linked
+    although the runtime never selects it (`jsonschema` chooses the engine at run time);
+    `referencing` 72 KiB; `num-bigint` 39 KiB; `fluent-uri` 19 KiB; `ahash` 15 KiB; `a2ui-runtime`
+    103 KiB; `serde_json` 47 KiB; `core`, `alloc` and `hashbrown` generics, mostly instantiated by
+    `jsonschema`, 493 KiB. No single dependency is a cheap cut: dropping `fancy-regex` would need an
+    upstream feature gate and saves 5 %. `boon` does the same work in a little over half the bytes
+    (-1.15 MiB raw, -328 KiB gzip). Both bring `getrandom`, and so `wasm-bindgen`, on wasm32:
+    `jsonschema` directly and through `ahash`, `boon` through `ahash`; it only seeds hashing and
+    reaches no result. We keep `jsonschema` for now: no wasm size budget exists yet (Plan 6 sets one
+    with the Leptos renderer and `wasm-opt`, and re-measures), and a switch is not only bytes. The
+    evaluation, t-1646, gated on that budget, must keep the agent-catalog protections as hard
+    requirements: a non-backtracking regex engine whose compiled size is capped at
+    `MAX_PATTERN_BYTES` (`size_limit`/`dfa_size_limit` today, not the pattern's length), and no
+    network or file loader (a `file:` or remote `$ref` refused, with a test). Then the conformance
+    suites must pass unchanged, error codes and locations included; the swap is local to
+    `validator.rs` and `catalog/compile.rs`. The measurement crates were throwaway, a dozen lines
+    each; Plan 6's budget should come with a committed size check instead.
+
+38. **A `common_types.json` `$ref` names a common type (t-1575):** localizing drops the document
+    part of a `$ref`, so `common_types.json#/$defs/Weight` resolved to the catalog's own
+    `Weight`: lenient, not unsafe (the caps applied), but the reference meant one document and
+    reached another. Load rule 4 now refuses a `common_types.json` reference (any of its three
+    URIs) whose `$defs` name is not a common type; `common_types.json#/components/X` was already
+    refused (only `$defs` is kept there). The task also proposed refusing a self-reference that
+    lands on a copied common type (`#/$defs/DynamicString`); review found upstream's own v1.0
+    conformance catalogs write that form in schema positions (`composition_constraints.yaml`,
+    `multi_catalog.yaml`, run from Plan 3), and it is not ambiguous: `check_defs` refuses a
+    definition named like a common type, so such a name can only mean the common type. It stays
+    accepted, pinned by a test. A dangling `common_types.json` pointer below a real type
+    (`#/$defs/DynamicString/oneOf/99`) is still the validation schema's check to report. The
+    commit is marked breaking: a catalog that loaded before can be refused.
+
+39. **Common type names are reserved per protocol version (t-1570):** `check_defs` refuses a
+    catalog `$defs` entry named like a common type, so a 1.0.x `common_types.json` adding a type
+    `T` would refuse a catalog declaring 1.0.0 whose own `$defs` has `T`, valid when written.
+    Three answers were weighed:
+    - Keep refusing: an additive patch release of the schemas breaks valid catalogs. Refused.
+    - Namespacing the copied common types (`#/$defs/common/T` or a prefix): the validation
+      schema must keep upstream's flattened shape, where common types sit at `#/$defs/<name>`
+      (conformance compares it), and upstream's own v1.0 catalogs reference them by bare name
+      (`#/$defs/ChildList`, Decision 38), so a namespace would break both. Refused.
+    - **Chosen: version-scoped names.** The runtime keeps, per supported patch version, the set
+      of common type names that version defines. A catalog reads the set of its
+      `protocolVersion`: `1.0` is `1.0.0`, the set that reserves the fewest names and so refuses
+      the fewest catalogs; a patch newer than any known reads the newest set (patches compared
+      as digit strings, longest first, never parsed into an integer). Every place that keys on
+      a common type name reads that set, not the embedded `$defs`: `check_defs`, Decision 38's
+      check, the own-`$defs` filter and the `add_common_types` merge of
+      `catalog/validation_schema.rs` (which today drop and overwrite a catalog entry named like
+      a common type), the descriptions copied there, and `catalog/flatten.rs`'s mixin test.
+      A 1.0.0 catalog may then define `T`: its `#/$defs/T` reaches its own entry, and its
+      `common_types.json#/$defs/T` is refused, `T` not being a 1.0.0 type. A bare `#/$defs/T`
+      in a 1.0.0 catalog with no own `T` is a dangling reference, not the newer common type:
+      Decision 38's "such a name can only mean the common type" holds per version.
+    - **The bodies are the newest embedded ones**, since one runtime validates every 1.0.x
+      message with one set of schemas. So the closure of common types a catalog pulls in may
+      reach a name only a newer version defines (a 1.0.1 `ChildList` whose body refers to a new
+      `T`). If the catalog's own `$defs` holds that name, the copied body would bind to the
+      catalog's entry, and a catalog could loosen a common type (`"T": true`). That load is
+      refused with `DefsShadowCommonType`: the reserved names of a catalog are its version's
+      set plus every name the common types it reaches reach in turn. A catalog that never
+      reaches the changed type keeps loading.
+
+    Nothing changes until the first 1.0.x schema update: only 1.0.0 exists, so the sets would be
+    one. The implementation is t-1647. A tripwire holds the decision until then:
+    `schema_tests.rs` pins the 21 names of 1.0.0 and its failure message names this decision, so
+    the `vendor/sync.sh` that adds, removes or renames a common type fails `just test` before
+    any catalog breaks. `agent_to_renderer.json` is not affected: it is the runtime's own
+    schema, and no catalog `$defs` is merged into it.
+
+40. **The function registry reuses `FunctionDef` (t-1569):** Plan 4's `FunctionRegistry` holds
+    implementations only. What a function is (return type, `allowedCallers`,
+    `requiresUserActivation`, the compiled validator of its calls) is already the catalog's
+    `FunctionDef`, checked at load (a function requiring user activation must be `rendererOnly`)
+    and used by `validate_component` (an `agentOnly` function cannot be called from a
+    component). A second description in the registry could disagree with its catalog, so the
+    registry reads it through `Catalog::function`. It shares the catalog, never copies its
+    definitions; the handle takes a `&'static Catalog` (the shared basic catalog, Decision 36)
+    as well as an `Arc<Catalog>`, the type being Plan 4's choice.
+
+    Routing follows upstream's fallback rule (protocol, "Function Location Resolution"): `@`
+    functions run locally, a function with a registered implementation runs locally, and any
+    other call is sent as `callAgentFunction`. A function the catalog declares without an
+    implementation (schema-only) is therefore legal and goes to the agent, never refused at
+    registration. `AllowedCallers` and `requires_user_activation()` do not choose the route;
+    they gate both routes of a declared function (an `agentOnly` call or a passive call needing
+    a gesture is an `EXPRESSION_ERROR`, never dispatched). A call to an undeclared name is
+    already refused by `validate_component` (`UnknownFunction`), which upstream allows a
+    renderer that declares the agent functions it expects; so registering an implementation for
+    a name the catalog lacks is an error too, as it could never be called.
+
+    The policy is a trust boundary: an implementation is host code, and the catalog the host
+    registered it with is the one whose policy guards it. So implementations bind to that
+    loaded catalog, not to its id string: a catalog the agent sends (inline, or one reusing a
+    registered id) never rebinds them or loosens their `allowedCallers` or
+    `requiresUserActivation`. Left to Plan 4, tracked as t-1648: what re-registering an id
+    does to the old bindings, and two catalogs sharing an id. The design spec's `function`
+    module now says so.
 
 ## The algorithm (reference for Tasks 1 and 2)
 

@@ -1,8 +1,11 @@
 //! The A2UI v1.0 basic catalog, embedded for `a2ui-runtime`.
 //!
-//! [`catalog`] loads the published `catalog.json` ([`CATALOG_JSON`], copied by
-//! `vendor/sync.sh`, Apache-2.0: see `LICENSE-A2UI`), whose id is [`CATALOG_ID`]. The
-//! renderer-side implementations of its functions arrive with the function runtime (Plan 4).
+//! [`catalog`] returns the published `catalog.json` ([`CATALOG_JSON`], copied by
+//! `vendor/sync.sh`, Apache-2.0: see `LICENSE-A2UI`), whose id is [`CATALOG_ID`], loaded once and
+//! shared. The renderer-side implementations of its functions arrive with the function runtime
+//! (Plan 4).
+
+use std::sync::OnceLock;
 
 use a2ui_runtime::{Catalog, Error};
 
@@ -12,9 +15,19 @@ pub const CATALOG_ID: &str = "https://a2ui.org/specification/v1_0/catalogs/basic
 /// The published catalog document, as JSON text.
 pub const CATALOG_JSON: &str = include_str!("../catalog.json");
 
-/// Loads the basic catalog; each call parses and compiles it anew (about 20 ms).
-pub fn catalog() -> Result<Catalog, Error> {
-    Catalog::parse(CATALOG_JSON, None, None)
+/// The basic catalog, loaded once on first use and then shared.
+///
+/// The first successful call parses and compiles [`CATALOG_JSON`] (about 20 ms) and keeps the
+/// result; later calls on any thread return the same catalog. Only success is kept: a load error
+/// is built afresh on each call, owned, with that caller's backtrace, so `?` composes. Two
+/// threads racing on the first load may both compile; one result is kept.
+pub fn catalog() -> Result<&'static Catalog, Error> {
+    static BASIC: OnceLock<Catalog> = OnceLock::new();
+    if let Some(basic) = BASIC.get() {
+        return Ok(basic);
+    }
+    let loaded = Catalog::parse(CATALOG_JSON, None, None)?;
+    Ok(BASIC.get_or_init(|| loaded))
 }
 
 #[cfg(test)]

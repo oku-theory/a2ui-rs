@@ -57,7 +57,7 @@ fn check(expect: &Map<String, Value>, catalog: &Catalog, at: &str) -> Result<(),
     }
     if flag(expect, "matchesBuiltinCatalog", at)? {
         let builtin = a2ui_catalog_basic::catalog().map_err(|err| format!("{at}: {err}"))?;
-        matches_builtin(catalog, &builtin).map_err(|err| format!("{at}: {err}"))?;
+        matches_builtin(catalog, builtin).map_err(|err| format!("{at}: {err}"))?;
     }
     for (index, component) in list(expect, "validComponents", at)?.iter().enumerate() {
         catalog

@@ -33,6 +33,10 @@ type KeptEntries = (
 
 impl Catalog {
     /// Loads a catalog document; `catalog_id` and `protocol_version` override its own.
+    ///
+    /// The caps below (depth, nodes, key and `$ref` lengths) run on a document already parsed,
+    /// so they cannot bound the parse itself. A caller parsing untrusted text must cap its size
+    /// first, as [`Catalog::parse`] does with 4 MiB; prefer that entry point for agent-sent text.
     pub fn from_json(
         document: &Value,
         catalog_id: Option<&str>,

@@ -18,9 +18,9 @@ use crate::bundle::Segment;
     "#/theme/$defs/Missing",
     "/theme/properties/brand/$ref"
 )]
-#[case::theme_to_missing_common_type(
-    json!({"theme": {"properties": {"brand": {"$ref": "common_types.json#/$defs/Missing"}}}}),
-    "common_types.json#/$defs/Missing",
+#[case::theme_to_missing_node_of_a_common_type(
+    json!({"theme": {"properties": {"brand": {"$ref": "common_types.json#/$defs/DynamicString/oneOf/99"}}}}),
+    "common_types.json#/$defs/DynamicString/oneOf/99",
     "/theme/properties/brand/$ref"
 )]
 #[case::unreached_def_to_missing_def(
