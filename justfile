@@ -1,3 +1,9 @@
+# The dated nightly that `-Z` flags need, never a build we ship. Renovate's custom manager moves it
+# weekly to the newest nightly 14 days old or more; it reads the next two lines exactly as written,
+# which scripts/nightly_pin_test.py checks (plan 2b, Decision 41).
+# renovate: datasource=rust-version versioning=rust-release-channel
+nightly := "nightly-2026-10-31"
+
 # Formatting, lints, dependency rules, pinned and audited actions, and the wasm build.
 check:
     cargo fmt --all --check
@@ -374,9 +380,10 @@ msrv-resolved:
 
 # Our lower bounds, each direct dependency at its lowest allowed release, checked on the MSRV.
 # Nightly cargo resolves them (-Z direct-minimal-versions), so it builds unreviewed releases.
-minimal-versions:
+minimal-versions: nightly-toolchain
     #!/usr/bin/env bash
     set -euo pipefail
+    nightly={{ quote(nightly) }}
     # A copy of the workspace, so Cargo.lock stays ours; a killed run leaves it under target/.
     mkdir -p target
     copy="$(mktemp -d target/minimal-versions.XXXXXX)"
@@ -388,11 +395,10 @@ minimal-versions:
     RUSTUP_TOOLCHAIN="$(just msrv-version)"
     export RUSTUP_TOOLCHAIN
     just msrv-toolchain
-    # Only the resolver runs on nightly (`+nightly` beats RUSTUP_TOOLCHAIN): nothing builds with it.
-    rustup toolchain install nightly --profile minimal
-    # Its version, for the log: nightly is not pinned.
-    cargo +nightly -V
-    cargo +nightly generate-lockfile --manifest-path "$copy/Cargo.toml" -Z direct-minimal-versions
+    # Only the resolver runs on the pinned nightly, installed by `nightly-toolchain` (`+` beats
+    # RUSTUP_TOOLCHAIN): nothing builds with it.
+    cargo "+$nightly" generate-lockfile --manifest-path "$copy/Cargo.toml" \
+        -Z direct-minimal-versions
     # Resolving runs no crate's code: known advisories, known-malicious crates included, and
     # yanked releases stop the run before any build script does.
     cargo audit --file "$copy/Cargo.lock" --deny yanked
@@ -404,6 +410,20 @@ minimal-versions:
     cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic
     cargo check --manifest-path "$copy/Cargo.toml" --locked -p a2ui-runtime -p a2ui-catalog-basic \
         --target wasm32-unknown-unknown
+
+# Checks the pinned nightly is dated, installs it and logs its cargo's version.
+[private]
+nightly-toolchain:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nightly={{ quote(nightly) }}
+    # Plain `nightly` would float again, and Renovate bumps only a dated name.
+    if ! [[ "$nightly" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        echo "nightly must be a dated nightly-YYYY-MM-DD, found: $nightly" >&2
+        exit 1
+    fi
+    rustup toolchain install "$nightly" --profile minimal
+    cargo "+$nightly" -V
 
 # cargo-semver-checks against our libraries' crates.io releases: builds unreviewed releases.
 semver-checks:

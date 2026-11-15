@@ -519,10 +519,10 @@ upstream's reading would be unsafe:
     minimum, such as jsonschema's error texts (Decision 26), is not covered. The job is t-1634's
     regression guard. Accepted gap: a pull request may start using an API newer than a bound after a
     lock refresh, and the job sees it only on its next weekly run; the release PR's dispatch now
-    runs it too (Decision 32, t-1639). Nightly only resolves, unpinned, as `-Z` flags need it; a
-    nightly that breaks the flag fails the job, and the release PR with it, until nightly is fixed
-    or the recipe pins a dated nightly. Like `msrv-resolved` it builds unreviewed releases:
-    `ci.yml`'s `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
+    runs it too (Decision 32, t-1639). Nightly only resolves, as `-Z` flags need it, on the dated
+    nightly the justfile pins since Decision 41, so a nightly that breaks the flag fails only
+    Renovate's bump of it. Like `msrv-resolved` it builds unreviewed releases: `ci.yml`'s
+    `minimal-versions` job runs weekly on `main` and on a dispatch (`minimal_versions`,
     on by default, the release PR's included since Decision 32), with the read-only token, no cache
     step and its own 60-minute bound; it accepts `msrv-resolved`'s exposure of `main`'s cache scope.
     Checked locally: the resolution fails on the old bounds and passes on the new ones, the audit
@@ -632,8 +632,8 @@ upstream's reading would be unsafe:
     release once the jobs are required checks (t-1633, Decision 24's list): a bound to raise on
     `main` (release-plz then updates the PR); upstream drift `msrv-resolved` reports, which users
     would hit too (a temporary `<` bound on `main`, or an admin merge after reading the failure);
-    or a nightly that broke `-Z direct-minimal-versions`, until it is fixed or the recipe pins a
-    dated nightly (t-1641). A merge queue's `merge_group` run skips them: the PR's head result is
+    or, before Decision 41 pinned a dated one, a nightly that broke `-Z direct-minimal-versions`. A
+    merge queue's `merge_group` run skips them: the PR's head result is
     the gate there. Not taken: `scripts/release_gate.py`, a first design reviewed for this task
     that read `main`'s latest weekly or dispatched result through the API and refused a red or
     stale one (its review showed a green run from before the offending merge passes it, and tying
@@ -849,6 +849,43 @@ upstream's reading would be unsafe:
     `requiresUserActivation`. Left to Plan 4, tracked as t-1648: what re-registering an id
     does to the old bindings, and two catalogs sharing an id. The design spec's `function`
     module now says so.
+
+41. **A dated nightly (t-1641):** `just minimal-versions` installed unpinned nightly for `-Z
+    direct-minimal-versions`, so since Decision 32 a nightly that broke the flag would hold every
+    release until nightly was fixed. The justfile now pins one, `nightly := "nightly-YYYY-MM-DD"`,
+    which a private `nightly-toolchain` recipe checks is dated, installs and logs (`cargo
+    +<nightly> -V`); `minimal-versions` depends on it, so a command-line override reaches both, and
+    t-1649's opt-in AddressSanitizer is to reuse both. Renovate bumps it: a `custom.regex` manager
+    reads the `# renovate:` comment above it with the `rust-version` datasource and
+    `rust-release-channel` versioning, the pair its own `rust-toolchain` manager uses, which takes
+    dated nightlies from static.rust-lang.org's `manifests.txt`, dates each one (so
+    `minimumReleaseAge: "14 days"` holds) and compares a nightly with nightlies only. A bump that
+    came out undated would fail the recipe's check on its own pull request. Its rule opens a
+    `ci(nightly)` pull request on branch `renovate/rust-nightly`, weekly like the others, and
+    `ci.yml` runs the `minimal-versions` job on that branch's runs too, since the pin serves that
+    job only: the bump is checked before its merge, with the exposure Decision 32 accepts there (a
+    fork's pull request may name its branch so, with the same read-only token and no cache). A hand
+    edit of the pin is dispatched like a dependency change (AGENTS.md). Both ends fail silently: an
+    edit the pattern no longer matches leaves the pin stale, and a branch name `ci.yml` does not
+    expect skips the job, which leaves the checks green. So `scripts/nightly_pin_test.py`, in `just
+    test`, applies renovate.json's own pattern to the justfile and requires exactly the one
+    assignment, and requires the job's condition to name `renovate/` and the rule's `branchTopic`
+    with no prefix, branch name or group overriding them. The first pin, `nightly-2026-10-31`, was a
+    fortnight old when set. Not taken: a second `rust-toolchain.toml` in a subdirectory, which
+    Renovate's own manager would bump, but under the pinned compiler's rule, and which rustup would
+    apply to commands run there; a dated nightly in `ci.yml` alone, which a local run would not
+    share; and the pinned stable cargo with `RUSTC_BOOTSTRAP=1`, which drops the second toolchain
+    and its pull requests but leans on a discouraged switch and does not serve t-1649's sanitizer.
+    Each bump leaves the previous nightly installed locally (`rustup toolchain list`). Checked
+    locally: the recipe refuses `nightly` and a name carrying a shell command, and `just
+    nightly=nightly minimal-versions` stops there before any copy; the pin installs (cargo
+    1.101.0-nightly, 2026-10-27) and resolves `-Z direct-minimal-versions` on a copy of the
+    workspace to our bounds; the pattern, run with Node's RegExp, extracts the pin; the new test
+    passes and fails on a respaced assignment, a blank line under the comment, and a renamed
+    `branchTopic`. Not verified: Renovate's own run (running Renovate locally was not allowed),
+    whose Dependency Dashboard should list `rust-nightly`, nor the job on its first bump pull
+    request, which should log the nightly's cargo (t-1652).
+
 
 ## The algorithm (reference for Tasks 1 and 2)
 
