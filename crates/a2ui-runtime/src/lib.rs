@@ -21,6 +21,7 @@ mod data;
 mod error;
 mod expression;
 mod ident;
+mod keys;
 mod limits;
 mod pointer;
 mod quoted;

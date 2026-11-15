@@ -22,8 +22,8 @@ It builds for `wasm32-unknown-unknown`.
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached validators; `FunctionCall` takes any function but `@index`).
-- `ident`: UAX #31 `is_identifier` (`_` first allowed). `validator`: `jsonschema` 2020-12,
-  `regex` engine, offline; build errors `CatalogError`, the first violation a `ValidationError`.
+- `keys`: `CALL_KEY`, `PATH_KEY`. `ident`: UAX #31 `is_identifier`. `validator`: `jsonschema`
+  2020-12, `regex` engine, offline; build errors `CatalogError`, a violation `ValidationError`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, string
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries
   its unions list and the authored document (`to_json`), compiles each entry against a bundle

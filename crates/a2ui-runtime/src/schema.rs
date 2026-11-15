@@ -12,6 +12,7 @@ use snafu::{OptionExt, ensure};
 
 use crate::bundle::{local_ref, localize_refs};
 use crate::error::{EmbeddedSchemaSnafu, Error, UnknownDefinitionSnafu, ValueLimitSnafu};
+use crate::keys::CALL_KEY;
 use crate::limits::{MAX_JSON_DEPTH, deeper_than};
 use crate::validator::{build, check, rooted};
 
@@ -81,7 +82,7 @@ fn any_function_envelope() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "@call": {"not": {"const": "@index"}},
+            CALL_KEY: {"not": {"const": "@index"}},
             "args": {"type": "object"}
         }
     })

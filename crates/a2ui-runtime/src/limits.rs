@@ -6,6 +6,7 @@ use std::ptr;
 use serde_json::{Map, Value};
 
 use crate::bundle::{Located, REF_KEY, RefPointer};
+use crate::keys::CALL_KEY;
 
 /// Deepest nesting of arrays and objects accepted in a catalog or a validated value.
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
@@ -184,7 +185,7 @@ pub(crate) fn component_oversize(value: &Value) -> Option<ComponentOversize> {
         MAX_COMPONENT_NODES,
         ComponentOversize::Nodes,
         |map| {
-            calls += usize::from(map.contains_key("@call"));
+            calls += usize::from(map.contains_key(CALL_KEY));
             (calls > MAX_COMPONENT_CALLS).then_some(ComponentOversize::Calls)
         },
     )
