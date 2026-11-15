@@ -82,7 +82,7 @@ test:
     cargo test --doc --workspace
     just lock-diff-test
 
-# scripts/lock_diff.py's unit tests, offline; -B leaves no __pycache__ behind.
+# The unit tests in scripts/ (lock_diff.py, fuzz_lock.py), offline; -B leaves no __pycache__ behind.
 lock-diff-test:
     python3 -B -m unittest discover -s scripts -p '*_test.py'
 
@@ -131,6 +131,7 @@ fuzz target seconds="60":
         (corpus / ("seed-" + hashlib.sha256(seed).hexdigest()[:16])).write_bytes(seed)
     print(f"{len(seeds)} seeds for {target}")
     EOF
+    just fuzz-lockfile
     cd fuzz
     triple="$(rustc -vV | sed -n 's/^host: //p')"
     export CARGO_TARGET_DIR="$PWD/target"
@@ -143,49 +144,24 @@ fuzz target seconds="60":
         -timeout="$timeout" -report_slow_units=1 -artifact_prefix="artifacts/$target/" \
         "corpus/$target"
 
-# The fuzz workspace: formatted, lint-clean, building `--locked`, and fuzzing the releases that
-# ship (a2ui-runtime's dependencies at the root lock's versions).
-fuzz-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
+# The fuzz workspace: formatted and lint-clean on its generated lock (fuzz-lockfile).
+fuzz-check: fuzz-lockfile
     cargo fmt --manifest-path fuzz/Cargo.toml --check
     cargo clippy --manifest-path fuzz/Cargo.toml --locked --bins -- -D warnings
-    tree() { cargo tree --manifest-path "$1" --locked -p a2ui-runtime -e normal --prefix none \
-        | sed 's/ (.*//' | sort -u; }
-    if ! diff <(tree Cargo.toml) <(tree fuzz/Cargo.toml); then
-        echo "fuzz/Cargo.lock resolves a2ui-runtime apart from Cargo.lock: run just fuzz-lock" >&2
-        exit 1
-    fi
 
-# Rebuilds fuzz/Cargo.lock from the root lock, so shared crates keep the reviewed versions; the
-# crates only the fuzz workspace uses keep the versions its old lock pinned, new ones resolve.
-fuzz-lock:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The root lock's packages, then the old fuzz lock's others; cargo drops what is unused.
-    python3 -I - Cargo.lock fuzz/Cargo.lock <<'EOF'
-    import re, sys
-    def packages(path):
-        text = open(path).read()
-        blocks = re.findall(r"\[\[package\]\]\n.*?(?=\n\[\[|\Z)", text, re.S)
-        return text[: text.index("[[package]]")], blocks
-    def key(block):
-        field = lambda name: re.search(rf"^{name} = (.*)$", block, re.M)[1]
-        return field("name"), field("version")
-    def line(name, version):
-        major, minor = version.strip('"').split(".")[:2]
-        return name, major if major != "0" else "0." + minor
-    header, root = packages(sys.argv[1])
-    _, old = packages(sys.argv[2])
-    # An old package the root lock holds a semver-compatible version of takes the root's.
-    kept = {line(*key(block)) for block in root}
-    blocks = root + [block for block in old if line(*key(block)) not in kept]
-    open(sys.argv[2], "w").write(header + "\n".join(block.rstrip("\n") + "\n" for block in blocks))
-    EOF
+# Generates fuzz/Cargo.lock (not committed): Cargo.lock's packages, so fuzz/ builds the reviewed
+# releases that ship and a root lock change needs nothing here, then fuzz/fuzz-only.lock's pins
+# for what fuzz/ alone uses. Fails if fuzz/ needs a release neither holds (plan 2b, Decision 45).
+fuzz-lockfile:
+    python3 -B scripts/fuzz_lock.py assemble
     cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
-    entries() { awk '/^name =/{n=$3}/^version =/{print n, $3}' "$1" | sort; }
-    echo "fuzz/Cargo.lock adds, beyond Cargo.lock (review each new release):"
-    comm -13 <(entries Cargo.lock) <(entries fuzz/Cargo.lock)
+    python3 -B scripts/fuzz_lock.py verify
+
+# Resolves what fuzz/ alone needs and rewrites fuzz/fuzz-only.lock, listing each release to review.
+fuzz-lock:
+    python3 -B scripts/fuzz_lock.py assemble
+    cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
+    python3 -B scripts/fuzz_lock.py pin
 
 # The declared minimum Rust version, `rust-version` in the workspace Cargo.toml.
 msrv-version:
@@ -532,6 +508,8 @@ semver-checks-tool:
 audit:
     cargo deny check licenses sources
     cargo audit --deny yanked
+    # fuzz/'s lock as assembled from Cargo.lock and the pins, by Python alone: no build script.
+    python3 -B scripts/fuzz_lock.py assemble
     cargo audit --deny yanked --file fuzz/Cargo.lock
 
 # Packages both libraries as crates.io receives them, each built from its package alone, so a

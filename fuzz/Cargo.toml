@@ -7,8 +7,8 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 # Its own workspace, so libfuzzer-sys and its C++ build stay out of the published crates' lock,
-# MSRV and minimal-versions builds. `just fuzz-check` (in `just check`) keeps it formatted, linted
-# and on the root lock's versions; `just fuzz-lock` rebuilds fuzz/Cargo.lock from Cargo.lock.
+# MSRV and minimal-versions builds. Its Cargo.lock is generated, not committed: the root lock's
+# packages, then fuzz-only.lock's pins (`just fuzz-lockfile`; `just fuzz-lock` rewrites the pins).
 [workspace]
 members = ["."]
 

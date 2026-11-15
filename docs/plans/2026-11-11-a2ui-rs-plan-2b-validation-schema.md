@@ -916,6 +916,46 @@ upstream's reading would be unsafe:
     both crates on 1.88 from the packages. Not run: its audit and builds, which build unreviewed
     releases (CI).
 
+45. **fuzz/'s lock is generated from the root's (t-1650):** `fuzz/` is its own workspace (t-1568),
+    so `libfuzzer-sys` and its C++ build stay out of the published crates' lock, MSRV and
+    minimal-versions builds. Its committed `fuzz/Cargo.lock` had to follow `Cargo.lock` by hand
+    (`just fuzz-lock`), and `fuzz-check` failed whenever the root lock moved alone: every weekly
+    `lockFileMaintenance` pull request (Decision 26), since Renovate ignores `fuzz/**` and the
+    hosted app cannot run `postUpgradeTasks`, went red until a person pushed to it. Weighed:
+    - (a) Keep the manual step, documented in the pull request's body: a weekly red PR. Refused.
+    - (b) A workflow on Renovate's branch running `just fuzz-lock` and pushing: `contents: write`
+      in a job resolving crates, and a push stops Renovate updating the branch (`rebaseWhen`),
+      while Decision 26 wants the lock a person reviewed to be the one that merges. Refused.
+    - (d) Warn only on lock-maintenance branches: `main` would then fuzz releases nobody
+      reviewed against it, the drift the check exists to stop. Refused.
+    - (c) One lock, the fuzz crate in the root workspace behind a feature: `libfuzzer-sys` would
+      enter `Cargo.lock`, and with it the `msrv`, `minimal-versions` and audit jobs. Refused.
+    - **Chosen: (e), one reviewed lock by generation**, the task's (c) without a second
+      committed lock. `fuzz/Cargo.lock` is ignored by git and generated (`just fuzz-lockfile`,
+      run by `fuzz-check` and `fuzz`): `scripts/fuzz_lock.py assemble` writes `Cargo.lock`'s
+      packages, then the pins of the committed `fuzz/fuzz-only.lock`, the releases
+      `a2ui-fuzz`'s registry dependencies reach, each kept only when `Cargo.lock` holds no
+      release on its caret line (the leftmost non-zero part; a pre-release is its own line).
+      A bare dependency entry that the other file makes ambiguous gets its version. Cargo then
+      drops what is unused, and `verify` fails naming each registry release (name, version,
+      source) the assembled lock did not hold: a fuzz-only crate no pin covers, or a shared
+      crate fuzz/ needs at another release than `Cargo.lock`'s, which the old `cargo tree`
+      comparison caught and which needs a root lock change. So the shared crates are the
+      reviewed root releases by construction, a root lock change needs nothing in `fuzz/`, and
+      every release fuzz/ builds was in the assembled lock that `just audit` and CI's `msrv`
+      job audit, made by Python alone before any build script. The pins reach `serde_json`'s
+      and `cc`'s dependencies too, so a root lock dropping `libc` still builds. `cargo
+      metadata` may fetch a newly resolved release's source before `verify` fails, running
+      nothing. `just fuzz-lock` rewrites the pins and lists each release `Cargo.lock` lacks,
+      to review; to bump one, `cargo update --manifest-path fuzz/Cargo.toml -p <crate>`, then
+      `python3 -B scripts/fuzz_lock.py pin`. Tested: the generated lock equals PR #11's
+      committed one byte for byte; moving `itoa` and `memchr` in `Cargo.lock` alone left
+      `fuzz-check` green on the moved releases; removing the `shlex` pin made it fail naming
+      `shlex 2.0.1`; requiring `itoa 1.0.19` in fuzz/ while `Cargo.lock` held 1.0.15 failed
+      naming both; `scripts/fuzz_lock_test.py` covers assembly, caret lines, verification and
+      pinning. Pins age until a person re-pins (Renovate ignores `fuzz/**`), with no publish
+      dates or licence check: t-1653.
+
 ## The algorithm (reference for Tasks 1 and 2)
 
 Inputs: the checked `Bundle` (localized `components`, `functions`, and `$defs` = own defs +
