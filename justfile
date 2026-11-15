@@ -310,15 +310,31 @@ msrv-compile-fail:
         exit 1
     fi
 
+# Prints workspace member `crate`'s version, as cargo packages it, from cargo metadata.
+[private]
+crate-version crate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    crate={{ quote(crate) }}
+    version="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r --arg name "$crate" '.packages[] | select(.name == $name) | .version')"
+    # Empty for an unknown name, which jq does not fail on.
+    if [ -z "$version" ]; then
+        echo "no workspace member named $crate" >&2
+        exit 1
+    fi
+    echo "$version"
+
 # On the MSRV, a user's crate resolves the packaged libraries afresh: builds unreviewed releases.
 msrv-resolved:
     #!/usr/bin/env bash
     set -euo pipefail
-    version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)"
-    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "Cargo.toml needs one workspace version such as 0.1.0, found: $version" >&2
-        exit 1
-    fi
+    # The pinned toolchain reads the versions and packages the crates (the MSRV's cargo cannot
+    # package a crate whose sibling is not yet published).
+    unset RUSTUP_TOOLCHAIN
+    # Each crate's own version, as cargo packages it: a pre-release or a per-crate one included.
+    runtime="$(just crate-version a2ui-runtime)"
+    catalog="$(just crate-version a2ui-catalog-basic)"
     # Cargo.lock proves our versions only. A crate of its own, with no lock, no dev-dependencies
     # and no rust-version, resolves the newest versions this rustc accepts (resolver 3, as in an
     # edition 2024 crate), the way a user's does; its `[workspace]` keeps it out of ours. A
@@ -327,14 +343,12 @@ msrv-resolved:
     user="$(mktemp -d target/msrv-user.XXXXXX)"
     trap 'rm -rf "$user"' EXIT
     # It depends on the packages crates.io would get, unpacked, not on our sources: a file missing
-    # from `include` fails here too. The pinned toolchain packages them (the MSRV's cargo cannot
-    # package a crate whose sibling is not yet published); --no-verify, as nothing is built yet.
-    unset RUSTUP_TOOLCHAIN
+    # from `include` fails here too; --no-verify, as nothing is built yet.
     cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked --no-verify --allow-dirty \
         --target-dir "$PWD/$user/package"
     mkdir "$user/packages" "$user/src"
-    for crate in a2ui-runtime a2ui-catalog-basic; do
-        tar -xzf "$user/package/package/$crate-$version.crate" -C "$user/packages"
+    for package in "a2ui-runtime-$runtime" "a2ui-catalog-basic-$catalog"; do
+        tar -xzf "$user/package/package/$package.crate" -C "$user/packages"
     done
     : > "$user/src/lib.rs"
     # [patch.crates-io] stands the packages in for releases crates.io may not have yet;
@@ -347,12 +361,12 @@ msrv-resolved:
     publish = false
 
     [dependencies]
-    a2ui-runtime = "=$version"
-    a2ui-catalog-basic = "=$version"
+    a2ui-runtime = "=$runtime"
+    a2ui-catalog-basic = "=$catalog"
 
     [patch.crates-io]
-    a2ui-runtime = { path = "packages/a2ui-runtime-$version" }
-    a2ui-catalog-basic = { path = "packages/a2ui-catalog-basic-$version" }
+    a2ui-runtime = { path = "packages/a2ui-runtime-$runtime" }
+    a2ui-catalog-basic = { path = "packages/a2ui-catalog-basic-$catalog" }
 
     [workspace]
     exclude = ["packages"]
@@ -533,6 +547,8 @@ package:
     # one.
     notice=()
     if [ -f vendor/a2ui/NOTICE ]; then notice=(NOTICE-A2UI); fi
+    # Nor does it ship tests/, which nothing builds from a package (trybuild's cases hold the
+    # pinned rustc's wording; plan 2b, Decision 42).
     shipped() {
         local crate="$1" listed
         shift
@@ -543,6 +559,10 @@ package:
                 exit 1
             fi
         done
+        if grep '^tests/' <<< "$listed" >&2; then
+            echo "$crate's package ships the files above from tests/" >&2
+            exit 1
+        fi
     }
     shipped a2ui-runtime LICENSE-MIT LICENSE-APACHE schemas/v1_0/LICENSE \
         ${notice[@]+"${notice[@]/#/schemas/v1_0/}"}

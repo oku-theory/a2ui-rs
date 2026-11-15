@@ -421,8 +421,8 @@ upstream's reading would be unsafe:
     sibling is unpublished), unpacks them, and its user crate depends on `=<version>` with
     `[patch.crates-io]` pointing at the unpacked packages and `exclude` keeping them out of its
     workspace, so their dev-dependencies stay unresolved; it fails if its lock takes either crate
-    from a registry, since cargo only warns about an unused patch. The version is the workspace's,
-    one `X.Y.Z`: a pre-release or a crate with its own version fails it loudly. Checked locally:
+    from a registry, since cargo only warns about an unused patch. Each crate's version comes from
+    `cargo metadata` since Decision 42 (it was the workspace's, read by `sed`). Checked locally:
     `just package` passes, fails without `catalog.json` in `include`, and with `CI` set refuses a
     dirty tree; the user crate's resolution and audit against the unpacked packages pass. Not run:
     its builds, which run unreviewed releases, nor the `package` job on GitHub. Our lower bounds were
@@ -886,6 +886,35 @@ upstream's reading would be unsafe:
     whose Dependency Dashboard should list `rust-nightly`, nor the job on its first bump pull
     request, which should log the nightly's cargo (t-1652).
 
+42. **Package gaps after the first release (t-1635):** three points Decision 25 left open, checked
+    now that both crates are on crates.io at 0.2.0. (1) `cargo package -p a2ui-runtime -p
+    a2ui-catalog-basic --locked` builds `a2ui-catalog-basic` against `a2ui-runtime`'s local
+    package, not crates.io's release of the same version: with a function added to the runtime and
+    called from the catalog, which 0.2.0 on crates.io lacks, the catalog's verification unpacked
+    the runtime from cargo's temporary registry and passed, with no checksum error. Nothing to
+    change. (2) `a2ui-runtime`'s package shipped `tests/` (the trybuild cases), which nothing builds
+    from the package, and whose `.stderr` files hold the pinned rustc's wording, so any other rustc
+    fails them: its manifest now has `exclude = ["/tests/"]` (anchored, as `exclude` follows
+    gitignore rules and `tests/` would also drop a nested `tests` directory), and `just package`
+    fails when either crate's package lists a `tests/` file (seen failing before the exclude). The
+    packaged manifest then has no test target. The unit tests under `src/` still ship, since anyone
+    running `cargo test` from the package needs their `#[path]` modules; they read no file outside
+    the package and are not built from it here either. The changed file list likely makes
+    release-plz propose a runtime release at the next release PR even with no code change. An
+    `include` allowlist like the catalog's, which would also keep a stray local file out of a
+    `--allow-dirty` package, is t-1651. Building
+    the packaged tests once was set aside: the catalog's package resolves the runtime from
+    crates.io outside `cargo package`, so it would need its own `[patch]` and an unlocked
+    resolution of the dev-dependencies, unreviewed releases for a check of files we already test.
+    (3) `just msrv-resolved` read one workspace version from the root `Cargo.toml` with `sed`; it
+    now reads each crate's own version from `cargo metadata`, through a private `crate-version`
+    recipe, so a pre-release or a per-crate version no longer stops it; `crate-version` fails on an
+    unknown name.
+    Checked locally on a copy with `a2ui-runtime` at `0.3.0-alpha.1`: `sed` read `0.2.0`,
+    `crate-version` read `0.3.0-alpha.1` and `0.2.0`, the names `cargo package` gave the two
+    `.crate` files; on the tree, `msrv-resolved` up to its audit packaged, unpacked and resolved
+    both crates on 1.88 from the packages. Not run: its audit and builds, which build unreviewed
+    releases (CI).
 
 ## The algorithm (reference for Tasks 1 and 2)
 

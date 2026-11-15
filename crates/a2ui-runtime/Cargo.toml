@@ -9,6 +9,9 @@ repository.workspace = true
 readme = "../../README.md"
 keywords = ["a2ui", "ui", "protocol", "agent", "renderer"]
 categories = ["gui", "wasm"]
+# The trybuild cases hold the pinned rustc's wording and nothing builds them from the package, so
+# they stay in the repository (plan 2b, Decision 42).
+exclude = ["/tests/"]
 
 [dependencies]
 snafu.workspace = true
