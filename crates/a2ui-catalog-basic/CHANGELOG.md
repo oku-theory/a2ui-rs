@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-catalog-basic-v0.2.0...a2ui-catalog-basic-v0.3.0) - 2026-11-15
+
+### Added
+
+- *(catalog-basic)* [**breaking**] load the basic catalog once and share it (t-1572)
+
 ## [0.2.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-catalog-basic-v0.1.0...a2ui-catalog-basic-v0.2.0) - 2026-11-14
 
 ### Added
