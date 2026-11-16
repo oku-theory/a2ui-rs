@@ -82,7 +82,8 @@ test:
     cargo test --doc --workspace
     just lock-diff-test
 
-# The unit tests in scripts/ (lock_diff, fuzz_lock, fuzz_targets), offline; -B: no __pycache__.
+# The unit tests in scripts/ (lock_diff, fuzz_lock, fuzz_targets, nightly_pin, package_include),
+# offline; -B: no __pycache__.
 lock-diff-test:
     python3 -B -m unittest discover -s scripts -p '*_test.py'
 
@@ -536,7 +537,8 @@ package:
     notice=()
     if [ -f vendor/a2ui/NOTICE ]; then notice=(NOTICE-A2UI); fi
     # Nor does it ship tests/, which nothing builds from a package (trybuild's cases hold the
-    # pinned rustc's wording; plan 2b, Decision 42).
+    # pinned rustc's wording; plan 2b, Decision 42); each crate's `include` keeps it out, and
+    # scripts/package_include_test.py checks that no published crate falls back to `exclude`.
     shipped() {
         local crate="$1" listed
         shift
@@ -552,7 +554,7 @@ package:
             exit 1
         fi
     }
-    shipped a2ui-runtime LICENSE-MIT LICENSE-APACHE schemas/v1_0/LICENSE \
+    shipped a2ui-runtime README.md LICENSE-MIT LICENSE-APACHE schemas/v1_0/LICENSE \
         ${notice[@]+"${notice[@]/#/schemas/v1_0/}"}
     shipped a2ui-catalog-basic LICENSE-A2UI catalog.json ${notice[@]+"${notice[@]}"}
     cargo package -p a2ui-runtime -p a2ui-catalog-basic --locked $dirty

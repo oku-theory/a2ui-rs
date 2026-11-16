@@ -9,9 +9,20 @@ repository.workspace = true
 readme = "../../README.md"
 keywords = ["a2ui", "ui", "protocol", "agent", "renderer"]
 categories = ["gui", "wasm"]
-# The trybuild cases hold the pinned rustc's wording and nothing builds them from the package, so
-# they stay in the repository (plan 2b, Decision 42).
-exclude = ["/tests/"]
+# An allowlist, so tests/ (trybuild's cases hold the pinned rustc's wording) and any file not
+# listed stay out of the package (plan 2b, Decision 42). README.md ships through `readme`. NOTICE-A2UI exists
+# only while upstream has a NOTICE (vendor/sync.sh copies it); listed so that it ships the day it
+# does. `just package` builds the crate from these files alone.
+include = [
+    "src/**",
+    "schemas/v1_0/common_types.json",
+    "schemas/v1_0/agent_to_renderer.json",
+    "schemas/v1_0/LICENSE",
+    "schemas/v1_0/NOTICE-A2UI",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "Cargo.toml",
+]
 
 [dependencies]
 snafu.workspace = true
