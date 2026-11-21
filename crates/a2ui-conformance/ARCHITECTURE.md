@@ -12,8 +12,7 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   v0.8 envelope key, suite suffix `_v1_0`; no leading `v`. A version-dependent action left
   unclassified is `VersionError::Unclassified`, only the version-neutral ones give `None`; a
   read or type error is `VersionError::Failed`. `Skips::reason_for` skips an unclassified case
-  named in `[cases]`/`[actions]` and fails every other error; `at()` is the `suite#name`
-  location.
+  named in `[cases]`/`[actions]`, fails every other error; `at()` is `suite#name`.
 - `skips`: `skips.toml` `[actions]`, `[cases]`, `[versions]` (each with a reason; the
   version-neutral `data_model`, `resolve_path`, `parse_expression_template` ignore `[versions]`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.
@@ -21,22 +20,24 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 - `compare`: `json_eq`, `schema_eq` (`enum`/`required` as multisets), `expect_error`: a string
   matches the message only; a mapping takes `category` (`ValidationError` also accepts
   `IntegrityError`/`RecursionError`), `message` (case-insensitive literal, then regex), `code`,
-  `path`, `surfaceId`, `functionCallId`, `details` (index and length), `rendererError`; any other
-  key fails.
+  `path`, `surfaceId`, `functionCallId`, `details` (by index: `path`, `code`, `surfaceId`),
+  `rendererError`; any other key fails.
 - `outbound`: `check_renderer_error` validates `RendererMessage::error(..)` against upstream's
-  `renderer_to_agent.json` (`common_types.json` registered under its `$id`, a stand-in
-  `catalog.json` resource satisfying its `anyFunction` ref) and matches `version` and
-  `error.{code,surfaceId,functionCallId,path,message}`; a missing error body or message fails.
-- `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR`
-  is set (`just conformance-manifest` sets it).
-- `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`;
-  `expect_file`.
+  `renderer_to_agent.json` (`common_types.json` under its `$id`, a stand-in `catalog.json` for
+  its `anyFunction` ref), matching `version` and `error.{code,surfaceId,functionCallId,path,
+  message}`; a missing error body or message fails.
+- `manifest`: upstream's executed-case JSONL, and aliased ids per case in
+  `rust-core-<pid>.aliased.txt` (`.txt`: outside the comparer's `*.jsonl` glob), written whenever
+  `A2UI_CONFORMANCE_MANIFEST_DIR` is set (`just conformance-manifest` sets it).
+- `paths`: `upstream_root` (the vendored `vendor/a2ui`), `read_json`, `expect_file`.
 - `handlers`: `handler(action)`, one runner per implemented action (schema_doc: the two
   schema-equality actions; common_type; round_trip; from_json; to_json; derive;
   validation_schema (golden comparison with `schema_eq`); catalog_checks: entries,
   `selfContained`, `matchesBuiltinCatalog` against `a2ui-catalog-basic`);
   `catalog_input` reads the case's catalog (inline or `catalogPath`) and its
-  `catalogId`/`protocolVersion` overrides.
+  `catalogId`/`protocolVersion` overrides; `processing` runs `process_messages` steps on one
+  `MessageProcessor`, `catalogs` registers v1.0 catalogs (stubs opened, missing ids aliased),
+  `surfaces` checks `expect.surfaces`.
 
 Depends on: `a2ui-runtime`, `a2ui-catalog-basic`, `jsonschema`, `percent-encoding`.
 

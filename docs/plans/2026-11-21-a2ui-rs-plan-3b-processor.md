@@ -261,15 +261,17 @@ the 12-reviewer plan review).
     (Decision 48, chosen by the user): unless the case or a step expects a `CatalogError`, each
     non-empty catalog id the messages name that no registered catalog has is registered as a
     `derive` of the case's first registered catalog (none: the basic catalog from
-    `a2ui-catalog-basic`) under that id; `""` is never aliased. The manifest lists, per case,
-    the ids it aliased.
+    `a2ui-catalog-basic`) under that id; `""` is never aliased. The ids each case aliased go to
+    a side file, `rust-core-<pid>.aliased.txt`, since the manifest record schema is closed
+    (`additionalProperties: false`); `.txt` keeps it out of the comparer's `*.jsonl` glob.
 76. **Harness surface expectations.** `exists`, `sendDataModel`, `metadata`, `dataModel` (whole
     root, `json_eq`), `components` (list: same count, each matched by `id`, each listed key's
     value compared whole with `json_eq` against `unescaped_component`; map: the same per listed
     id; an expected `null` matches an absent key). Any other key fails the case; expectations
     this plan cannot check (`isValid`, `validationErrors`, `validationResult(s)`, resolved
-    template ids) are listed `[cases]` skips. A case or step with neither `expect` nor
-    `expectError` fails.
+    template ids) are listed `[cases]` skips. A case with no `expect` or `expectError`, in itself or
+    any step, fails, and so does an `expect` without a non-empty `surfaces`; a step with
+    neither must be accepted (upstream composition cases rely on it).
 77. **Version scope of the harness.** A case runs when Plan 3a's `effective_version` is 1.0.
     `test_v10_get_renderer_data_model_filters_by_surface_protocol_version` needs one processor
     reading v0.9 envelopes: `[cases]` skip, "v0.9 surfaces: a2ui-rs implements v1.0 only".

@@ -1,7 +1,6 @@
 # Actions not implemented yet, each with the plan that implements it.
 [actions]
 validate = "Plan 3: validation and message processing"
-process_messages = "Plan 3: validation and message processing"
 get_renderer_capabilities = "Plan 3: validation and message processing"
 get_renderer_data_model = "Plan 3: validation and message processing"
 evaluate_function = "Plan 4: functions, actions and RPC"
@@ -16,6 +15,10 @@ accessibility_check = "framework adapter suite: run by a2ui-leptos in the browse
 
 # Individual cases skipped on purpose.
 [cases]
+test_batch_atomic_rollback_on_candidate_topology_cycle = """\
+  upstream conflict (Decision 72): expects IntegrityError (rendererError RECURSION_LIMIT_EXCEEDED) \
+  for a component cycle; the guide and error_responses.yaml make it a RecursionError; the guide \
+  wins, Task 3's rollback test pins it"""
 
 # Protocol versions this runtime does not implement (written without the leading `v`); the
 # version-neutral data_model, resolve_path and parse_expression_template run whatever version.

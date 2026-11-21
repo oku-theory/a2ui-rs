@@ -215,6 +215,21 @@ fn expect_error_compares_details_by_index_and_length() {
     assert_that!(expect_error(&err, &wrong, "here").unwrap_err()).contains("details[0].code");
 }
 
+fn processed_create_with_theme() -> a2ui_runtime::Error {
+    let mut processor = a2ui_runtime::MessageProcessor::new(a2ui_runtime::CatalogSet::new());
+    let batch = json!([{"version": "1.0", "createSurface": {"surfaceId": "s1", "theme": {}}}]);
+    processor.handle_batch(&batch).unwrap_err()
+}
+
+#[test]
+fn expect_error_details_surface_id_is_compared() {
+    let err = processed_create_with_theme();
+    let good = json!({"details": [{"surfaceId": "s1"}]});
+    assert_that!(expect_error(&err, &good, "here")).is_ok();
+    let wrong = json!({"details": [{"surfaceId": "s2"}]});
+    assert_that!(expect_error(&err, &wrong, "here").unwrap_err()).contains("details[0].surfaceId");
+}
+
 #[test]
 fn expect_error_refuses_unknown_keys() {
     let expected = json!({"category": "ValidationError", "surprise": 1});

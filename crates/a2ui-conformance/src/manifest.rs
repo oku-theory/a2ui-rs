@@ -7,6 +7,8 @@ use std::sync::{Mutex, PoisonError};
 
 use serde_json::json;
 
+use crate::case::Case;
+
 /// The outcome recorded for one case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -67,3 +69,43 @@ impl Manifest {
         writeln!(file, "{line}").map_err(|err| format!("manifest: {err}"))
     }
 }
+
+/// Serializes appends to the aliased-ids side file across parallel trials.
+static ALIASED_LOCK: Mutex<()> = Mutex::new(());
+
+/// Appends the ids `case` aliased to `rust-core-<pid>.aliased.txt`, when the manifest is on.
+///
+/// Upstream's manifest record schema is closed (`additionalProperties: false`), so aliases go
+/// to a side file. Its `.txt` suffix keeps it out of the comparer's `<harness>-<suffix>.jsonl`
+/// glob, where its lines would be `INVALID_RECORD`s. Each line is written whole, under a lock.
+pub(crate) fn record_aliased(case: &Case, aliased: &[String]) -> Result<(), String> {
+    let Some(dir) = std::env::var_os("A2UI_CONFORMANCE_MANIFEST_DIR") else {
+        return Ok(());
+    };
+    let Some(line) = aliased_line(case, aliased) else {
+        return Ok(());
+    };
+    let name = format!("rust-core-{}.aliased.txt", std::process::id());
+    let path = PathBuf::from(dir).join(name);
+    let _guard = ALIASED_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|err| format!("{}: {err}", path.display()))?;
+    file.write_all(line.as_bytes())
+        .map_err(|err| format!("{}: {err}", path.display()))
+}
+
+/// The side-file line for `case`, newline included; `None` when it aliased nothing.
+fn aliased_line(case: &Case, aliased: &[String]) -> Option<String> {
+    if aliased.is_empty() {
+        return None;
+    }
+    let line = json!({"suite": case.suite, "case": case.name, "aliased": aliased});
+    Some(format!("{line}\n"))
+}
+
+#[cfg(test)]
+#[path = "manifest_tests.rs"]
+mod tests;

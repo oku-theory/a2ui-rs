@@ -119,3 +119,14 @@ fn reason_for_classified_case_follows_reason() {
     let reason = skips.reason_for(&case("- {name: t, action: from_json}"), &version);
     assert_that!(reason).is_equal_to(Ok(Some("protocol v0.9".to_owned())));
 }
+
+#[test]
+fn real_skips_run_process_messages_and_explain_each_case() {
+    let skips = Skips::parse(include_str!("../skips.toml")).unwrap();
+    assert_that!(skips.actions.contains_key("process_messages")).is_false();
+    let explained = ["t-1688", "t-1689", "Decision 72", "v0.9"];
+    for (name, reason) in &skips.cases {
+        let named = explained.iter().any(|mark| reason.contains(mark));
+        assert_that!(named).named(name).is_true();
+    }
+}

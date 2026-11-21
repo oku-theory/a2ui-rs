@@ -176,10 +176,15 @@ fn check_details(actual: &a2ui_runtime::Error, want: &Value, at: &str) -> Result
             return Err(format!("{at}: details[{index}] must be a mapping"));
         };
         let here = format!("{at}: details[{index}]");
-        crate::keys::assert_known_keys(want, &["path", "code"], &here)?;
-        for (key, value) in [("path", have.path()), ("code", have.code().as_str())] {
+        crate::keys::assert_known_keys(want, &["path", "code", "surfaceId"], &here)?;
+        let fields = [
+            ("path", Some(have.path())),
+            ("code", Some(have.code().as_str())),
+            ("surfaceId", have.surface_id()),
+        ];
+        for (key, value) in fields {
             if let Some(want) = want.get(key) {
-                check_exact(&format!("details[{index}].{key}"), Some(value), want, at)?;
+                check_exact(&format!("details[{index}].{key}"), value, want, at)?;
             }
         }
     }
