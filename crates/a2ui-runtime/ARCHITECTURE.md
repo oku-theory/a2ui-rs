@@ -4,8 +4,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation, no rendering, I/O or asyn
 
 ## Modules
 - `error`: opaque `Error` (Snafu `Inner`, backtrace per variant), `category()`, `code()`, boxed
-  context (`detail`: `path`, `surface_id`, `function_call_id`, `Detail` list); stable English.
-- `quoted`: `Quoted` input, escaped and capped; `reason!` joins fixed text and `Quoted` only.
+  context (`detail`: `path`, ids, `Detail` list); stable English.
+- `quoted`: `Quoted` input, escaped, capped; `reason!` joins fixed text and `Quoted` only.
 - `pointer`: the one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`, absolute,
   empty segments dropped, `__proto__`/`constructor`/`prototype` refused; list indices are
   canonical digits up to `MAX_LIST_INDEX` (10 000).
@@ -19,8 +19,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation, no rendering, I/O or asyn
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached; `FunctionCall` takes any function but `@index`).
-- `keys`: `CALL_KEY`, `PATH_KEY`. `ident`: UAX #31 `is_identifier`. `validator`: `jsonschema`
-  2020-12, `regex`, offline; build failures are `CatalogError`.
+- `keys`: `CALL_KEY`, `PATH_KEY`. `ident`: UAX #31. `validator`: `jsonschema` 2020-12, offline;
+  build failures are `CatalogError`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, string
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries its
   unions list and the authored document (`to_json`), compiles each entry against a bundle pruned to
@@ -29,22 +29,22 @@ Renderer-side A2UI v1.0 runtime: state and evaluation, no rendering, I/O or asyn
   instance: depth, nodes, calls, reserved `@` keys, envelope keys removed, its validator, then each
   nested call in its catalog (via `CatalogLookup`): exists, not `agentOnly`, matches the function's
   validator; `@index` as `IndexSystemFunction`; unknown catalogs only for identifiers. `derive`: a
-  new-id catalog from a `Derivation` (source's version, theme, `$defs`; duplicate names rejected,
-  changed unions regenerated).
+  new-id catalog from a `Derivation` (duplicate names rejected, changed unions regenerated).
 - `bundle`: `local_ref`s, common types, `written_ref`; `walk`: `$ref` walks, data included;
   `ref_pointer`: a `$ref`'s decoded tokens, `locate`; `target`; `position`: schema vs data keywords;
   `check`: v1.0 `$ref` rules (self, `catalog.json`, `common_types.json` naming common types,
-  RFC 6901 escapes, data `$ref`s as written; no anchor, dynamic ref, inner `$id`, interior).
+  RFC 6901 escapes; no anchor, dynamic ref, inner `$id`, interior).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, catalog and component nodes,
   component calls, 256-byte keys, 4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site
-  once), charges each reached entry whole, weighs strings and keys (one node per 64 bytes), and
-  rejects cycles, depth past 128 and oversized or pattern-heavy entries before compile.
+  once), charges each entry whole, weighs strings and keys (a node per 64 bytes), and rejects
+  cycles, depth past 128 and oversized or pattern-heavy entries before compile.
 - `message`: `AgentMessage::parse`/`from_json` check `MessageLimits` (1 MiB; text by `len`, a value
-  by an escape-free estimate), then `envelope` (object, one action, version "1.0"), `schema` (the
-  action's branch, components opaque; first violation one `Detail`; `callRendererFunction` faults
-  `INVALID_FUNCTION_CALL`), then `typed` (by hand, no serde). `batch` reads an array or
-  `{"messages": [...]}`, one result each, detail paths `messages.<i>.…`.
+  by an escape-free estimate), then `envelope` (object, one action, version "1.0"), `values`
+  (`check_depth`: components, `dataModel`, `value`, call `args` up to 50 containers,
+  `RecursionError`), `schema` (the action's branch, components opaque; first violation one
+  `Detail`; `callRendererFunction` faults `INVALID_FUNCTION_CALL`), `typed` (by hand), then
+  `check_bindings` (`@call` chains up to 5, `@path` parses). `batch`: array or `{"messages": […]}`.
 
 ## Dependencies
-`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off; brings
+`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;
 `wasm-bindgen` via `getrandom` on wasm32, checked by `just deps`).

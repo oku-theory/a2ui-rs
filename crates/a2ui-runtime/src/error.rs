@@ -24,6 +24,8 @@ pub enum Category {
     Catalog,
     /// A value that breaks a schema, such as a rejected component or a malformed pointer.
     Validation,
+    /// A message value nested past the recursion limits.
+    Recursion,
 }
 
 impl Category {
@@ -35,6 +37,7 @@ impl Category {
             Self::Expression => "ExpressionError",
             Self::Catalog => "CatalogError",
             Self::Validation => "ValidationError",
+            Self::Recursion => "RecursionError",
         }
     }
 }
@@ -60,6 +63,8 @@ pub enum ErrorCode {
     ValidationFailed,
     /// A `callRendererFunction` message that breaks its schema.
     InvalidFunctionCall,
+    /// A message value nested past the recursion limits.
+    RecursionLimitExceeded,
 }
 
 impl ErrorCode {
@@ -71,6 +76,7 @@ impl ErrorCode {
             Self::CatalogError => "CATALOG_ERROR",
             Self::ValidationFailed => "VALIDATION_FAILED",
             Self::InvalidFunctionCall => "INVALID_FUNCTION_CALL",
+            Self::RecursionLimitExceeded => "RECURSION_LIMIT_EXCEEDED",
         }
     }
 }
@@ -381,6 +387,12 @@ pub(crate) enum Inner {
         reason: Reason,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("Global recursion limit exceeded: more than 50 nested containers"))]
+    ValueDepth { backtrace: Backtrace },
+
+    #[snafu(display("functionCall depth {depth} exceeds the limit of 5"))]
+    CallDepth { depth: usize, backtrace: Backtrace },
 }
 
 impl Inner {
@@ -428,6 +440,9 @@ impl Inner {
             | Self::MessageField { .. } => (Category::Validation, ErrorCode::ValidationFailed),
             Self::FunctionCallShape { .. } => {
                 (Category::Validation, ErrorCode::InvalidFunctionCall)
+            }
+            Self::ValueDepth { .. } | Self::CallDepth { .. } => {
+                (Category::Recursion, ErrorCode::RecursionLimitExceeded)
             }
         }
     }

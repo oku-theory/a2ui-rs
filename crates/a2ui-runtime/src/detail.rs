@@ -100,6 +100,16 @@ impl Error {
         self
     }
 
+    /// Prepends `prefix` to the path, or makes it the path when the error has none.
+    pub(crate) fn prefix_path(mut self, prefix: &str) -> Self {
+        let context = self.context_mut();
+        context.path = Some(match context.path.take() {
+            Some(path) => format!("{prefix}{path}"),
+            None => prefix.to_owned(),
+        });
+        self
+    }
+
     pub(crate) fn with_surface(mut self, id: &str) -> Self {
         self.context_mut().surface_id = Some(id.to_owned());
         self

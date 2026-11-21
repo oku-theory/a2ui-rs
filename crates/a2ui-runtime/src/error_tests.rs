@@ -66,6 +66,7 @@ fn error_debug_large_field_is_capped() {
 #[case::catalog(ErrorCode::CatalogError, "CATALOG_ERROR")]
 #[case::validation(ErrorCode::ValidationFailed, "VALIDATION_FAILED")]
 #[case::function_call(ErrorCode::InvalidFunctionCall, "INVALID_FUNCTION_CALL")]
+#[case::recursion(ErrorCode::RecursionLimitExceeded, "RECURSION_LIMIT_EXCEEDED")]
 fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expected: &str) {
     assert_that!(code.as_str()).is_equal_to(expected);
 }
@@ -141,6 +142,16 @@ fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expec
     Category::Validation,
     ErrorCode::ValidationFailed
 )]
+#[case::value_depth(
+    ValueDepthSnafu.build(),
+    Category::Recursion,
+    ErrorCode::RecursionLimitExceeded
+)]
+#[case::call_depth(
+    CallDepthSnafu { depth: 6_usize }.build(),
+    Category::Recursion,
+    ErrorCode::RecursionLimitExceeded
+)]
 fn error_class_of_variant_is_its_upstream_category_and_code(
     #[case] inner: Inner,
     #[case] category: Category,
@@ -193,4 +204,23 @@ fn error_backtrace_delegates_to_inner() {
 fn error_source_is_none_for_a_leaf_variant() {
     let error = value_limit();
     assert_that!(std::error::Error::source(&error).is_none()).is_true();
+}
+
+#[test]
+fn category_recursion_is_spelled_recursion_error() {
+    assert_that!(Category::Recursion.as_str()).is_equal_to("RecursionError");
+}
+
+#[test]
+fn prefix_path_prepends_to_the_path() {
+    let error = value_limit()
+        .with_path("/text".to_owned())
+        .prefix_path("/components/0");
+    assert_that!(error.path()).is_equal_to(Some("/components/0/text"));
+}
+
+#[test]
+fn prefix_path_without_path_sets_it() {
+    let error = value_limit().prefix_path("/components/0");
+    assert_that!(error.path()).is_equal_to(Some("/components/0"));
 }

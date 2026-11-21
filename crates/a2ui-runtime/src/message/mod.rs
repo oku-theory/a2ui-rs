@@ -8,6 +8,7 @@ mod envelope;
 mod limits;
 mod schema;
 mod typed;
+mod values;
 
 use serde_json::{Map, Value};
 
@@ -123,7 +124,7 @@ impl AgentMessage {
         Self::from_json(&value, limits)
     }
 
-    /// Reads one message from JSON: size, envelope, then schema, then typed fields.
+    /// Reads one message from JSON: size, envelope, depth, schema, typed fields, then bindings.
     ///
     /// # Errors
     ///
@@ -134,8 +135,13 @@ impl AgentMessage {
             return Err(too_large(limits));
         }
         let (action, body) = envelope::precheck(value)?;
+        if let Value::Object(map) = body {
+            values::check_depth(action, map)?;
+        }
         schema::check(action, value)?;
-        typed::read(action, body)
+        let message = typed::read(action, body)?;
+        values::check_bindings(&message)?;
+        Ok(message)
     }
 
     /// Reads a batch: an array of messages, or an object whose only key is `messages`.

@@ -11,6 +11,12 @@ use crate::keys::CALL_KEY;
 /// Deepest nesting of arrays and objects accepted in a catalog or a validated value.
 pub(crate) const MAX_JSON_DEPTH: usize = 64;
 
+/// Most nested arrays and objects one message component or value may hold.
+pub(crate) const MAX_MESSAGE_DEPTH: usize = 50;
+
+/// Most `@call` objects that may nest inside one another in a message component.
+pub(crate) const MAX_CALL_DEPTH: usize = 5;
+
 /// Compiled size cap of one schema `pattern`, in bytes, for the regex and its lazy DFA.
 pub(crate) const MAX_PATTERN_BYTES: usize = 128 * 1024;
 
