@@ -51,7 +51,8 @@ fn stub_becomes_open_with_basic_slots() {
     let card = loaded.set.get("c").unwrap().component("Card").unwrap();
     assert_that!(card.schema()).is_equal_to(&json!({"type": "object", "properties": {
         "child": {"$ref": "common_types.json#/$defs/ComponentId"},
-        "children": {"$ref": "common_types.json#/$defs/ChildList"}}}));
+        "children": {"$ref": "common_types.json#/$defs/ChildList"}},
+        "additionalProperties": true}));
 }
 
 #[test]
@@ -124,6 +125,20 @@ fn non_v10_document_is_not_registered() {
     ))
     .unwrap();
     assert_that!(ids(&loaded)).is_empty();
+}
+
+#[test]
+fn unversioned_document_takes_the_case_version() {
+    let loaded = load(&case(
+        r#"
+- name: t
+  action: validate
+  protocolVersion: "1.0"
+  catalog: {catalogId: custom, components: {Box: {type: object}}}
+"#,
+    ))
+    .unwrap();
+    assert_that!(ids(&loaded)).is_equal_to(vec!["custom".to_owned()]);
 }
 
 #[test]

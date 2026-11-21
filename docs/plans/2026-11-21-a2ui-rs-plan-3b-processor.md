@@ -151,12 +151,18 @@ the 12-reviewer plan review).
     upstream reports (each key starting `@@` loses one `@`, iteratively, at every depth).
 68. **`ValidationRules`.** `#[derive(Clone, Copy, Debug, PartialEq, Eq)] pub struct
     ValidationRules` with private flags `allow_orphan_components`, `allow_dangling_references`,
-    `allow_missing_root`, `allow_unknown_elements`; `strict()` (all false) and a manual
-    `Default` returning it; `permissive()` (all true); consuming setters `allow_orphan_components(
-    self, bool) -> Self` (and the three others); getters `allows_orphan_components(&self) ->
-    bool` (and the three others). No `builder()`: four flags, `Copy`, consuming setters. Lives in
-    `processor/rules.rs`. Permissive rules never relax self-reference, cycles, duplicate ids,
-    depth, catalog resolution or limits.
+    `allow_missing_root`, `allow_unknown_elements`, `allow_undeclared_properties`; `strict()`
+    (all false) and a manual `Default` returning it; `permissive()` (all true); consuming setters
+    `allow_orphan_components(self, bool) -> Self` (and the four others); getters
+    `allows_orphan_components(&self) -> bool` (and the four others). No `builder()`: five flags,
+    `Copy`, consuming setters. Lives in `processor/rules.rs`. Permissive rules never relax
+    self-reference, cycles, duplicate ids, depth, catalog resolution or limits. Undeclared
+    properties (Task 7 ruling): each component document compiles closed, `"unevaluatedProperties":
+    false` beside its root `$ref` (2020-12 semantics through `$ref`/`allOf`); a property the
+    schema does not evaluate is refused (VALIDATION_FAILED at `/components/<i>/<prop>`, detail
+    `invalid_value`) unless the flag holds. It runs after the schema check: a schema fault wins.
+    A schema allowing extra properties (`additionalProperties: true`) declares them all.
+    `Catalog::validate_component` checks as strict rules do.
 69. **Surface state.** `#[non_exhaustive] pub struct Surface`, no public constructor; private
     fields: `components: Vec<Map<String, Value>>` in first-arrival order plus `index:
     HashMap<String, usize>` (a same-id component replaces the stored one whole, keeping its
@@ -257,7 +263,9 @@ the 12-reviewer plan review).
     and `protocolVersion` only) becomes an open catalog: one component per type the case's
     messages place in it, schema `{"type": "object", "properties": {"child": {"$ref":
     "common_types.json#/$defs/ComponentId"}, "children": {"$ref":
-    "common_types.json#/$defs/ChildList"}}}` (the basic catalog's slot names). Aliasing
+    "common_types.json#/$defs/ChildList"}}, "additionalProperties": true}` (the basic catalog's
+    slot names; open, so strict rules accept any other property). A document object with no
+    `protocolVersion` takes the case's top-level one (Task 7 ruling). Aliasing
     (Decision 48, chosen by the user): unless the case or a step expects a `CatalogError`, each
     non-empty catalog id the messages name that no registered catalog has is registered as a
     `derive` of the case's first registered catalog (none: the basic catalog from
@@ -271,12 +279,17 @@ the 12-reviewer plan review).
     this plan cannot check (`isValid`, `validationErrors`, `validationResult(s)`, resolved
     template ids) are listed `[cases]` skips. A case with no `expect` or `expectError`, in itself or
     any step, fails, and so does an `expect` without a non-empty `surfaces`; a step with
-    neither must be accepted (upstream composition cases rely on it).
+    neither must be accepted (upstream composition cases rely on it). That first rule is for
+    `process_messages`; a `validate` case with no expectation passes when every step is
+    accepted (Task 7 ruling).
 77. **Version scope of the harness.** A case runs when Plan 3a's `effective_version` is 1.0.
     `test_v10_get_renderer_data_model_filters_by_surface_protocol_version` needs one processor
     reading v0.9 envelopes: `[cases]` skip, "v0.9 surfaces: a2ui-rs implements v1.0 only".
     `test_v10_get_renderer_data_model_excludes_surface_without_default_from_v09` runs (its
-    `args.version: "v0.9"` reports `null`).
+    `args.version: "v0.9"` reports `null`; a `0.<minor>` version reports nothing, any other
+    than 1.0 fails the case). `test_error_response_create_surface_incompatible_catalog_version`
+    needs v0.9 catalogs: `[cases]` skip, "v0.9 catalogs: its v0.9 basic catalog is not
+    vendored; a2ui-rs implements v1.0 only".
 78. **State limits.** `#[derive(Clone, Copy, Debug, PartialEq, Eq)] pub struct StateLimits`
     (in `processor/limits.rs`), setters and getters like `ValidationRules`, `Default`: 64
     surfaces, 10 000 components per surface, 10 000 components per message, 100 000 data model

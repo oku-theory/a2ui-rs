@@ -79,6 +79,7 @@ fn one(
         report: Report::All { id },
         calls: CallCatalogs::Resolve,
         allow_unknown: rules.allows_unknown_elements(),
+        allow_undeclared: rules.allows_undeclared_properties(),
     };
     catalog.validate_located(component, &at)?;
     Ok((id.to_owned(), map.clone()))

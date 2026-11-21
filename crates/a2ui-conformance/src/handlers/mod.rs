@@ -9,6 +9,7 @@ mod derive;
 mod expression;
 mod from_json;
 mod processing;
+mod reports;
 mod resolve_path;
 mod round_trip;
 mod schema_doc;
@@ -36,6 +37,9 @@ pub fn handler(action: &str) -> Option<Handler> {
         "derive" => Some(derive::run),
         "validation_schema" => Some(validation_schema::run),
         "process_messages" => Some(processing::run),
+        "validate" => Some(processing::validate),
+        "get_renderer_capabilities" => Some(reports::capabilities),
+        "get_renderer_data_model" => Some(reports::data_model),
         _ => None,
     }
 }

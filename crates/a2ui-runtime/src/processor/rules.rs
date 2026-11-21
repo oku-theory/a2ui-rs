@@ -1,36 +1,40 @@
 //! How strictly a processor checks the components it is sent.
 
-/// Which component-graph faults a processor accepts.
+/// Which component faults a processor accepts.
 ///
-/// [`ValidationRules::strict`], the default, accepts none. Orphans, dangling references and a
-/// missing root are judged once the graph checks exist; an unknown element is a component type
-/// or function its catalog does not define.
+/// [`ValidationRules::strict`], the default, accepts none. An unknown element is a component
+/// type or function its catalog does not define; an undeclared property is one a component
+/// carries that its schema does not evaluate (a schema allowing extra properties declares them
+/// all).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValidationRules {
     allow_orphan_components: bool,
     allow_dangling_references: bool,
     allow_missing_root: bool,
     allow_unknown_elements: bool,
+    allow_undeclared_properties: bool,
 }
 
 impl ValidationRules {
-    /// Rules accepting none of the four faults.
+    /// Rules accepting none of the five faults.
     pub fn strict() -> Self {
         Self {
             allow_orphan_components: false,
             allow_dangling_references: false,
             allow_missing_root: false,
             allow_unknown_elements: false,
+            allow_undeclared_properties: false,
         }
     }
 
-    /// Rules accepting all four faults.
+    /// Rules accepting all five faults.
     pub fn permissive() -> Self {
         Self {
             allow_orphan_components: true,
             allow_dangling_references: true,
             allow_missing_root: true,
             allow_unknown_elements: true,
+            allow_undeclared_properties: true,
         }
     }
 
@@ -66,6 +70,15 @@ impl ValidationRules {
         }
     }
 
+    /// These rules, accepting component properties their schema does not evaluate when `allow`
+    /// holds.
+    pub fn allow_undeclared_properties(self, allow: bool) -> Self {
+        Self {
+            allow_undeclared_properties: allow,
+            ..self
+        }
+    }
+
     /// Whether components no other component reaches are accepted.
     pub fn allows_orphan_components(&self) -> bool {
         self.allow_orphan_components
@@ -84,6 +97,11 @@ impl ValidationRules {
     /// Whether unknown component types and functions are accepted.
     pub fn allows_unknown_elements(&self) -> bool {
         self.allow_unknown_elements
+    }
+
+    /// Whether component properties their schema does not evaluate are accepted.
+    pub fn allows_undeclared_properties(&self) -> bool {
+        self.allow_undeclared_properties
     }
 }
 

@@ -35,14 +35,14 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   validation_schema (golden comparison with `schema_eq`); catalog_checks: entries,
   `selfContained`, `matchesBuiltinCatalog` against `a2ui-catalog-basic`);
   `catalog_input` reads the case's catalog (inline or `catalogPath`) and its
-  `catalogId`/`protocolVersion` overrides; `processing` runs `process_messages` steps on one
-  `MessageProcessor`, `catalogs` registers v1.0 catalogs (stubs opened, missing ids aliased),
-  `surfaces` checks `expect.surfaces`.
+  `catalogId`/`protocolVersion` overrides; `processing` runs `process_messages` and `validate`
+  (acceptance alone may be its check) steps on one `MessageProcessor`; `catalogs` registers v1.0
+  catalogs (an unversioned one takes the case's version; stubs opened, missing ids aliased);
+  `surfaces` checks `expect.surfaces`; `reports`: capabilities (lists sorted), data model.
 
 Depends on: `a2ui-runtime`, `a2ui-catalog-basic`, `jsonschema`, `percent-encoding`.
 
 ## Rule
-
 A failing case is fixed in `a2ui-runtime`, never by bending the harness.
 
 Accepted advisory: RUSTSEC-2024-0449 (`unsafe-libyaml` unmaintained, via `serde_yaml_ng`) is a

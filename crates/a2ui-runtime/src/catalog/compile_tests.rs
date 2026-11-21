@@ -60,6 +60,7 @@ fn pruned_entry_reaching_defs_and_a_component_holds_exactly_those_keys() {
     assert_that!(document).is_equal_to(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$ref": "#/components/X",
+        "unevaluatedProperties": false,
         "components": {
             "X": {"properties": {
                 "label": {"$ref": "#/$defs/D"},
@@ -363,4 +364,15 @@ fn function_call_envelope_closes_the_call_over_function_common() {
         "properties": {"args": {"type": "object"}},
         "unevaluatedProperties": false
     }));
+}
+
+#[test]
+fn pruned_function_entry_is_left_open() {
+    let root = reaching_root();
+    let entry = json!({"returnType": "string"});
+    let targets = reach(&root, "f", &entry).unwrap().targets;
+
+    let document = pruned(&root, "functions", "f", &entry, targets);
+
+    assert_that!(document.get("unevaluatedProperties")).is_none();
 }

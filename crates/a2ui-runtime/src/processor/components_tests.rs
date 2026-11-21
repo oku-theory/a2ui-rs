@@ -189,6 +189,18 @@ fn check_component_errors_are_prefixed() {
     assert_that!(detail.code()).is_equal_to(DetailCode::TypeMismatch);
 }
 
+#[test]
+fn check_unknown_component_type_has_an_invalid_value_detail() {
+    let component = json!({"id": "t1", "component": "Nowhere"});
+
+    let error = check_on(&surface(Some("a")), &[component]).unwrap_err();
+
+    assert_that!(error.path()).is_equal_to(Some("/components/0/component"));
+    let detail = &error.details()[0];
+    assert_that!(detail.path()).is_equal_to("/component");
+    assert_that!(detail.code()).is_equal_to(DetailCode::InvalidValue);
+}
+
 #[rstest]
 #[case::plain_beside_escaped(
     json!({"@path": "/a", "@@path": 1}),
@@ -276,4 +288,26 @@ fn unescaped_component_unescapes_one_level(#[case] extra: Value, #[case] expecte
     let stored: Option<&Map<String, Value>> = target.component("a1");
     assert_that!(stored).is_equal_to(component.as_object());
     assert_that!(target.unescaped_component("a1")).is_equal_to(unescaped.as_object().cloned());
+}
+
+#[rstest]
+#[case::strict(
+    ValidationRules::strict(),
+    Some(("/components/0/extra".to_owned(), ErrorCode::ValidationFailed))
+)]
+#[case::allowed(ValidationRules::strict().allow_undeclared_properties(true), None)]
+fn check_undeclared_property_follows_the_rules(
+    #[case] rules: ValidationRules,
+    #[case] expected: Option<(String, ErrorCode)>,
+) {
+    let set = catalog_set();
+    let limits = StateLimits::default();
+    let component = json!({"id": "t1", "component": "Text", "text": "x", "extra": 1});
+
+    let result = check(&surface(Some("a")), &[component], rules, &set, &limits);
+
+    let refusal = result
+        .err()
+        .map(|error| (error.path().unwrap().to_owned(), error.code()));
+    assert_that!(refusal).is_equal_to(expected);
 }

@@ -81,7 +81,8 @@ fn embedded_error(message: &str) -> Error {
 
 /// Checks `message` against `action`'s branch; the first violation becomes an [`Error`].
 ///
-/// A `callRendererFunction` fault carries its `functionCallId`, any other the `surfaceId`.
+/// A `callRendererFunction` fault carries its `functionCallId`, any other the `surfaceId`: for
+/// a surface message naming none (or a non-string one), the empty id.
 pub(crate) fn check(action: Action, message: &Value) -> Result<(), Error> {
     let validator = validator_for(action)
         .as_ref()
@@ -129,12 +130,22 @@ fn refusal(action: Action, fault: Fault, body: Option<&Value>) -> Error {
     if nested && let Some((_, inside)) = tokens.split_first() {
         error = error.with_path(pointer(inside));
     }
-    if action == Action::CallRendererFunction {
-        if let Some(call) = id("functionCallId") {
-            error = error.with_function_call(call);
+    match action {
+        Action::CallRendererFunction => {
+            if let Some(call) = id("functionCallId") {
+                error = error.with_function_call(call);
+            }
         }
-    } else if let Some(surface) = id("surfaceId") {
-        error = error.with_surface(surface);
+        // A surface message naming no string surface id reports the empty one, as upstream.
+        Action::CreateSurface
+        | Action::UpdateComponents
+        | Action::UpdateDataModel
+        | Action::DeleteSurface => error = error.with_surface(id("surfaceId").unwrap_or("")),
+        Action::AgentFunctionResponse => {
+            if let Some(surface) = id("surfaceId") {
+                error = error.with_surface(surface);
+            }
+        }
     }
     error
 }

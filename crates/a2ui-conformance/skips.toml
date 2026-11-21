@@ -1,8 +1,5 @@
 # Actions not implemented yet, each with the plan that implements it.
 [actions]
-validate = "Plan 3: validation and message processing"
-get_renderer_capabilities = "Plan 3: validation and message processing"
-get_renderer_data_model = "Plan 3: validation and message processing"
 evaluate_function = "Plan 4: functions, actions and RPC"
 select_catalog = "Plan 4: functions, actions and RPC"
 dispatch_action = "Plan 4: functions, actions and RPC"
@@ -19,10 +16,56 @@ test_batch_atomic_rollback_on_candidate_topology_cycle = """\
   upstream conflict (Decision 72): expects IntegrityError (rendererError RECURSION_LIMIT_EXCEEDED) \
   for a component cycle; the guide and error_responses.yaml make it a RecursionError; the guide \
   wins, Task 3's rollback test pins it"""
+test_error_response_create_surface_incompatible_catalog_version = """\
+  v0.9 catalogs: its v0.9 basic catalog is not vendored; a2ui-rs implements v1.0 only"""
+test_expression_parser_data_type_coercion_matrix = """\
+  formatString evaluation of path bindings: t-1688 (function evaluation)"""
+test_expression_parser_escaped_interpolation_sequence = """\
+  formatString evaluation of an escaped interpolation: t-1688 (function evaluation)"""
+test_expression_parser_max_depth_exceeded_error = """\
+  formatString template parsed when evaluated, past its nesting limit: t-1688 (function \
+  evaluation)"""
+test_expression_parser_nested_function_call = """\
+  formatString evaluation of a nested formatCurrency call: t-1688 (function evaluation)"""
+test_expression_parser_string_interpolation_multiple_bindings = """\
+  formatString evaluation of several bindings: t-1688 (function evaluation)"""
+test_expression_parser_syntax_error_unclosed_brace = """\
+  formatString template parsed when evaluated, unclosed brace: t-1688 (function evaluation)"""
+test_function_format_currency_locale_and_symbol = """\
+  formatCurrency evaluation: t-1688 (function evaluation)"""
+test_function_format_date_tr35_tokens = "formatDate evaluation: t-1688 (function evaluation)"
+test_function_logical_and_or_not = "and/or/not evaluation: t-1688 (function evaluation)"
+test_function_pluralize_categories = "pluralize evaluation: t-1688 (function evaluation)"
+test_index_function_in_collection_loop = """\
+  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+test_index_function_nested_path = """\
+  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+test_index_function_outside_loop_error = """\
+  @index refused outside a template when evaluated: t-1688 (function evaluation)"""
+test_index_function_with_offset = """\
+  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+test_multi_catalog_format_string_index_and_catalog_call_without_default = """\
+  formatString, @index and pluralize evaluation in expanded items: t-1688 (function evaluation)"""
+test_multi_catalog_function_call_catalog_id_override = """\
+  formatDate evaluation in the catalog a call names: t-1688 (function evaluation)"""
+test_v10_get_renderer_data_model_filters_by_surface_protocol_version = """\
+  v0.9 surfaces: a2ui-rs implements v1.0 only"""
+test_validation_result_boolean_fallback = "isValid and validationResult from checks: t-1689"
+test_validation_result_coercion_in_logical_and_or_not = """\
+  isValid and validationResult from checks: t-1689"""
+test_validation_result_dynamic_object_return = "isValid and validationResult from checks: t-1689"
+test_validation_result_multiple_rules_preserve_order = """\
+  isValid and validationResult from checks: t-1689"""
+test_validation_result_reactive_recovery_on_data_update = """\
+  isValid and validationResult from checks: t-1689"""
+test_validation_result_warning_and_info_non_blocking = """\
+  isValid and validationResult from checks: t-1689"""
 
 # Protocol versions this runtime does not implement (written without the leading `v`); the
 # version-neutral data_model, resolve_path and parse_expression_template run whatever version.
 [versions]
 "0.8" = "protocol v0.8: a2ui-rs implements v1.0 only"
-"0.9" = "protocol v0.9 (also upstream's default for a catalog that declares no version): a2ui-rs implements v1.0 only"
+"0.9" = """\
+  protocol v0.9 (also upstream's default for a catalog that declares no version): \
+  a2ui-rs implements v1.0 only"""
 "0.9.1" = "protocol v0.9.1: a2ui-rs implements v1.0 only"

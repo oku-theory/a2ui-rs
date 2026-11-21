@@ -2,7 +2,7 @@ use serde_json::{Map, Value};
 use snafu::{OptionExt, ensure};
 
 use super::{AllowedCallers, Catalog};
-use crate::detail::Detail;
+use crate::detail::{Detail, DetailCode};
 use crate::error::{
     AgentOnlyCallSnafu, BadIdentifierSnafu, CallShapeSnafu, ComponentLimitSnafu,
     ComponentShapeSnafu, Error, MAX_VIOLATION_DETAILS, MissingComponentTypeSnafu, ProcessFailure,
@@ -18,6 +18,10 @@ use crate::limits::{
 use crate::quoted::{Quoted, reason};
 use crate::schema::{validate_common_type, validate_component_metadata};
 use crate::validator::{pointer, violation_detail, violation_error};
+/// The schema path of a property no keyword of the component's schema evaluates: the
+/// `compile::UNDECLARED_KEYWORD` closing the component's document at its root.
+const UNDECLARED_PATH: &str = "/unevaluatedProperties";
+
 /// Keys a component may carry whether or not its schema declares them.
 const ENVELOPE: [&str; 4] = ["id", "component", "catalogId", "metadata"];
 
@@ -74,10 +78,17 @@ pub(crate) struct Located<'a, L: ?Sized> {
     pub(crate) calls: CallCatalogs,
     /// Whether an unknown component type or function is accepted.
     pub(crate) allow_unknown: bool,
+    /// Whether a property the component's schema does not evaluate is accepted.
+    pub(crate) allow_undeclared: bool,
 }
 
 impl Catalog {
     /// Validates one component instance, such as `{"id": "t1", "component": "Text"}`.
+    ///
+    /// The check runs as strict [`ValidationRules`](crate::ValidationRules) do: an unknown
+    /// component type or function is refused, and so is a property the component's schema does
+    /// not evaluate. A component schema with `additionalProperties: true` accepts extra
+    /// properties.
     ///
     /// A nested call runs in the catalog its `catalogId` names, else in `default_catalog` (the
     /// surface's). When that catalog is this one or `catalogs` finds it, the call is checked
@@ -107,6 +118,7 @@ impl Catalog {
             report: Report::First,
             calls: CallCatalogs::IdentifiersOnly,
             allow_unknown: false,
+            allow_undeclared: false,
         };
         self.validate_located(component, &at)
     }
@@ -133,7 +145,13 @@ impl Catalog {
         let def = self.components.get(kind);
         if def.is_none() && !at.allow_unknown {
             let error = Error::from(UnknownComponentSnafu { component: kind }.build());
-            return Err(error.with_path("/component".into()));
+            let error = error.with_path("/component".into());
+            return Err(match at.report {
+                Report::First => error,
+                Report::All { .. } => {
+                    error.with_detail(Detail::new("/component".into(), DetailCode::InvalidValue))
+                }
+            });
         }
         let mut instance = map.clone();
         for key in ENVELOPE {
@@ -144,7 +162,14 @@ impl Catalog {
                 .map_err(|error| error.with_path(format!("/{key}")))?;
         }
         if let Some(def) = def {
-            check_schema(def.validator(), &Value::Object(instance), kind, at.report)?;
+            let instance = Value::Object(instance);
+            check_schema(
+                def.validator(),
+                &instance,
+                kind,
+                at.report,
+                at.allow_undeclared,
+            )?;
         }
         let walk = Walk { home: self, at };
         let mut tokens = Vec::new();
@@ -192,17 +217,36 @@ fn envelope(key: &'static str, value: Option<Value>) -> Result<(), Error> {
 
 /// Checks `instance`, a component of type `kind`, against `validator`, reporting as `report`
 /// says.
+///
+/// A property the schema does not evaluate (a violation at [`UNDECLARED_PATH`]) is
+/// refused unless `allow_undeclared` holds, and only once the schema itself passes: a schema
+/// fault wins, as a failing branch leaves its properties unevaluated too.
 fn check_schema(
     validator: &jsonschema::Validator,
     instance: &Value,
     kind: &str,
     report: Report<'_>,
+    allow_undeclared: bool,
 ) -> Result<(), Error> {
     let take = match report {
         Report::First => 1,
         Report::All { .. } => MAX_VIOLATION_DETAILS + 1,
     };
-    let violations: Vec<_> = validator.iter_errors(instance).take(take).collect();
+    let mut undeclared = None;
+    let mut violations = Vec::new();
+    for violation in validator.iter_errors(instance) {
+        if violation.schema_path().as_str() != UNDECLARED_PATH {
+            violations.push(violation);
+            if violations.len() == take {
+                break;
+            }
+        } else if undeclared.is_none() && !allow_undeclared {
+            undeclared = Some(violation);
+        }
+    }
+    if violations.is_empty() {
+        violations.extend(undeclared);
+    }
     let Some(first) = violations.first() else {
         return Ok(());
     };

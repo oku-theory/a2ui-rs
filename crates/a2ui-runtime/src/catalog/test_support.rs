@@ -101,7 +101,11 @@ pub(crate) fn catalog_a() -> Catalog {
                 "required": ["child"],
                 "unevaluatedProperties": false
             },
-            "Any": {"type": "object", "properties": {"component": {"const": "Any"}}},
+            "Any": {
+                "type": "object",
+                "properties": {"component": {"const": "Any"}},
+                "additionalProperties": true
+            },
             "Many": {"type": "object", "properties": many, "required": required}
         },
         "functions": {

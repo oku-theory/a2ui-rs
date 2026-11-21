@@ -15,8 +15,9 @@ refresh it with `just vendor-sync <commit>`.
 
 ## Status
 
-Conformance: stages C1 (data model, paths, expression parsing) and C2 (catalogs, common types,
-agent-to-renderer schema) pass; later stages are listed in
+Conformance: stages C1 (data model, paths, expression parsing), C2 (catalogs, common types,
+agent-to-renderer schema) and C3 (message processing, validation, renderer reports) pass;
+later stages and the cases awaiting function evaluation or checks are listed in
 crates/a2ui-conformance/skips.toml.
 
 Licensed under MIT or Apache-2.0, at your option, except `a2ui-catalog-basic`, which is

@@ -13,8 +13,18 @@ fn text(value: Value) -> Value {
 }
 
 /// Validates `component` in catalog `a` as the processor does: every violation reported, calls
-/// resolved in the set of `a` and `b`, default catalog `a`.
-fn located(component: &Value, allow_unknown: bool) -> Result<(), Error> {
+/// resolved in the set of `a` and `b`, default catalog `a`; `allow` accepts unknown elements
+/// and undeclared properties, as permissive rules do.
+fn located(component: &Value, allow: bool) -> Result<(), Error> {
+    located_with(component, allow, allow)
+}
+
+/// [`located`] with each flag set on its own.
+fn located_with(
+    component: &Value,
+    allow_unknown: bool,
+    allow_undeclared: bool,
+) -> Result<(), Error> {
     let set = catalog_set();
     let id = component["id"].as_str().unwrap();
     let at = Located {
@@ -24,6 +34,7 @@ fn located(component: &Value, allow_unknown: bool) -> Result<(), Error> {
         report: Report::All { id },
         calls: CallCatalogs::Resolve,
         allow_unknown,
+        allow_undeclared,
     };
     catalog_a().validate_located(component, &at)
 }
@@ -62,7 +73,11 @@ fn details(error: &Error) -> Vec<(String, DetailCode)> {
     None
 )]
 #[case::agent_only(text(json!({"@call": "fetch", "args": {}})), "/text", None)]
-#[case::unknown_type(json!({"id": "t1", "component": "Nope"}), "/component", None)]
+#[case::unknown_type(
+    json!({"id": "t1", "component": "Nope"}),
+    "/component",
+    Some(DetailCode::InvalidValue)
+)]
 fn validate_located_error_has_the_component_path(
     #[case] component: Value,
     #[case] path: &str,
@@ -130,6 +145,51 @@ fn validate_located_allow_unknown_still_refuses_a_bad_type_name() {
 }
 
 #[test]
+fn validate_located_undeclared_property_is_refused_at_its_pointer() {
+    let component = json!({"id": "t1", "component": "Text", "text": "x", "extra": 1});
+
+    let error = located_with(&component, false, false).unwrap_err();
+
+    assert_that!(error.code()).is_equal_to(ErrorCode::ValidationFailed);
+    assert_that!(error.path()).is_equal_to(Some("/extra"));
+    assert_that!(error.to_string()).contains("'extra'");
+    assert_that!(details(&error))
+        .is_equal_to(vec![("/extra".to_owned(), DetailCode::InvalidValue)]);
+}
+
+#[test]
+fn validate_located_undeclared_property_allowed_is_accepted() {
+    let component = json!({"id": "t1", "component": "Text", "text": "x", "extra": 1});
+
+    assert_that!(located_with(&component, false, true)).is_ok();
+}
+
+#[test]
+fn validate_located_schema_fault_wins_over_an_undeclared_property() {
+    let component = json!({"id": "t1", "component": "Text", "text": 5, "extra": 1});
+
+    let error = located_with(&component, false, false).unwrap_err();
+
+    assert_that!(error.path()).is_equal_to(Some("/text"));
+    assert_that!(details(&error)).is_equal_to(vec![("/text".to_owned(), DetailCode::TypeMismatch)]);
+}
+
+#[test]
+fn validate_located_open_schema_accepts_an_undeclared_property() {
+    let component = json!({"id": "a1", "component": "Any", "extra": {"deep": 1}});
+
+    assert_that!(located_with(&component, false, false)).is_ok();
+}
+
+#[test]
+fn validate_located_envelope_keys_are_not_undeclared() {
+    let component = json!({"id": "t1", "component": "Text", "catalogId": "a", "text": "x",
+        "metadata": {}});
+
+    assert_that!(located_with(&component, false, false)).is_ok();
+}
+
+#[test]
 fn validate_component_two_violations_reports_the_first_only() {
     let catalog = catalog_a();
     let component = json!({"id": "b1", "component": "Button", "bogus": 1});
@@ -158,6 +218,7 @@ fn validate_located_deep_component_is_refused_on_a_small_stack() {
             report: Report::All { id: "a1" },
             calls: CallCatalogs::Resolve,
             allow_unknown: true,
+            allow_undeclared: true,
         };
         let refused = catalog_a()
             .validate_located(&component, &at)
@@ -175,4 +236,11 @@ fn validate_located_deep_component_is_refused_on_a_small_stack() {
     let text = format!("Value nesting exceeds {MAX_JSON_DEPTH} levels");
     let expected = (ErrorCode::ValidationFailed, text, Some(String::new()));
     assert_that!(refused).is_equal_to(Err(expected));
+}
+
+#[test]
+fn undeclared_path_is_the_closing_keyword_at_the_root() {
+    let keyword = super::super::compile::UNDECLARED_KEYWORD;
+
+    assert_that!(super::UNDECLARED_PATH.to_owned()).is_equal_to(format!("/{keyword}"));
 }

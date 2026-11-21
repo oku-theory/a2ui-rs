@@ -66,13 +66,13 @@ fn call(body: Value) -> Value {
     (Category::Validation, ErrorCode::ValidationFailed),
     create(json!({"surfaceId": 123})),
     "createSurface.surfaceId must be a string", Some("/surfaceId"),
-    Some(("createSurface.surfaceId", DetailCode::TypeMismatch)), None, None
+    Some(("createSurface.surfaceId", DetailCode::TypeMismatch)), Some(""), None
 )]
 #[case::delete_missing(
     (Category::Validation, ErrorCode::ValidationFailed),
     json!({"version": V, "deleteSurface": {}}),
     "deleteSurface is missing required field 'surfaceId'", Some("/surfaceId"),
-    Some(("deleteSurface.surfaceId", DetailCode::MissingField)), None, None
+    Some(("deleteSurface.surfaceId", DetailCode::MissingField)), Some(""), None
 )]
 #[case::theme(
     (Category::Validation, ErrorCode::ValidationFailed),

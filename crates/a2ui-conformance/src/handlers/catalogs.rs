@@ -19,7 +19,8 @@ pub struct Loaded {
 
 /// Registers the case's catalogs: `catalogPaths` files, `catalogs` entries, then `catalog`.
 ///
-/// Only v1.0 documents are registered; one with neither `catalogId` nor `components` is
+/// Only v1.0 documents are registered (a document without a version takes the case's
+/// `protocolVersion`); one with neither `catalogId` nor `components` is
 /// ignored. A stub (`catalogId` and `protocolVersion` only) becomes an open catalog holding
 /// each component type the messages place in it. Unless the case or a step expects a
 /// `CatalogError`, each non-empty id the messages name and no catalog has is registered as a
@@ -64,6 +65,8 @@ pub fn load(case: &Case) -> Result<Loaded, String> {
 }
 
 /// The case's catalog documents in registration order; `catalog.catalogSchema` is unwrapped.
+///
+/// A document declaring no `protocolVersion` takes the case's top-level one, if any.
 fn documents(case: &Case) -> Result<Vec<Value>, String> {
     let at = case.at();
     let mut documents = Vec::new();
@@ -87,6 +90,15 @@ fn documents(case: &Case) -> Result<Vec<Value>, String> {
     }
     if let Some(catalog) = case.get("catalog") {
         documents.push(unwrapped(catalog, &at)?);
+    }
+    if let Some(version) = case.get("protocolVersion") {
+        for document in &mut documents {
+            if let Value::Object(map) = document
+                && !map.contains_key("protocolVersion")
+            {
+                map.insert("protocolVersion".to_owned(), version.clone());
+            }
+        }
     }
     Ok(documents)
 }
@@ -139,11 +151,13 @@ fn registrable(document: Value, named: &Named) -> Option<Value> {
     Some(Value::Object(map))
 }
 
-/// The schema of a stub catalog's component: any property, the basic catalog's slot names.
+/// The schema of a stub catalog's component: the basic catalog's slot names, and any other
+/// property declared by `additionalProperties`, so strict rules accept it.
 fn open_schema() -> Value {
     json!({"type": "object", "properties": {
         "child": {"$ref": "common_types.json#/$defs/ComponentId"},
-        "children": {"$ref": "common_types.json#/$defs/ChildList"}}})
+        "children": {"$ref": "common_types.json#/$defs/ChildList"}},
+        "additionalProperties": true})
 }
 
 /// Whether the case or one of its steps expects a `CatalogError`.

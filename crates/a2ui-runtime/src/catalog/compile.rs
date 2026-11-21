@@ -210,10 +210,16 @@ fn compile_entry(
     Ok(Arc::new(compile(&document)?))
 }
 
+/// The keyword closing a component's document at its root: a property the component's schema
+/// does not evaluate violates it, at the schema path `/unevaluatedProperties`.
+pub(super) const UNDECLARED_KEYWORD: &str = "unevaluatedProperties";
+
 /// The document the entry `name` of `section` compiles against, rooted at that entry.
 ///
 /// It holds `$schema`, the root `$ref`, the entry and each `$defs`, `components` or
-/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Each target's
+/// `functions` entry of `targets`, so a build costs the entry, not the catalog. A component's
+/// document is closed by [`UNDECLARED_KEYWORD`] beside the root `$ref`; whether that violation
+/// counts is the caller's choice (`ValidationRules::allow_undeclared_properties`). Each target's
 /// borrowed name is copied here, as a key of the pruned document. Every target
 /// was resolved in `root` by the entry's expansion, so each lookup finds it; were one absent,
 /// the pruned document would keep a dangling `$ref`, which [`compile_entry`]'s build reports.
@@ -242,10 +248,13 @@ fn pruned(
                 .insert(target.to_owned(), definition.clone());
         }
     }
-    let top: Map<String, Value> = sections
+    let mut top: Map<String, Value> = sections
         .into_iter()
         .map(|(key, entries)| (key.to_owned(), Value::Object(entries)))
         .collect();
+    if section == "components" {
+        top.insert(UNDECLARED_KEYWORD.to_owned(), Value::Bool(false));
+    }
     let reference = local_ref(&format!("/{section}/{name}"));
     rooted(&top, &reference)
 }
