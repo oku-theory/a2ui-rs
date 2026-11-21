@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "a2ui-catalog-basic"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "a2ui-runtime",
  "rstest",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "a2ui-conformance"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "a2ui-catalog-basic",
  "a2ui-runtime",
@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "a2ui-runtime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "jsonschema",
  "nom",
