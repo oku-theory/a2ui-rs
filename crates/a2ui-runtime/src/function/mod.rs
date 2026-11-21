@@ -6,4 +6,5 @@ mod context;
 mod registry;
 
 pub use context::CallContext;
+pub(crate) use context::Interpolate;
 pub use registry::{Args, FunctionRegistry, Implementation};

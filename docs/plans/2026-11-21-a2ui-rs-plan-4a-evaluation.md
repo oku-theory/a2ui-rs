@@ -124,8 +124,9 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     against the scope's base, `DataModel::get`, a missing value is `null` without error. An
     object with key `@call` is a call: `catalogId` (string, optional), `args` (object,
     optional, each value evaluated depth-first before the call). Any other object is evaluated
-    member by member with one `@` stripped from keys starting `@@` (reusing
-    `surface::unescape`, made `pub(crate)`); arrays element by element; scalars as they are.
+    member by member with one `@` stripped from keys starting `@@`; `@@<k>` beside `@<k>` is
+    `EscapedKeyCollision` (the `updateComponents` error) and member `@<k>` is `null`; arrays
+    element by element; scalars as they are.
     A failed binding becomes `null` and pushes one error; evaluation of siblings continues.
 85. **Catalog selection.** `evaluate::select_catalog(own: Option<&str>, surface_default:
     Option<&str>, surface_id: &str, what: &'static str, name: &str) -> Result<&str, Error>`:
@@ -133,7 +134,8 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     enclosing call's catalog (B21); only `CallContext::interpolate` does (Decision 87). Then
     `CatalogSet::get`, absent: `CatalogNotFound`. `processor::resolve::component_catalog` is
     rewritten on `select_catalog`, behaviour unchanged. `select_supported(own, default,
-    supported: &[String], surface_id) -> Result<&str, Error>` adds the surface allow-list check
+    supported: &[String], surface_id, what, name) -> Result<&str, Error>` (`what` and `name`
+    build `NoDefaultCatalog`'s message) adds the surface allow-list check
     (`UnsupportedCatalog`) for `select_catalog` cases and a host allow-list later.
 86. **Call checks in order.** Catalog (Decision 85) → `FunctionDef` present, else
     `UnknownFunction` → `allowed_callers()` is `AgentOnly`: `RendererForbidden` → requires
@@ -141,8 +143,10 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     (their errors pushed; a failed argument is `null`) → implementation, else
     `NotImplemented` → run it. No schema check of arguments here (Plan 2b validated the
     message; direct calls skip it per the guide). `@index`: inside a template
-    `index + offset` (offset from `args.offset`, `coerce::number`, default 0, as a JSON
-    integer), outside `IndexOutsideTemplate`; a `catalogId` on it is ignored.
+    `index + offset` as a JSON integer (offset `args.offset`: absent 0; present, it must give
+    an integral finite `coerce::number`, else `EvalFailure::Function` named `@index`, reason
+    `offset must be an integer`, value `null`), outside `IndexOutsideTemplate`; a `catalogId`
+    on it is ignored.
 87. **`CallContext`.** `pub struct CallContext<'a>` with `user_activation(&self) -> bool`,
     `surface_id(&self) -> &str`, `catalog_id(&self) -> &str` (the catalog the current call ran
     in) and `interpolate(&mut self, template: &str) -> Result<String, Error>`:

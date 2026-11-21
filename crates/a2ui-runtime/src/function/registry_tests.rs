@@ -3,6 +3,8 @@ use speculoos::prelude::*;
 
 use super::*;
 use crate::catalog::test_support::{load, v10};
+use crate::expression::Expr;
+use crate::function::Interpolate;
 use crate::{Category, ErrorCode};
 
 /// Catalog `id` declaring functions `f` and `g`.
@@ -15,10 +17,19 @@ fn catalog(id: &str) -> Catalog {
     .unwrap()
 }
 
+/// Stands in for the evaluator: these implementations never interpolate.
+struct NoTemplates;
+
+impl Interpolate for NoTemplates {
+    fn parts(&self, _: &[Expr], _: &str, _: usize) -> Result<Vec<Value>, crate::Error> {
+        Ok(Vec::new())
+    }
+}
+
 /// Calls the implementation bound to `name` in `catalog_id`.
 fn call(registry: &FunctionRegistry, catalog_id: &str, name: &str) -> Option<Value> {
     let implementation = registry.implementation(catalog_id, name)?;
-    let mut context = CallContext::new(false, "s", catalog_id);
+    let mut context = CallContext::new(false, "s", catalog_id, 0, &NoTemplates);
     Some(implementation(&Args::new(), &mut context).unwrap())
 }
 

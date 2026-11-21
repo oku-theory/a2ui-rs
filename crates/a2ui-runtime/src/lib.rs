@@ -14,7 +14,9 @@
 //! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
 //! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
 //! faults carry a [`Detail`]), [`FunctionRegistry`] (binds implementations to catalog functions,
-//! with [`CallContext`] and the [`coerce`] conversions), and [`MessageProcessor`] (applies
+//! with [`CallContext`] and the [`coerce`] conversions), [`Evaluator`] (evaluates bindings and
+//! calls in a [`Scope`] into an [`Evaluation`], at most [`MAX_EVALUATION_DEPTH`] deep, with
+//! [`select_catalog`] and [`select_supported`]), and [`MessageProcessor`] (applies
 //! messages to each [`Surface`], checked against a [`CatalogSet`] under [`ValidationRules`]
 //! within [`StateLimits`], returning an [`Outcome`] and reporting the renderer's capabilities and
 //! data models).
@@ -26,6 +28,7 @@ mod context;
 mod data;
 mod detail;
 mod error;
+mod evaluate;
 mod expression;
 mod function;
 mod ident;
@@ -49,6 +52,9 @@ pub use context::resolve_path;
 pub use data::{DataModel, Write};
 pub use detail::{Detail, DetailCode};
 pub use error::{Category, Error, ErrorCode};
+pub use evaluate::{
+    Evaluation, Evaluator, MAX_EVALUATION_DEPTH, Scope, select_catalog, select_supported,
+};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
 pub use function::{Args, CallContext, FunctionRegistry, Implementation};
 pub use message::{
