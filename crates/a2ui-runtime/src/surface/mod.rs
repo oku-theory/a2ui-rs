@@ -32,6 +32,38 @@ pub(crate) struct Staged {
     pub(crate) components: Vec<(String, Map<String, Value>)>,
 }
 
+/// A surface's components with staged ones applied, as [`Surface::commit`] would store them.
+#[derive(Debug)]
+pub(crate) struct Merged<'a> {
+    surface: &'a Surface,
+    /// Each component's id and entries, in arrival order.
+    components: Vec<(&'a str, &'a Map<String, Value>)>,
+    /// The position in `components` of each component id.
+    index: HashMap<&'a str, usize>,
+}
+
+impl<'a> Merged<'a> {
+    /// The surface the staged components were sent to.
+    pub(crate) fn surface(&self) -> &'a Surface {
+        self.surface
+    }
+
+    /// Each component's id and entries, in arrival order.
+    pub(crate) fn components(&self) -> &[(&'a str, &'a Map<String, Value>)] {
+        &self.components
+    }
+
+    /// The arrival position of the component whose id is `id`.
+    pub(crate) fn position(&self, id: &str) -> Option<usize> {
+        self.index.get(id).copied()
+    }
+
+    /// Whether a component has the id `id`.
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.index.contains_key(id)
+    }
+}
+
 impl Surface {
     /// The surface a `createSurface` message describes.
     pub(crate) fn new(create: &CreateSurface) -> Self {
@@ -114,6 +146,43 @@ impl Surface {
                     self.components.push(component);
                 }
             }
+        }
+    }
+
+    /// The components `commit(staged)` would leave, without storing them.
+    pub(crate) fn merged<'a>(&'a self, staged: &'a Staged) -> Merged<'a> {
+        let mut components: Vec<(&str, &Map<String, Value>)> = self
+            .components
+            .iter()
+            .map(|component| ("", component))
+            .collect();
+        for (id, &at) in &self.index {
+            if let Some(entry) = components.get_mut(at) {
+                entry.0 = id;
+            }
+        }
+        let mut index: HashMap<&str, usize> = self
+            .index
+            .iter()
+            .map(|(id, &at)| (id.as_str(), at))
+            .collect();
+        for (id, component) in &staged.components {
+            match index.entry(id) {
+                Entry::Occupied(entry) => {
+                    if let Some(entry) = components.get_mut(*entry.get()) {
+                        entry.1 = component;
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(components.len());
+                    components.push((id, component));
+                }
+            }
+        }
+        Merged {
+            surface: self,
+            components,
+            index,
         }
     }
 

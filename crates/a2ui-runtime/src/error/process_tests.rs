@@ -44,6 +44,46 @@ use super::*;
     "Surface 's' has no default catalogId for component 'c1'",
     (Category::Catalog, ErrorCode::CatalogNotFound)
 )]
+#[case::self_reference(
+    ProcessFailure::SelfReference { id: "root".into() },
+    "Self-reference detected: component 'root' lists itself as a child",
+    (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+)]
+#[case::dangling_reference(
+    ProcessFailure::DanglingReference {
+        parent: "stack".into(),
+        child: "missing".into(),
+        field: "slots[1]".into(),
+    },
+    "Dangling reference: component 'stack' references non-existent component 'missing' in \
+     field 'slots[1]'",
+    (Category::Integrity, ErrorCode::IntegrityError)
+)]
+#[case::circular_reference(
+    ProcessFailure::CircularReference { ids: vec!["a".into(), "b".into()], more: false },
+    "Circular reference detected: circular component reference 'a' -> 'b' -> 'a'",
+    (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+)]
+#[case::circular_reference_past_the_ids(
+    ProcessFailure::CircularReference { ids: vec!["a".into(), "b".into()], more: true },
+    "Circular reference detected: circular component reference 'a' -> 'b' -> …",
+    (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+)]
+#[case::missing_root(
+    ProcessFailure::MissingRoot,
+    "Missing root component 'root'",
+    (Category::Validation, ErrorCode::ValidationFailed)
+)]
+#[case::unreachable(
+    ProcessFailure::Unreachable { id: "o".into() },
+    "Component 'o' is not reachable from 'root'",
+    (Category::Integrity, ErrorCode::IntegrityError)
+)]
+#[case::component_depth(
+    ProcessFailure::ComponentDepth { id: "c50".into(), depth: 51 },
+    "Global recursion limit exceeded: component 'c50' is 51 levels below 'root'",
+    (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+)]
 #[case::schema_violations(
     ProcessFailure::SchemaViolations {
         id: "b1".into(),

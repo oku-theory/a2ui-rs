@@ -4,10 +4,14 @@
 //! [`StateLimits`], then applies it; a refused message changes nothing. The host turns an error
 //! into a reply with [`RendererMessage::error`](crate::RendererMessage::error).
 
+pub(crate) mod children;
 mod components;
 mod limits;
 mod resolve;
 mod rules;
+#[cfg(test)]
+pub(crate) mod test_support;
+mod topology;
 
 use std::collections::BTreeMap;
 
@@ -191,6 +195,7 @@ impl MessageProcessor {
             &self.catalogs,
             &self.state_limits,
         )?;
+        topology::check(&surface.merged(&staged), &self.catalogs, rules)?;
         surface.commit(staged);
         let max_nodes = self.state_limits.max_data_model_nodes();
         if surface.data_model().weighs_more_than(max_nodes) {
@@ -219,6 +224,7 @@ impl MessageProcessor {
             &self.catalogs,
             &self.state_limits,
         )?;
+        topology::check(&surface.merged(&staged), &self.catalogs, rules)?;
         surface.commit(staged);
         Ok(())
     }
@@ -259,3 +265,7 @@ mod tests;
 #[cfg(test)]
 #[path = "mod_components_tests.rs"]
 mod components_tests;
+
+#[cfg(test)]
+#[path = "mod_rollback_tests.rs"]
+mod rollback_tests;

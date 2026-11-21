@@ -37,6 +37,22 @@ pub(crate) enum ProcessFailure {
     },
     /// An object holding both `@@<k>` and `@<k>`, equal once unescaped.
     EscapedKeyCollision { escaped: Quoted, plain: Quoted },
+    /// A component listing itself as a child.
+    SelfReference { id: Quoted },
+    /// A component naming a child the surface does not hold.
+    DanglingReference {
+        parent: Quoted,
+        child: Quoted,
+        field: Quoted,
+    },
+    /// Components reaching themselves; `ids` is the loop, cut short when `more` holds.
+    CircularReference { ids: Vec<Quoted>, more: bool },
+    /// A surface with components but no `root`.
+    MissingRoot,
+    /// A component `root` does not reach.
+    Unreachable { id: Quoted },
+    /// A component more than `MAX_MESSAGE_DEPTH` levels below `root`.
+    ComponentDepth { id: Quoted, depth: usize },
 }
 
 /// How many schema violations of one component an error lists as details.
@@ -51,11 +67,17 @@ impl ProcessFailure {
             | Self::NoDefaultCatalog { .. } => Category::Catalog,
             Self::SurfaceExists { .. }
             | Self::SurfaceNotFound { .. }
-            | Self::DuplicateComponent { .. } => Category::Integrity,
+            | Self::DuplicateComponent { .. }
+            | Self::DanglingReference { .. }
+            | Self::Unreachable { .. } => Category::Integrity,
             Self::NotYetSupported { .. }
             | Self::StateLimit { .. }
             | Self::SchemaViolations { .. }
-            | Self::EscapedKeyCollision { .. } => Category::Validation,
+            | Self::EscapedKeyCollision { .. }
+            | Self::MissingRoot => Category::Validation,
+            Self::SelfReference { .. }
+            | Self::CircularReference { .. }
+            | Self::ComponentDepth { .. } => Category::Recursion,
         }
     }
 
@@ -68,11 +90,17 @@ impl ProcessFailure {
             }
             Self::SurfaceExists { .. }
             | Self::SurfaceNotFound { .. }
-            | Self::DuplicateComponent { .. } => ErrorCode::IntegrityError,
+            | Self::DuplicateComponent { .. }
+            | Self::DanglingReference { .. }
+            | Self::Unreachable { .. } => ErrorCode::IntegrityError,
             Self::NotYetSupported { .. }
             | Self::StateLimit { .. }
             | Self::SchemaViolations { .. }
-            | Self::EscapedKeyCollision { .. } => ErrorCode::ValidationFailed,
+            | Self::EscapedKeyCollision { .. }
+            | Self::MissingRoot => ErrorCode::ValidationFailed,
+            Self::SelfReference { .. }
+            | Self::CircularReference { .. }
+            | Self::ComponentDepth { .. } => ErrorCode::RecursionLimitExceeded,
         }
     }
 }
@@ -118,6 +146,40 @@ impl fmt::Display for ProcessFailure {
                     "Key '{escaped}' collides with '{plain}' after unescaping"
                 )
             }
+            Self::SelfReference { id } => write!(
+                f,
+                "Self-reference detected: component '{id}' lists itself as a child"
+            ),
+            Self::DanglingReference {
+                parent,
+                child,
+                field,
+            } => write!(
+                f,
+                "Dangling reference: component '{parent}' references non-existent component \
+                 '{child}' in field '{field}'"
+            ),
+            Self::CircularReference { ids, more } => {
+                write!(
+                    f,
+                    "Circular reference detected: circular component reference"
+                )?;
+                for (at, id) in ids.iter().enumerate() {
+                    let arrow = if at == 0 { " " } else { " -> " };
+                    write!(f, "{arrow}'{id}'")?;
+                }
+                match ids.first() {
+                    Some(_) if *more => write!(f, " -> …"),
+                    Some(first) => write!(f, " -> '{first}'"),
+                    None => Ok(()),
+                }
+            }
+            Self::MissingRoot => write!(f, "Missing root component 'root'"),
+            Self::Unreachable { id } => write!(f, "Component '{id}' is not reachable from 'root'"),
+            Self::ComponentDepth { id, depth } => write!(
+                f,
+                "Global recursion limit exceeded: component '{id}' is {depth} levels below 'root'"
+            ),
         }
     }
 }

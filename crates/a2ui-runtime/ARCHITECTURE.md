@@ -36,11 +36,13 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   action's branch, components opaque; first violation one `Detail`; `callRendererFunction` faults
   `INVALID_FUNCTION_CALL`), `typed` (by hand), then `check_bindings` (`@call` chains up to 5,
   `@path` parses). `batch`: array or `{"messages": […]}`. `RendererMessage::error`: an `Error`.
-- `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`, components as
-  sent in arrival order, replaced whole in place; `unescaped_component` strips one `@` of `@@`).
+- `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`, components in
+  arrival order, replaced in place; `unescaped_component`); `merged`: the view `commit` leaves.
 - `processor`: `MessageProcessor` applies messages; a refused one changes nothing. `components`:
   counts, duplicate ids, then per component size, id, catalog (`resolve`), `@@` collisions,
-  `validate_located`; paths `/components/<i>`. `ValidationRules` (strict default), `StateLimits`;
+  `validate_located`; paths `/components/<i>`. `children`: edges read through catalog child
+  slots. `topology` (on the merged view, before commit): self-reference, dangling, cycle (Kahn),
+  missing root, unreachable, depth past 50. `ValidationRules` (strict default), `StateLimits`;
   `handle_batch` stamps `message_index`. `Outcome` is empty until t-1688/t-1689.
 
 ## Dependencies

@@ -7,6 +7,10 @@ v1.0 catalogs: the components and functions an agent may use on a surface.
   entries its unions list; `document` keeps the authored document (`to_json`).
 - `compile`: each entry against a bundle pruned to what it reaches; the validator lives in its
   `ComponentDef`/`FunctionDef`. `shape`: `ComponentShape`.
+- `slots`: each component's `ChildSlot`s (Decision 70), paths to `ComponentId`/`Child` (one id)
+  or `ChildList` (ids or a template) through `properties`, `items`, `prefixItems`, `allOf`/`anyOf`/
+  `oneOf` and `$ref`s; iterative, memoized, within the expansion caps. A slot under another
+  keyword or in a recursive `$def` is a `CatalogError`; the envelope `id` is never a slot.
 - `validation_schema`, `flatten`: the output-only schema in upstream's flattened shape.
 - `validate`: `validate_located` checks an instance: depth, nodes, calls, reserved `@` keys,
   envelope keys removed, its validator, then each nested call in its own catalog else the

@@ -36,7 +36,7 @@ fn stored(processor: &MessageProcessor) -> Vec<Value> {
 #[test]
 fn update_replaces_a_component_whole_in_place() {
     let mut processor = widgets();
-    let root = json!({"id": "root", "component": "Any"});
+    let root = json!({"id": "root", "component": "Column", "children": ["t1", "t2"]});
     let middle = json!({"id": "t1", "component": "Text", "text": "x",
         "metadata": {"extensions": {"com_example": 1}}});
     let last = json!({"id": "t2", "component": "Text", "text": "y"});
@@ -69,7 +69,7 @@ fn refused_second_component_stores_nothing() {
 #[test]
 fn create_surface_components_are_checked_and_stored() {
     let mut processor = MessageProcessor::new(catalog_set());
-    let text = json!({"id": "t1", "component": "Text", "text": "x"});
+    let text = json!({"id": "root", "component": "Text", "text": "x"});
 
     processor
         .handle(&message(json!({"version": V, "createSurface": {
@@ -134,7 +134,7 @@ fn permissive_rules_accept_an_unknown_component_type() {
 #[test]
 fn refused_replacement_keeps_the_stored_components_and_order() {
     let mut processor = widgets();
-    let root = json!({"id": "root", "component": "Any"});
+    let root = json!({"id": "root", "component": "Column", "children": ["t1"]});
     let text = json!({"id": "t1", "component": "Text", "text": "x"});
     processor.handle(&components(json!([root, text]))).unwrap();
     let replaced = json!({"id": "t1", "component": "Text", "text": "y"});

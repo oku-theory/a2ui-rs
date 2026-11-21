@@ -89,7 +89,7 @@ impl Bundle {
     }
 
     /// The bundle as one document, each section under its catalog key.
-    fn document(&self) -> Value {
+    pub(super) fn document(&self) -> Value {
         Value::Object(Map::from_iter([
             (
                 "components".to_owned(),
@@ -184,13 +184,9 @@ impl Totals {
     fn add<'r>(&mut self, reach: Reach<'r>) -> Result<Targets<'r>, Error> {
         self.size += reach.size;
         self.patterns += reach.patterns;
-        ensure!(
-            self.size <= MAX_CATALOG_EXPANSION,
-            CatalogLimitSnafu {
-                what: "schema nodes in all entries once their $refs are expanded",
-                limit: MAX_CATALOG_EXPANSION,
-            }
-        );
+        if self.size > MAX_CATALOG_EXPANSION {
+            return Err(catalog_too_large());
+        }
         ensure!(
             self.patterns <= MAX_CATALOG_PATTERNS,
             CatalogLimitSnafu {
@@ -294,6 +290,44 @@ struct Reach<'r> {
     targets: Targets<'r>,
 }
 
+/// The error for the entry `name` past `MAX_ENTRY_EXPANSION` schema nodes.
+pub(super) fn entry_too_large(name: &str) -> Error {
+    CatalogLimitSnafu {
+        what: reason![
+            "schema nodes in '",
+            Quoted::new(name),
+            "' once its $refs are expanded",
+        ],
+        limit: MAX_ENTRY_EXPANSION,
+    }
+    .build()
+    .into()
+}
+
+/// The error for the entry `name` past `MAX_SCHEMA_DEPTH` levels once expanded.
+pub(super) fn entry_too_deep(name: &str) -> Error {
+    CatalogLimitSnafu {
+        what: reason![
+            "levels of '",
+            Quoted::new(name),
+            "' once its $refs are expanded"
+        ],
+        limit: MAX_SCHEMA_DEPTH,
+    }
+    .build()
+    .into()
+}
+
+/// The error for all entries together past `MAX_CATALOG_EXPANSION` schema nodes.
+pub(super) fn catalog_too_large() -> Error {
+    CatalogLimitSnafu {
+        what: "schema nodes in all entries once their $refs are expanded",
+        limit: MAX_CATALOG_EXPANSION,
+    }
+    .build()
+    .into()
+}
+
 /// Expands the entry `name` in `root`; each way it breaks load rule 11 is a `CatalogError`.
 fn reach<'r>(root: &'r Value, name: &str, schema: &Value) -> Result<Reach<'r>, Error> {
     match expand(root, schema, MAX_ENTRY_EXPANSION) {
@@ -306,26 +340,8 @@ fn reach<'r>(root: &'r Value, name: &str, schema: &Value) -> Result<Reach<'r>, E
             patterns,
             targets: reached,
         }),
-        Expansion::TooLarge => Err(CatalogLimitSnafu {
-            what: reason![
-                "schema nodes in '",
-                Quoted::new(name),
-                "' once its $refs are expanded",
-            ],
-            limit: MAX_ENTRY_EXPANSION,
-        }
-        .build()
-        .into()),
-        Expansion::TooDeep => Err(CatalogLimitSnafu {
-            what: reason![
-                "levels of '",
-                Quoted::new(name),
-                "' once its $refs are expanded"
-            ],
-            limit: MAX_SCHEMA_DEPTH,
-        }
-        .build()
-        .into()),
+        Expansion::TooLarge => Err(entry_too_large(name)),
+        Expansion::TooDeep => Err(entry_too_deep(name)),
         Expansion::Cycle(reference) => Err(MalformedCatalogSnafu {
             reason: reason!["$ref cycle through '", Quoted::new(&reference), "'"],
         }

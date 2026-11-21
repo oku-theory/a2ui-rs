@@ -9,6 +9,7 @@ use super::Catalog;
 use super::compile::{bundle, compile_entries};
 use super::document::union_members;
 use super::entries::{ComponentAttrs, FunctionAttrs};
+use super::slots;
 use super::validation_schema::{self, Header};
 use crate::bundle::check_references;
 use crate::error::{
@@ -90,8 +91,9 @@ impl Catalog {
                 reason: "`theme` and `$defs.theme` both name the validation schema's theme",
             }
         );
-        let (components, functions) = kept_entries(document, defs)?;
+        let (mut components, functions) = kept_entries(document, defs)?;
         let bundle = bundle(&components, &functions, defs)?;
+        slots::attach(&bundle, &mut components)?;
         let ((components, functions), checked) = compile_entries(&bundle, components, functions)?;
         let header = Header {
             id,
