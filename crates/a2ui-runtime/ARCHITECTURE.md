@@ -17,10 +17,10 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   value changed (exact path, ancestors, descendants). `context`: `resolve_path(path, scope)`.
 - `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
   with named arguments); `\${` is literal; limits 10 000 characters, 1 000 parts, nesting 100.
-- `schema`: embedded v1.0 `common_types.json`, `agent_to_renderer.json` (copied into
-  `schemas/v1_0/` by `vendor/sync.sh`, with the `LICENSE`); `validate_common_type` (cached).
+- `schema`: embedded v1.0 `common_types`, `agent_to_renderer`; `validate_common_type` (cached).
 - `function`: `FunctionRegistry`, `CallContext` (`interpolate`); `coerce`: boolean, number, text.
 - `evaluate`: `Evaluator` in a `Scope` (a failure: `null` + one error; depth 100); `select_catalog`.
+- `regex`: nom `parse` (256 code points; groups on a heap stack) to `ast::Node`; `safety::check`.
 - `keys`, `ident` (UAX #31). `validator`: `jsonschema` 2020-12, offline (build failures are
   `CatalogError`); maps a violation to a message, `DetailCode` and JSON Pointer. `catalog`:
   `Catalog` and `CatalogSet` (by id, duplicates refused); see `src/catalog/ARCHITECTURE.md`.
@@ -33,7 +33,7 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   components, `dataModel`, `value`, call `args`, 50 containers), `schema` (action's branch,
   components opaque; first violation one `Detail`; surface faults carry the id or `""`;
   `callRendererFunction`: `INVALID_FUNCTION_CALL`), `typed` (by hand), `check_bindings` (`@call`
-  chains up to 5, `@path` parses). `batch`: array or `{"messages": […]}`; `RendererMessage::error`.
+  chains up to 5, `@path` parses). `batch`: array, `{"messages": […]}`; `RendererMessage::error`.
 - `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`, components in
   arrival order, replaced in place; `unescaped_component`); `merged`: the view `commit` leaves.
 - `processor`: `MessageProcessor` applies messages; a refused one changes nothing. `components`:
@@ -46,5 +46,5 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   `Outcome` empty; `evaluate`. `reports`: `capabilities`, `data_model_report`.
 
 ## Dependencies
-`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;
-`wasm-bindgen` via `getrandom` on wasm32, checked by `just deps`).
+`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `nom` (`alloc` only), `jsonschema`
+(default features off; `wasm-bindgen` via `getrandom` on wasm32, checked by `just deps`).

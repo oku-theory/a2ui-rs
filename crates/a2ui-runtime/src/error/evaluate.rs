@@ -27,7 +27,10 @@ pub(crate) enum EvalFailure {
     /// An implementation refusing its arguments or input.
     Function { name: Quoted, reason: Quoted },
     /// A regex pattern the A2UI dialect refuses.
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by Task 3 (t-1713)"))]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by DialectRegex in Task 4 (t-1714)")
+    )]
     Regex { rule: &'static str, detail: Quoted },
 }
 

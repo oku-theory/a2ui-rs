@@ -38,6 +38,11 @@ mod message;
 mod pointer;
 mod processor;
 mod quoted;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "used by DialectRegex in Task 4 (t-1714)")
+)]
+mod regex;
 mod schema;
 mod subscribe;
 mod surface;
