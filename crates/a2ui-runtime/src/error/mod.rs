@@ -2,8 +2,10 @@
 //!
 //! Input a message quotes is held as `Quoted` (escaped, capped) from the moment the error is
 //! built, alone or as a piece of runtime wording, a `Reason` that only `reason!` composes.
-//! `inner` holds the variants; `process` the processor's failures, boxed in one variant.
+//! `inner` holds the variants; `process` the processor's failures and `evaluate` the evaluator's,
+//! each boxed in one variant.
 
+pub(crate) mod evaluate;
 mod inner;
 pub(crate) mod process;
 
@@ -13,6 +15,7 @@ use snafu::{Backtrace, ErrorCompat};
 
 use crate::detail::Context;
 
+pub(crate) use evaluate::EvalFailure;
 pub(crate) use inner::*;
 pub(crate) use process::{Allowed, MAX_VIOLATION_DETAILS, ProcessFailure};
 
@@ -140,6 +143,16 @@ impl From<ProcessFailure> for Error {
     }
 }
 
+impl From<EvalFailure> for Error {
+    fn from(failure: EvalFailure) -> Self {
+        EvaluateSnafu {
+            failure: Box::new(failure),
+        }
+        .build()
+        .into()
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
@@ -169,6 +182,18 @@ impl Error {
     pub fn code(&self) -> ErrorCode {
         let (_, code) = self.inner.class();
         code
+    }
+
+    /// The error a function implementation returns when it refuses its arguments or input.
+    ///
+    /// `name` and `reason` are quoted and capped like any agent string; the error is an
+    /// `ExpressionError`.
+    pub fn function(name: &str, reason: &str) -> Self {
+        EvalFailure::Function {
+            name: name.into(),
+            reason: reason.into(),
+        }
+        .into()
     }
 }
 

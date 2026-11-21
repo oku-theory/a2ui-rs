@@ -2,6 +2,7 @@
 
 use snafu::{Backtrace, Snafu};
 
+use super::evaluate::EvalFailure;
 use super::process::ProcessFailure;
 use super::{Category, ErrorCode};
 use crate::quoted::{Quoted, Reason};
@@ -268,6 +269,12 @@ pub(crate) enum Inner {
         failure: Box<ProcessFailure>,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("{failure}"))]
+    Evaluate {
+        failure: Box<EvalFailure>,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -320,6 +327,7 @@ impl Inner {
                 (Category::Recursion, ErrorCode::RecursionLimitExceeded)
             }
             Self::Process { failure, .. } => (failure.category(), failure.code()),
+            Self::Evaluate { failure, .. } => (failure.category(), failure.code()),
         }
     }
 }

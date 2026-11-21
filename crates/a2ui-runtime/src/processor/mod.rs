@@ -30,7 +30,7 @@ pub use limits::StateLimits;
 pub use rules::ValidationRules;
 
 /// What handling a message produced; later versions add fields.
-// MVP: t-1688 (outbound messages), t-1689 (ChangeSet)
+// MVP: t-1710 (outbound messages), t-1689 (ChangeSet)
 #[non_exhaustive]
 #[derive(Debug, Default, PartialEq)]
 pub struct Outcome {}
@@ -112,14 +112,14 @@ impl MessageProcessor {
                 self.surfaces.remove(&delete.surface_id);
                 Ok(())
             }
-            // MVP: t-1688
+            // MVP: t-1710
             AgentMessage::CallRendererFunction(call) => {
                 Err(Error::from(ProcessFailure::NotYetSupported {
                     action: "callRendererFunction",
                 })
                 .with_function_call(&call.function_call_id))
             }
-            // MVP: t-1688
+            // MVP: t-1710
             AgentMessage::AgentFunctionResponse(_) => Err(ProcessFailure::NotYetSupported {
                 action: "agentFunctionResponse",
             }
