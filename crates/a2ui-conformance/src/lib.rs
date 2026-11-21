@@ -8,6 +8,7 @@ mod compare;
 pub mod handlers;
 mod keys;
 mod manifest;
+mod outbound;
 mod paths;
 mod skips;
 
@@ -15,5 +16,6 @@ pub use case::{Case, UPSTREAM_DEFAULT_VERSION, VersionError, load_suite, parse_s
 pub use compare::{expect_error, json_eq, schema_eq};
 pub use keys::{assert_case_keys, assert_known_keys};
 pub use manifest::{Manifest, Status};
+pub use outbound::check_renderer_error;
 pub use paths::{read_json, upstream_root};
 pub use skips::Skips;

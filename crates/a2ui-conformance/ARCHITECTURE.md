@@ -18,8 +18,14 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   version-neutral `data_model`, `resolve_path`, `parse_expression_template` ignore `[versions]`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.
 - `keys`: strict key checks; an unread key fails the case.
-- `compare`: `json_eq`, `schema_eq` (`enum`/`required` as multisets), `expect_error` (category,
-  then message as a case-insensitive substring or regex).
+- `compare`: `json_eq`, `schema_eq` (`enum`/`required` as multisets), `expect_error`: a string
+  matches the message only; a mapping takes `category` (`ValidationError` also accepts
+  `IntegrityError`/`RecursionError`), `message` (case-insensitive literal, then regex), `code`,
+  `path`, `surfaceId`, `functionCallId`, `details` (index and length), `rendererError`; any other
+  key fails.
+- `outbound`: `check_renderer_error` validates `RendererMessage::error(..)` against upstream's
+  `renderer_to_agent.json` (`common_types.json` registered under its `$id`) and matches
+  `version` and `error.{code,surfaceId,functionCallId,path,message}`.
 - `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR`
   is set (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`;
@@ -31,7 +37,7 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   `catalog_input` reads the case's catalog (inline or `catalogPath`) and its
   `catalogId`/`protocolVersion` overrides.
 
-Depends on: `a2ui-runtime`, `a2ui-catalog-basic`, `percent-encoding`.
+Depends on: `a2ui-runtime`, `a2ui-catalog-basic`, `jsonschema`, `percent-encoding`.
 
 ## Rule
 
