@@ -112,3 +112,15 @@
 "prototype"
 "/0"
 "/10000"
+
+# Messages
+"\"version\""
+"\"createSurface\""
+"\"updateComponents\""
+"\"updateDataModel\""
+"\"deleteSurface\""
+"\"callRendererFunction\""
+"\"agentFunctionResponse\""
+"\"surfaceId\""
+"\"callFunction\""
+"\"functionCallId\""
