@@ -2,7 +2,8 @@
 //!
 //! [`Catalog::from_json`] checks an authored catalog document, keeps it for
 //! [`Catalog::to_json`], compiles one validator per entry, which its [`ComponentDef`] or
-//! [`FunctionDef`] holds, and builds [`Catalog::validation_schema`].
+//! [`FunctionDef`] holds, and builds [`Catalog::validation_schema`]. A [`CatalogSet`] holds the
+//! catalogs a renderer has loaded.
 
 mod compile;
 mod derive;
@@ -10,7 +11,9 @@ mod document;
 mod entries;
 mod flatten;
 mod load;
+mod set;
 mod shape;
+mod slots;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod validate;
@@ -23,8 +26,11 @@ use jsonschema::Validator;
 use serde_json::{Map, Value};
 
 pub use derive::{Derivation, DeriveEntry};
+pub use set::CatalogSet;
 pub use shape::ComponentShape;
+pub(crate) use slots::{ChildSlot, SlotKind, SlotStep};
 pub use validate::CatalogLookup;
+pub(crate) use validate::{CallCatalogs, Located, Report, bounded, identifier};
 
 /// Who may call a catalog function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -68,6 +74,7 @@ pub struct ComponentDef {
     allowed_children: Option<Vec<String>>,
     metadata: Option<Value>,
     shape: ComponentShape,
+    child_slots: Vec<ChildSlot>,
     validator: Arc<Validator>,
 }
 
@@ -100,6 +107,11 @@ impl ComponentDef {
     /// The property and required names, through `allOf` and `$ref`s.
     pub fn shape(&self) -> &ComponentShape {
         &self.shape
+    }
+
+    /// Where the schema holds child component ids, in schema order.
+    pub(crate) fn child_slots(&self) -> &[ChildSlot] {
+        &self.child_slots
     }
 
     /// The compiled schema, with function calls checked only as envelopes.

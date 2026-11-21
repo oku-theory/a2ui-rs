@@ -12,31 +12,45 @@
 //! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
 //! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
 //! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
-//! [`Derivation`].
+//! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
+//! faults carry a [`Detail`]), and [`MessageProcessor`] (applies messages to each [`Surface`],
+//! checked against a [`CatalogSet`] under [`ValidationRules`] within [`StateLimits`], returning
+//! an [`Outcome`] and reporting the renderer's capabilities and data models).
 
 mod bundle;
 mod catalog;
 mod context;
 mod data;
+mod detail;
 mod error;
 mod expression;
 mod ident;
 mod keys;
 mod limits;
+mod message;
 mod pointer;
+mod processor;
 mod quoted;
 mod schema;
 mod subscribe;
+mod surface;
 mod validator;
 pub use subscribe::Watchers;
 
 pub use catalog::{
-    AllowedCallers, Catalog, CatalogLookup, ComponentDef, ComponentShape, Derivation, DeriveEntry,
-    FunctionDef,
+    AllowedCallers, Catalog, CatalogLookup, CatalogSet, ComponentDef, ComponentShape, Derivation,
+    DeriveEntry, FunctionDef,
 };
 pub use context::resolve_path;
 pub use data::{DataModel, Write};
+pub use detail::{Detail, DetailCode};
 pub use error::{Category, Error, ErrorCode};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
+pub use message::{
+    AgentFunctionResponse, AgentMessage, Batch, CallRendererFunction, CreateSurface, DeleteSurface,
+    MessageLimits, RendererMessage, UpdateComponents, UpdateDataModel,
+};
 pub use pointer::{MAX_LIST_INDEX, Pointer};
+pub use processor::{MessageProcessor, Outcome, StateLimits, ValidationRules};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};
+pub use surface::Surface;

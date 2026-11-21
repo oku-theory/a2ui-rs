@@ -55,44 +55,140 @@ fn same_multiset(xs: &[Value], ys: &[Value]) -> bool {
             })
 }
 
-/// Checks `actual` against an `expectError` / `expect_error` value `{category, message?}`.
+/// Checks `actual` against an `expectError` / `expect_error` value.
 ///
-/// `message` matches as a case-insensitive substring or regular expression, as upstream's
-/// reference harness does (`_exception_matches_expected_message`).
+/// A string matches the message only. A mapping takes `category`, `message`, `code`, `path`,
+/// `surfaceId`, `functionCallId`, `details` and `rendererError`; any other key is an error.
+/// `message` matches as a case-insensitive literal substring, else a case-insensitive regex, as
+/// upstream's reference harness does. `ValidationError` also accepts `IntegrityError` and
+/// `RecursionError`, which subclass it upstream.
 pub fn expect_error(
     actual: &a2ui_runtime::Error,
     expected: &Value,
     at: &str,
 ) -> Result<(), String> {
-    let Value::Object(fields) = expected else {
-        return Err(format!("{at}: expect_error must be a mapping"));
+    let fields = match expected {
+        Value::String(_) => {
+            return check_message(actual, expected, at);
+        }
+        Value::Object(fields) => fields,
+        _ => return Err(format!("{at}: expect_error must be a mapping or a string")),
     };
-    crate::keys::assert_known_keys(fields, &["category", "message"], at)?;
-    let category = fields.get("category").and_then(Value::as_str);
-    if category != Some(actual.category().as_str()) {
-        return Err(format!(
-            "{at}: expected {category:?}, got {}: {actual}",
-            actual.category().as_str()
-        ));
+    crate::keys::assert_known_keys(fields, KEYS, at)?;
+    if let Some(category) = fields.get("category") {
+        check_category(actual, category, at)?;
     }
-    let pattern = match fields.get("message") {
-        None => return Ok(()),
-        Some(Value::String(pattern)) => pattern,
-        Some(other) => return Err(format!("{at}: message must be a string, got {other}")),
+    if let Some(message) = fields.get("message") {
+        check_message(actual, message, at)?;
+    }
+    if let Some(code) = fields.get("code") {
+        check_exact("code", Some(actual.code().as_str()), code, at)?;
+    }
+    for (key, have) in [
+        ("path", actual.path()),
+        ("surfaceId", actual.surface_id()),
+        ("functionCallId", actual.function_call_id()),
+    ] {
+        if let Some(want) = fields.get(key) {
+            check_exact(key, have, want, at)?;
+        }
+    }
+    if let Some(details) = fields.get("details") {
+        check_details(actual, details, at)?;
+    }
+    match fields.get("rendererError") {
+        Some(renderer) => crate::outbound::check_renderer_error(actual, renderer, at),
+        None => Ok(()),
+    }
+}
+
+const KEYS: &[&str] = &[
+    "category",
+    "message",
+    "code",
+    "path",
+    "surfaceId",
+    "functionCallId",
+    "details",
+    "rendererError",
+];
+
+fn check_category(actual: &a2ui_runtime::Error, want: &Value, at: &str) -> Result<(), String> {
+    let have = actual.category().as_str();
+    let Some(want) = want.as_str() else {
+        return Err(format!("{at}: category must be a string, got {want}"));
     };
-    let text = actual.to_string();
-    let substring = text.to_lowercase().contains(&pattern.to_lowercase());
-    let regex = regex::RegexBuilder::new(pattern)
-        .case_insensitive(true)
-        .build()
-        .is_ok_and(|regex| regex.is_match(&text));
-    if substring || regex {
+    let subclass = want == "ValidationError" && matches!(have, "IntegrityError" | "RecursionError");
+    if want == have || subclass {
+        Ok(())
+    } else {
+        Err(format!("{at}: expected {want:?}, got {have}: {actual}"))
+    }
+}
+
+fn check_exact(key: &str, have: Option<&str>, want: &Value, at: &str) -> Result<(), String> {
+    let Some(want) = want.as_str() else {
+        return Err(format!("{at}: {key} must be a string, got {want}"));
+    };
+    if have == Some(want) {
+        Ok(())
+    } else {
+        Err(format!("{at}: {key} expected {want:?}, got {have:?}"))
+    }
+}
+
+fn check_message(actual: &a2ui_runtime::Error, want: &Value, at: &str) -> Result<(), String> {
+    let Some(pattern) = want.as_str() else {
+        return Err(format!("{at}: message must be a string, got {want}"));
+    };
+    if message_matches(&actual.to_string(), pattern) {
         Ok(())
     } else {
         Err(format!(
             "{at}: message {actual} does not match {pattern:?} as a substring or a regex"
         ))
     }
+}
+
+/// Whether `text` holds `pattern` as a case-insensitive literal, else matches it as a regex.
+pub(crate) fn message_matches(text: &str, pattern: &str) -> bool {
+    text.to_lowercase().contains(&pattern.to_lowercase())
+        || regex::RegexBuilder::new(pattern)
+            .case_insensitive(true)
+            .build()
+            .is_ok_and(|regex| regex.is_match(text))
+}
+
+fn check_details(actual: &a2ui_runtime::Error, want: &Value, at: &str) -> Result<(), String> {
+    let Some(want) = want.as_array() else {
+        return Err(format!("{at}: details must be a list, got {want}"));
+    };
+    let have = actual.details();
+    if want.len() != have.len() {
+        return Err(format!(
+            "{at}: expected {} details, got {}: {actual}",
+            want.len(),
+            have.len()
+        ));
+    }
+    for (index, (want, have)) in want.iter().zip(have).enumerate() {
+        let Value::Object(want) = want else {
+            return Err(format!("{at}: details[{index}] must be a mapping"));
+        };
+        let here = format!("{at}: details[{index}]");
+        crate::keys::assert_known_keys(want, &["path", "code", "surfaceId"], &here)?;
+        let fields = [
+            ("path", Some(have.path())),
+            ("code", Some(have.code().as_str())),
+            ("surfaceId", have.surface_id()),
+        ];
+        for (key, value) in fields {
+            if let Some(want) = want.get(key) {
+                check_exact(&format!("details[{index}].{key}"), value, want, at)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -85,3 +85,58 @@ fn unused_version_of_a_skipped_case_is_not_listed() {
     let old = case("- {name: test_named, action: validate}");
     assert_that!(skips.unused(&[(&old, Some("0.9"))])).is_empty();
 }
+
+fn unclassified() -> Result<Option<String>, VersionError> {
+    Err(VersionError::Unclassified("core/x.yaml#t".to_owned()))
+}
+
+#[test]
+fn reason_for_unclassified_case_skipped_by_action_is_skipped() {
+    let skips = Skips::parse(SKIPS).unwrap();
+    let reason = skips.reason_for(&case("- {name: t, action: validate}"), &unclassified());
+    assert_that!(reason).is_equal_to(Ok(Some("Plan 3".to_owned())));
+}
+
+#[test]
+fn reason_for_unclassified_case_that_runs_is_error() {
+    let skips = Skips::parse(SKIPS).unwrap();
+    let reason = skips.reason_for(&case("- {name: t, action: from_json}"), &unclassified());
+    assert_that!(reason).is_err();
+}
+
+#[test]
+fn reason_for_read_error_in_a_skipped_case_is_still_error() {
+    let skips = Skips::parse(SKIPS).unwrap();
+    let failed = Err(VersionError::Failed("nope.json: not found".to_owned()));
+    let reason = skips.reason_for(&case("- {name: t, action: validate}"), &failed);
+    assert_that!(reason).is_equal_to(Err("nope.json: not found".to_owned()));
+}
+
+#[test]
+fn reason_for_classified_case_follows_reason() {
+    let skips = Skips::parse(SKIPS).unwrap();
+    let version = Ok(Some("0.9".to_owned()));
+    let reason = skips.reason_for(&case("- {name: t, action: from_json}"), &version);
+    assert_that!(reason).is_equal_to(Ok(Some("protocol v0.9".to_owned())));
+}
+
+#[test]
+fn real_skips_run_the_plan_3_actions_and_explain_each_case() {
+    let skips = Skips::parse(include_str!("../skips.toml")).unwrap();
+    let plan_3 = [
+        "process_messages",
+        "validate",
+        "get_renderer_capabilities",
+        "get_renderer_data_model",
+    ];
+    for action in plan_3 {
+        assert_that!(skips.actions.contains_key(action))
+            .named(action)
+            .is_false();
+    }
+    let explained = ["t-1688", "t-1689", "Decision 72", "v0.9"];
+    for (name, reason) in &skips.cases {
+        let named = explained.iter().any(|mark| reason.contains(mark));
+        assert_that!(named).named(name).is_true();
+    }
+}

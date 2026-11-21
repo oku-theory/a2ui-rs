@@ -1,100 +1,10 @@
-//! Runtime errors, each tagged with a conformance category and an A2UI code.
-//!
-//! Input a message quotes is held as [`Quoted`] (escaped, capped) from the moment the error is
-//! built, alone or as a piece of runtime wording, a [`Reason`] that only `reason!` composes.
+//! The variants behind [`Error`](super::Error), each with its message and class.
 
 use snafu::{Backtrace, Snafu};
 
+use super::process::ProcessFailure;
+use super::{Category, ErrorCode};
 use crate::quoted::{Quoted, Reason};
-
-/// The conformance category of an [`Error`], as the upstream suites name it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Category {
-    /// A data model read or write that cannot be satisfied at its path.
-    Data,
-    /// Malformed text, such as an expression template that does not parse.
-    Parse,
-    /// An expression template past the length or part limits.
-    Expression,
-    /// A catalog that cannot be loaded, or an embedded schema that is broken.
-    Catalog,
-    /// A value that breaks a schema, such as a rejected component or a malformed pointer.
-    Validation,
-}
-
-impl Category {
-    /// The name the conformance schema uses, such as `"DataError"`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Data => "DataError",
-            Self::Parse => "ParseError",
-            Self::Expression => "ExpressionError",
-            Self::Catalog => "CatalogError",
-            Self::Validation => "ValidationError",
-        }
-    }
-}
-
-/// The A2UI error code a renderer reports for an [`Error`].
-///
-/// It is the `code` of a renderer `error` message (`renderer_to_agent.json`) or of a surface
-/// diagnostic, for the stage that raises the error: upstream gives one fault different codes at
-/// different stages (an unknown component is `VALIDATION_FAILED` when a component is validated,
-/// `UNKNOWN_COMPONENT_TYPE` when a surface renders it), so each stage raises its own variants.
-/// [`ErrorCode::as_str`] is the text to send; [`Error`]'s `Display`, English and quoting
-/// (escaped, capped) input, is for logs, and applications localize from the code.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum ErrorCode {
-    /// A data model path that cannot be read or written, such as `/__proto__`.
-    DataError,
-    /// An expression that does not parse or exceeds its limits.
-    ExpressionError,
-    /// A catalog that cannot be loaded, or an embedded schema that is broken.
-    CatalogError,
-    /// A rejected component or value, or a malformed JSON Pointer.
-    ValidationFailed,
-}
-
-impl ErrorCode {
-    /// The code as the protocol spells it, such as `"VALIDATION_FAILED"`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::DataError => "DATA_ERROR",
-            Self::ExpressionError => "EXPRESSION_ERROR",
-            Self::CatalogError => "CATALOG_ERROR",
-            Self::ValidationFailed => "VALIDATION_FAILED",
-        }
-    }
-}
-
-/// An error raised by the runtime; [`Error::category`] and [`Error::code`] classify it.
-#[derive(Debug, Snafu)]
-pub struct Error(Inner);
-
-// `Result<_, Error>` stays under clippy's `result_large_err` threshold of 128 bytes.
-const _: () = assert!(size_of::<Error>() <= 128);
-
-// A loaded catalog is shared across threads and reactive scopes.
-const _: () = {
-    const fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<crate::Catalog>();
-};
-
-impl Error {
-    /// The conformance category this error belongs to.
-    pub fn category(&self) -> Category {
-        let (category, _) = self.0.class();
-        category
-    }
-
-    /// The A2UI code a renderer reports for this error.
-    pub fn code(&self) -> ErrorCode {
-        let (_, code) = self.0.class();
-        code
-    }
-}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -106,7 +16,7 @@ pub(crate) enum Inner {
         backtrace: Backtrace,
     },
 
-    #[snafu(display("Invalid JSON Pointer '{path}': {reason}"))]
+    #[snafu(display("Invalid path syntax '{path}': {reason}"))]
     InvalidPointer {
         path: Quoted,
         reason: &'static str,
@@ -252,11 +162,9 @@ pub(crate) enum Inner {
     #[snafu(display("Component name 'Surface' is reserved for the surface root"))]
     ReservedComponent { backtrace: Backtrace },
 
-    #[snafu(display("Invalid UAX #31 {kind} identifier: '{name}'{context}"))]
+    #[snafu(display("{reason}"))]
     InvalidIdentifier {
-        kind: &'static str,
-        name: Quoted,
-        context: Reason,
+        reason: Reason,
         backtrace: Backtrace,
     },
 
@@ -317,17 +225,61 @@ pub(crate) enum Inner {
         function: Quoted,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("{reason}"))]
+    MessageEnvelope {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{reason}"))]
+    MessageField {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("A2UI message exceeds the {limit}-byte limit"))]
+    MessageTooLarge { limit: usize, backtrace: Backtrace },
+
+    #[snafu(display("Invalid JSON in A2UI message: {message}"))]
+    MessageJson {
+        message: Quoted,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{reason}"))]
+    FunctionCallShape {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Global recursion limit exceeded: more than {limit} nested containers"))]
+    ValueDepth { limit: usize, backtrace: Backtrace },
+
+    #[snafu(display("functionCall depth {depth} exceeds the limit of {limit}"))]
+    CallDepth {
+        depth: usize,
+        limit: usize,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{failure}"))]
+    Process {
+        failure: Box<ProcessFailure>,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
     /// The category and code of this error, decided per variant.
-    fn class(&self) -> (Category, ErrorCode) {
+    pub(super) fn class(&self) -> (Category, ErrorCode) {
         match self {
             Self::ForbiddenSegment { .. }
             | Self::TraversePrimitive { .. }
             | Self::NonNumericSegment { .. }
             | Self::IndexOutOfRange { .. } => (Category::Data, ErrorCode::DataError),
             Self::ExpressionSyntax { .. } => (Category::Parse, ErrorCode::ExpressionError),
+            Self::MessageJson { .. } => (Category::Parse, ErrorCode::ValidationFailed),
             Self::ExpressionLimit { .. } => (Category::Expression, ErrorCode::ExpressionError),
             Self::EmbeddedSchema { .. }
             | Self::SchemaBuild { .. }
@@ -357,11 +309,21 @@ impl Inner {
             | Self::CallShape { .. }
             | Self::SystemFunctionCatalog { .. }
             | Self::UnknownFunction { .. }
-            | Self::AgentOnlyCall { .. } => (Category::Validation, ErrorCode::ValidationFailed),
+            | Self::AgentOnlyCall { .. }
+            | Self::MessageEnvelope { .. }
+            | Self::MessageTooLarge { .. }
+            | Self::MessageField { .. } => (Category::Validation, ErrorCode::ValidationFailed),
+            Self::FunctionCallShape { .. } => {
+                (Category::Validation, ErrorCode::InvalidFunctionCall)
+            }
+            Self::ValueDepth { .. } | Self::CallDepth { .. } => {
+                (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+            }
+            Self::Process { failure, .. } => (failure.category(), failure.code()),
         }
     }
 }
 
 #[cfg(test)]
-#[path = "error_tests.rs"]
+#[path = "inner_tests.rs"]
 mod tests;

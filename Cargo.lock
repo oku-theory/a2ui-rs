@@ -17,6 +17,7 @@ version = "0.3.0"
 dependencies = [
  "a2ui-catalog-basic",
  "a2ui-runtime",
+ "jsonschema",
  "libtest-mimic",
  "percent-encoding",
  "regex",

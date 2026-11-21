@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 use snafu::{OptionExt, ensure};
 
 use super::document::{argument_names, property_names, return_type};
-use super::{AllowedCallers, ComponentDef, ComponentShape, FunctionDef};
+use super::{AllowedCallers, ChildSlot, ComponentDef, ComponentShape, FunctionDef};
 use crate::error::{
     Error, InvalidIdentifierSnafu, MalformedCatalogSnafu, ReservedComponentSnafu,
     UserActivationSnafu,
@@ -23,6 +23,7 @@ pub(super) struct ComponentAttrs {
     allowed_parents: Option<Vec<String>>,
     allowed_children: Option<Vec<String>>,
     metadata: Option<Value>,
+    child_slots: Vec<ChildSlot>,
 }
 
 impl ComponentAttrs {
@@ -44,6 +45,7 @@ impl ComponentAttrs {
             allowed_parents: names_list(map, "allowedParents", name)?,
             allowed_children: names_list(map, "allowedChildren", name)?,
             metadata,
+            child_slots: Vec::new(),
         })
     }
 
@@ -57,6 +59,11 @@ impl ComponentAttrs {
         &self.schema
     }
 
+    /// Records where the schema holds child component ids.
+    pub(super) fn set_child_slots(&mut self, slots: Vec<ChildSlot>) {
+        self.child_slots = slots;
+    }
+
     /// The definition, completed with its shape and validator.
     pub(super) fn into_def(self, shape: ComponentShape, validator: Arc<Validator>) -> ComponentDef {
         ComponentDef {
@@ -66,6 +73,7 @@ impl ComponentAttrs {
             allowed_children: self.allowed_children,
             metadata: self.metadata,
             shape,
+            child_slots: self.child_slots,
             validator,
         }
     }
@@ -158,14 +166,38 @@ fn check_identifier(
     ensure!(
         is_identifier(name),
         InvalidIdentifierSnafu {
-            kind,
-            name,
-            context: owner.map_or(Reason::from(""), |(owner_kind, owner)| {
-                reason![" in ", owner_kind, " '", Quoted::new(owner), "'"]
-            }),
+            reason: identifier_reason(kind, name, owner)
         }
     );
     Ok(())
+}
+
+/// The wording of an invalid identifier, naming its owner when it has one.
+fn identifier_reason(
+    kind: &'static str,
+    name: &str,
+    owner: Option<(&'static str, &str)>,
+) -> Reason {
+    match owner {
+        Some((owner_kind, owner)) => reason![
+            "Invalid UAX #31 ",
+            kind,
+            " identifier: '",
+            Quoted::new(name),
+            "' in ",
+            owner_kind,
+            " '",
+            Quoted::new(owner),
+            "'"
+        ],
+        None => reason![
+            "Invalid UAX #31 ",
+            kind,
+            " identifier: '",
+            Quoted::new(name),
+            "'"
+        ],
+    }
 }
 
 fn entry<'a>(

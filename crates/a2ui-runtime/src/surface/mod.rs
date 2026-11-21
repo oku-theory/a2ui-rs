@@ -1,0 +1,209 @@
+//! The state a processor keeps per surface.
+
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
+use serde_json::{Map, Value};
+
+use crate::data::DataModel;
+use crate::message::CreateSurface;
+
+/// One surface a processor holds: its settings, components and data model.
+///
+/// It names its default catalog by id; the processor's `CatalogSet` holds the catalogs. It
+/// keeps each component as sent, in arrival order; one sent again replaces it in place.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Surface {
+    id: String,
+    catalog_id: Option<String>,
+    sends_data_model: bool,
+    metadata: Option<Map<String, Value>>,
+    data_model: DataModel,
+    components: Vec<Map<String, Value>>,
+    /// The position in `components` of each component id.
+    index: HashMap<String, usize>,
+}
+
+/// Components checked for a surface, stored by [`Surface::commit`].
+#[derive(Debug)]
+pub(crate) struct Staged {
+    /// Each component's id and entries, in message order; ids are distinct.
+    pub(crate) components: Vec<(String, Map<String, Value>)>,
+}
+
+/// A surface's components with staged ones applied, as [`Surface::commit`] would store them.
+#[derive(Debug)]
+pub(crate) struct Merged<'a> {
+    surface: &'a Surface,
+    /// Each component's id and entries, in arrival order.
+    components: Vec<(&'a str, &'a Map<String, Value>)>,
+    /// The position in `components` of each component id.
+    index: HashMap<&'a str, usize>,
+}
+
+impl<'a> Merged<'a> {
+    /// The surface the staged components were sent to.
+    pub(crate) fn surface(&self) -> &'a Surface {
+        self.surface
+    }
+
+    /// Each component's id and entries, in arrival order.
+    pub(crate) fn components(&self) -> &[(&'a str, &'a Map<String, Value>)] {
+        &self.components
+    }
+
+    /// The arrival position of the component whose id is `id`.
+    pub(crate) fn position(&self, id: &str) -> Option<usize> {
+        self.index.get(id).copied()
+    }
+
+    /// Whether a component has the id `id`.
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.index.contains_key(id)
+    }
+}
+
+impl Surface {
+    /// The surface a `createSurface` message describes.
+    pub(crate) fn new(create: &CreateSurface) -> Self {
+        let data_model = create.data_model.clone().map(Value::Object);
+        Self {
+            id: create.surface_id.clone(),
+            catalog_id: create.catalog_id.clone(),
+            sends_data_model: create.send_data_model,
+            metadata: create.metadata.clone(),
+            data_model: data_model.map_or_else(DataModel::default, DataModel::new),
+            components: Vec::new(),
+            index: HashMap::new(),
+        }
+    }
+
+    /// The surface id.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// The default catalog id; `Some("")` when the message named an empty one.
+    pub fn catalog_id(&self) -> Option<&str> {
+        self.catalog_id.as_deref()
+    }
+
+    /// Whether the renderer sends the data model back to the agent.
+    pub fn sends_data_model(&self) -> bool {
+        self.sends_data_model
+    }
+
+    /// The metadata `createSurface` gave, if any.
+    pub fn metadata(&self) -> Option<&Map<String, Value>> {
+        self.metadata.as_ref()
+    }
+
+    /// The surface's data model.
+    pub fn data_model(&self) -> &DataModel {
+        &self.data_model
+    }
+
+    /// The components, as sent, in arrival order.
+    pub fn components(&self) -> impl ExactSizeIterator<Item = &Map<String, Value>> {
+        self.components.iter()
+    }
+
+    /// The component whose id is `id`, as sent.
+    pub fn component(&self, id: &str) -> Option<&Map<String, Value>> {
+        self.index.get(id).and_then(|&at| self.components.get(at))
+    }
+
+    /// The component `id`, with one `@` stripped from each key starting `@@`.
+    ///
+    /// Keys at every depth are unescaped; values are untouched.
+    pub fn unescaped_component(&self, id: &str) -> Option<Map<String, Value>> {
+        let mut component = self.component(id)?.clone();
+        unescape_keys(&mut component);
+        let mut pending: Vec<&mut Value> = component.values_mut().collect();
+        while let Some(node) = pending.pop() {
+            match node {
+                Value::Object(map) => {
+                    unescape_keys(map);
+                    pending.extend(map.values_mut());
+                }
+                Value::Array(items) => pending.extend(items.iter_mut()),
+                _ => {}
+            }
+        }
+        Some(component)
+    }
+
+    /// Stores `staged`: a component with a known id replaces it in place, others are appended.
+    pub(crate) fn commit(&mut self, staged: Staged) {
+        for (id, component) in staged.components {
+            match self.index.entry(id) {
+                // Only this match writes `index` and `components`, and a vacant id gets the
+                // position its push fills, so every indexed position exists.
+                Entry::Occupied(entry) => self.components[*entry.get()] = component,
+                Entry::Vacant(entry) => {
+                    entry.insert(self.components.len());
+                    self.components.push(component);
+                }
+            }
+        }
+    }
+
+    /// The components `commit(staged)` would leave, without storing them.
+    pub(crate) fn merged<'a>(&'a self, staged: &'a Staged) -> Merged<'a> {
+        // `commit` keeps the positions in `index` exactly those of `components`, so sorting
+        // the entries by position pairs each id with its component in arrival order.
+        let mut entries: Vec<(&str, usize)> = self
+            .index
+            .iter()
+            .map(|(id, &at)| (id.as_str(), at))
+            .collect();
+        entries.sort_unstable_by_key(|&(_, at)| at);
+        let mut components: Vec<(&str, &Map<String, Value>)> = entries
+            .into_iter()
+            .map(|(id, at)| (id, &self.components[at]))
+            .collect();
+        let mut index: HashMap<&str, usize> = self
+            .index
+            .iter()
+            .map(|(id, &at)| (id.as_str(), at))
+            .collect();
+        for (id, component) in &staged.components {
+            match index.entry(id) {
+                Entry::Occupied(entry) => {
+                    if let Some(entry) = components.get_mut(*entry.get()) {
+                        entry.1 = component;
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(components.len());
+                    components.push((id, component));
+                }
+            }
+        }
+        Merged {
+            surface: self,
+            components,
+            index,
+        }
+    }
+
+    pub(crate) fn data_model_mut(&mut self) -> &mut DataModel {
+        &mut self.data_model
+    }
+}
+
+/// Strips one `@` from each key of `map` starting `@@`.
+fn unescape_keys(map: &mut Map<String, Value>) {
+    for (key, value) in std::mem::take(map) {
+        let key = match key.strip_prefix('@') {
+            Some(rest) if rest.starts_with('@') => rest.to_owned(),
+            _ => key,
+        };
+        map.insert(key, value);
+    }
+}
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

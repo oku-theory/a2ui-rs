@@ -10,7 +10,8 @@ Inputs with several parts join them with NUL, as fuzz/src/lib.rs's `fields` spli
 parts first so mutations reach them: catalog_parse takes [catalog_id, [protocol_version,]] then
 the catalog; validate_component a component, then a default catalog id; parse_then_validate a
 component, [a default catalog id,] then the catalog. template_parse gets each string holding
-`${`, pointer_parse each `@path` value and each string starting with `/`.
+`${`, pointer_parse each `@path` value and each string starting with `/`. message_parse takes
+one message as JSON text: each message of the basic catalog's examples and one per action.
 """
 
 import glob
@@ -29,6 +30,8 @@ TARGETS = {
     "parse_then_validate": (1048576, 2),
     "template_parse": (16384, 1),
     "pointer_parse": (4096, 1),
+    # Past the 1 MiB default message cap, so the cap itself is reached.
+    "message_parse": (1100000, 2),
 }
 BASIC = "vendor/a2ui/catalogs/basic/v1/catalog.json"
 # An id no catalog has, so a nested call's catalog is not found.
@@ -131,6 +134,43 @@ def components():
     return found
 
 
+def example_messages():
+    """Each message of the basic catalog's examples, as compact JSON bytes.
+
+    A file holds a `{"messages": [...]}` wrapper, an array or one message; another shape fails.
+    """
+    found = []
+    for name in files("vendor/a2ui/catalogs/basic/v1/examples/*.json"):
+        document = json.loads(pathlib.Path(name).read_text())
+        if isinstance(document, dict) and isinstance(document.get("messages"), list):
+            messages = document["messages"]
+        elif isinstance(document, list):
+            messages = document
+        elif isinstance(document, dict) and "version" in document:
+            messages = [document]
+        else:
+            raise SystemExit(f"fuzz_targets.py: {name} holds no message, array or wrapper")
+        found += [json.dumps(message, separators=(",", ":")).encode() for message in messages]
+    return found
+
+
+def action_messages():
+    """One valid message per action, as compact JSON bytes."""
+    call = {"@call": "now", "catalogId": "c"}
+    bodies = [
+        {"createSurface": {"surfaceId": "s", "catalogId": "c", "sendDataModel": True}},
+        {"updateComponents": {"surfaceId": "s", "components": [
+            {"id": "root", "component": "Text", "text": "hi"}]}},
+        {"updateDataModel": {"surfaceId": "s", "path": "/a/0", "value": {"b": [1, None]}}},
+        {"deleteSurface": {"surfaceId": "s"}},
+        {"callRendererFunction": {"surfaceId": "s", "callFunction": call,
+                                  "functionCallId": "f1"}},
+        {"agentFunctionResponse": {"functionCallId": "f1", "value": 3}},
+    ]
+    return [json.dumps({"version": "1.0", **body}, separators=(",", ":")).encode()
+            for body in bodies]
+
+
 def catalogs():
     """The vendored catalogs' texts: the published ones, then the conformance suite's."""
     names = files("vendor/a2ui/catalogs/*/v1/catalog.json")
@@ -152,6 +192,8 @@ def seeds(target):
         pairs = [component + b"\0" + basic for component in found]
         pairs += [found[index % len(found)] + b"\0" + text for index, text in enumerate(catalogs())]
         return pairs + [found[0] + b"\0" + UNKNOWN_ID + b"\0" + basic]
+    if target == "message_parse":
+        return example_messages() + action_messages()
     names = files("vendor/a2ui/catalogs/basic/v1/examples/*.json")
     names += files("vendor/a2ui/conformance/test_data/catalogs/*.json")
     names += files("vendor/a2ui/specification/v1_0/test/cases/*.json")

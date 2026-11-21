@@ -89,7 +89,7 @@ impl Bundle {
     }
 
     /// The bundle as one document, each section under its catalog key.
-    fn document(&self) -> Value {
+    pub(super) fn document(&self) -> Value {
         Value::Object(Map::from_iter([
             (
                 "components".to_owned(),
@@ -184,13 +184,9 @@ impl Totals {
     fn add<'r>(&mut self, reach: Reach<'r>) -> Result<Targets<'r>, Error> {
         self.size += reach.size;
         self.patterns += reach.patterns;
-        ensure!(
-            self.size <= MAX_CATALOG_EXPANSION,
-            CatalogLimitSnafu {
-                what: "schema nodes in all entries once their $refs are expanded",
-                limit: MAX_CATALOG_EXPANSION,
-            }
-        );
+        if self.size > MAX_CATALOG_EXPANSION {
+            return Err(catalog_too_large());
+        }
         ensure!(
             self.patterns <= MAX_CATALOG_PATTERNS,
             CatalogLimitSnafu {
@@ -214,10 +210,16 @@ fn compile_entry(
     Ok(Arc::new(compile(&document)?))
 }
 
+/// The keyword closing a component's document at its root: a property the component's schema
+/// does not evaluate violates it, at the schema path `/unevaluatedProperties`.
+pub(super) const UNDECLARED_KEYWORD: &str = "unevaluatedProperties";
+
 /// The document the entry `name` of `section` compiles against, rooted at that entry.
 ///
 /// It holds `$schema`, the root `$ref`, the entry and each `$defs`, `components` or
-/// `functions` entry of `targets`, so a build costs the entry, not the catalog. Each target's
+/// `functions` entry of `targets`, so a build costs the entry, not the catalog. A component's
+/// document is closed by [`UNDECLARED_KEYWORD`] beside the root `$ref`; whether that violation
+/// counts is the caller's choice (`ValidationRules::allow_undeclared_properties`). Each target's
 /// borrowed name is copied here, as a key of the pruned document. Every target
 /// was resolved in `root` by the entry's expansion, so each lookup finds it; were one absent,
 /// the pruned document would keep a dangling `$ref`, which [`compile_entry`]'s build reports.
@@ -246,10 +248,13 @@ fn pruned(
                 .insert(target.to_owned(), definition.clone());
         }
     }
-    let top: Map<String, Value> = sections
+    let mut top: Map<String, Value> = sections
         .into_iter()
         .map(|(key, entries)| (key.to_owned(), Value::Object(entries)))
         .collect();
+    if section == "components" {
+        top.insert(UNDECLARED_KEYWORD.to_owned(), Value::Bool(false));
+    }
     let reference = local_ref(&format!("/{section}/{name}"));
     rooted(&top, &reference)
 }
@@ -294,6 +299,44 @@ struct Reach<'r> {
     targets: Targets<'r>,
 }
 
+/// The error for the entry `name` past `MAX_ENTRY_EXPANSION` schema nodes.
+pub(super) fn entry_too_large(name: &str) -> Error {
+    CatalogLimitSnafu {
+        what: reason![
+            "schema nodes in '",
+            Quoted::new(name),
+            "' once its $refs are expanded",
+        ],
+        limit: MAX_ENTRY_EXPANSION,
+    }
+    .build()
+    .into()
+}
+
+/// The error for the entry `name` past `MAX_SCHEMA_DEPTH` levels once expanded.
+pub(super) fn entry_too_deep(name: &str) -> Error {
+    CatalogLimitSnafu {
+        what: reason![
+            "levels of '",
+            Quoted::new(name),
+            "' once its $refs are expanded"
+        ],
+        limit: MAX_SCHEMA_DEPTH,
+    }
+    .build()
+    .into()
+}
+
+/// The error for all entries together past `MAX_CATALOG_EXPANSION` schema nodes.
+pub(super) fn catalog_too_large() -> Error {
+    CatalogLimitSnafu {
+        what: "schema nodes in all entries once their $refs are expanded",
+        limit: MAX_CATALOG_EXPANSION,
+    }
+    .build()
+    .into()
+}
+
 /// Expands the entry `name` in `root`; each way it breaks load rule 11 is a `CatalogError`.
 fn reach<'r>(root: &'r Value, name: &str, schema: &Value) -> Result<Reach<'r>, Error> {
     match expand(root, schema, MAX_ENTRY_EXPANSION) {
@@ -306,26 +349,8 @@ fn reach<'r>(root: &'r Value, name: &str, schema: &Value) -> Result<Reach<'r>, E
             patterns,
             targets: reached,
         }),
-        Expansion::TooLarge => Err(CatalogLimitSnafu {
-            what: reason![
-                "schema nodes in '",
-                Quoted::new(name),
-                "' once its $refs are expanded",
-            ],
-            limit: MAX_ENTRY_EXPANSION,
-        }
-        .build()
-        .into()),
-        Expansion::TooDeep => Err(CatalogLimitSnafu {
-            what: reason![
-                "levels of '",
-                Quoted::new(name),
-                "' once its $refs are expanded"
-            ],
-            limit: MAX_SCHEMA_DEPTH,
-        }
-        .build()
-        .into()),
+        Expansion::TooLarge => Err(entry_too_large(name)),
+        Expansion::TooDeep => Err(entry_too_deep(name)),
         Expansion::Cycle(reference) => Err(MalformedCatalogSnafu {
             reason: reason!["$ref cycle through '", Quoted::new(&reference), "'"],
         }

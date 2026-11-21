@@ -3,7 +3,7 @@
 use serde_json::{Map, Value, json};
 use speculoos::prelude::*;
 
-use crate::{Catalog, Category, Error};
+use crate::{Catalog, CatalogSet, Category, Error};
 
 /// Loads `document` with no overrides.
 pub(crate) fn load(document: Value) -> Result<Catalog, Error> {
@@ -45,12 +45,113 @@ pub(crate) const WASM_STACK: usize = 1 << 20;
 
 /// Loads `document` as [`load`] does, on a thread with a [`WASM_STACK`] stack.
 pub(crate) fn load_on_a_small_stack(document: Value) -> Result<Catalog, Error> {
+    on_a_small_stack(move || load(document))
+}
+
+/// Runs `work` on a thread with a [`WASM_STACK`] stack.
+pub(crate) fn on_a_small_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     std::thread::Builder::new()
         .stack_size(WASM_STACK)
-        .spawn(move || load(document))
+        .spawn(work)
         .unwrap()
         .join()
         .unwrap()
+}
+
+/// The common type `name` as a `$ref`.
+fn common(name: &str) -> Value {
+    json!({"$ref": format!("common_types.json#/$defs/{name}")})
+}
+
+/// Catalog `a`: `Text`, `Chart`, `Column`, `Button`, `Any`, `Many`; functions `upper`,
+/// `fetch` (agentOnly) and `both` (no arguments).
+pub(crate) fn catalog_a() -> Catalog {
+    let many: Map<String, Value> = (0..17)
+        .map(|index| (format!("p{index}"), json!({"type": "string"})))
+        .collect();
+    let required: Vec<String> = many.keys().cloned().collect();
+    load(json!({
+        "catalogId": "a",
+        "protocolVersion": "1.0",
+        "components": {
+            "Text": {
+                "type": "object",
+                "properties": {"component": {"const": "Text"}, "text": common("DynamicString")},
+                "required": ["component", "text"]
+            },
+            "Chart": {
+                "type": "object",
+                "properties": {
+                    "component": {"const": "Chart"},
+                    "chartType": {"type": "string", "enum": ["bar", "line"]}
+                }
+            },
+            "Column": {
+                "type": "object",
+                "properties": {"component": {"const": "Column"}, "children": common("ChildList")},
+                "required": ["children"]
+            },
+            "Button": {
+                "type": "object",
+                "properties": {
+                    "component": {"const": "Button"},
+                    "child": common("ComponentId"),
+                    "action": common("Action")
+                },
+                "required": ["child"],
+                "unevaluatedProperties": false
+            },
+            "Any": {
+                "type": "object",
+                "properties": {"component": {"const": "Any"}},
+                "additionalProperties": true
+            },
+            "Many": {"type": "object", "properties": many, "required": required}
+        },
+        "functions": {
+            "upper": {
+                "type": "object",
+                "returnType": "string",
+                "properties": {
+                    "@call": {"const": "upper"},
+                    "args": {
+                        "type": "object",
+                        "properties": {"value": common("DynamicString")},
+                        "required": ["value"],
+                        "unevaluatedProperties": false
+                    }
+                },
+                "required": ["@call", "args"]
+            },
+            "fetch": {"type": "object", "returnType": "string", "allowedCallers": "agentOnly"},
+            "both": {"type": "object", "returnType": "string", "allowedCallers": "rendererOrAgent"}
+        }
+    }))
+    .unwrap()
+}
+
+/// Catalog `b`: a `Badge` component and an `onlyB` function.
+pub(crate) fn catalog_b() -> Catalog {
+    load(json!({
+        "catalogId": "b",
+        "protocolVersion": "1.0",
+        "components": {
+            "Badge": {
+                "type": "object",
+                "properties": {"component": {"const": "Badge"}, "label": common("DynamicString")}
+            }
+        },
+        "functions": {"onlyB": {"type": "object", "returnType": "string"}}
+    }))
+    .unwrap()
+}
+
+/// A set holding [`catalog_a`] and [`catalog_b`].
+pub(crate) fn catalog_set() -> CatalogSet {
+    let mut set = CatalogSet::new();
+    set.insert(catalog_a()).unwrap();
+    set.insert(catalog_b()).unwrap();
+    set
 }
 
 /// `$defs` `L0` to `L<levels>`, each level an `allOf` of two `$ref`s to the one below.

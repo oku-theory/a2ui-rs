@@ -32,7 +32,11 @@ fn catalog() -> Catalog {
                 "required": ["component", "value"],
                 "unevaluatedProperties": false
             },
-            "Any": {"type": "object", "properties": {"component": {"const": "Any"}}}
+            "Any": {
+                "type": "object",
+                "properties": {"component": {"const": "Any"}},
+                "additionalProperties": true
+            }
         },
         "functions": {
             "upper": {
