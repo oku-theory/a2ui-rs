@@ -2,7 +2,9 @@ use rstest::rstest;
 use speculoos::prelude::*;
 
 use super::*;
+use crate::detail::{Detail, DetailCode};
 use crate::limits::MAX_QUOTED_CHARS;
+use crate::quoted::reason;
 
 #[test]
 fn error_display_quoted_field_escapes_controls() {
@@ -63,6 +65,7 @@ fn error_debug_large_field_is_capped() {
 #[case::expression(ErrorCode::ExpressionError, "EXPRESSION_ERROR")]
 #[case::catalog(ErrorCode::CatalogError, "CATALOG_ERROR")]
 #[case::validation(ErrorCode::ValidationFailed, "VALIDATION_FAILED")]
+#[case::function_call(ErrorCode::InvalidFunctionCall, "INVALID_FUNCTION_CALL")]
 fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expected: &str) {
     assert_that!(code.as_str()).is_equal_to(expected);
 }
@@ -123,6 +126,21 @@ fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expec
     Category::Validation,
     ErrorCode::ValidationFailed
 )]
+#[case::function_call_shape(
+    FunctionCallShapeSnafu { reason: reason!["bad call"] }.build(),
+    Category::Validation,
+    ErrorCode::InvalidFunctionCall
+)]
+#[case::message_envelope(
+    MessageEnvelopeSnafu { reason: reason!["bad envelope"] }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
+#[case::message_field(
+    MessageFieldSnafu { reason: reason!["bad field"] }.build(),
+    Category::Validation,
+    ErrorCode::ValidationFailed
+)]
 fn error_class_of_variant_is_its_upstream_category_and_code(
     #[case] inner: Inner,
     #[case] category: Category,
@@ -130,4 +148,49 @@ fn error_class_of_variant_is_its_upstream_category_and_code(
 ) {
     let error: Error = inner.into();
     assert_that!((error.category(), error.code())).is_equal_to((category, code));
+}
+
+fn value_limit() -> Error {
+    ValueLimitSnafu { limit: 64_usize }.build().into()
+}
+
+#[test]
+fn error_without_context_reads_none() {
+    let error = value_limit();
+    assert_that!(error.path()).is_none();
+    assert_that!(error.surface_id()).is_none();
+    assert_that!(error.function_call_id()).is_none();
+    assert_that!(error.details().is_empty()).is_true();
+}
+
+#[test]
+fn error_context_reads_back() {
+    let detail = Detail::new("a.b".to_owned(), DetailCode::InvalidValue);
+    let error = value_limit()
+        .with_path("/a".to_owned())
+        .with_surface("s1")
+        .with_function_call("c1")
+        .with_detail(detail.clone());
+    assert_that!(error.path()).is_equal_to(Some("/a"));
+    assert_that!(error.surface_id()).is_equal_to(Some("s1"));
+    assert_that!(error.function_call_id()).is_equal_to(Some("c1"));
+    assert_that!(error.details()).is_equal_to(&[detail][..]);
+}
+
+#[test]
+fn error_display_is_the_inner_message() {
+    let error = value_limit().with_path("/a".to_owned());
+    assert_that!(error.to_string()).is_equal_to("Value nesting exceeds 64 levels".to_owned());
+}
+
+#[test]
+fn error_backtrace_delegates_to_inner() {
+    let error = value_limit();
+    assert_that!(ErrorCompat::backtrace(&error).is_some()).is_true();
+}
+
+#[test]
+fn error_source_is_none_for_a_leaf_variant() {
+    let error = value_limit();
+    assert_that!(std::error::Error::source(&error).is_none()).is_true();
 }

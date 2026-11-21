@@ -12,17 +12,20 @@
 //! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
 //! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
 //! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
-//! [`Derivation`].
+//! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
+//! faults carry a [`Detail`]).
 
 mod bundle;
 mod catalog;
 mod context;
 mod data;
+mod detail;
 mod error;
 mod expression;
 mod ident;
 mod keys;
 mod limits;
+mod message;
 mod pointer;
 mod quoted;
 mod schema;
@@ -36,7 +39,12 @@ pub use catalog::{
 };
 pub use context::resolve_path;
 pub use data::{DataModel, Write};
+pub use detail::{Detail, DetailCode};
 pub use error::{Category, Error, ErrorCode};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
+pub use message::{
+    AgentFunctionResponse, AgentMessage, CallRendererFunction, CreateSurface, DeleteSurface,
+    UpdateComponents, UpdateDataModel,
+};
 pub use pointer::{MAX_LIST_INDEX, Pointer};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};

@@ -3,8 +3,11 @@
 //! Input a message quotes is held as [`Quoted`] (escaped, capped) from the moment the error is
 //! built, alone or as a piece of runtime wording, a [`Reason`] that only `reason!` composes.
 
-use snafu::{Backtrace, Snafu};
+use std::fmt;
 
+use snafu::{Backtrace, ErrorCompat, Snafu};
+
+use crate::detail::Context;
 use crate::quoted::{Quoted, Reason};
 
 /// The conformance category of an [`Error`], as the upstream suites name it.
@@ -55,6 +58,8 @@ pub enum ErrorCode {
     CatalogError,
     /// A rejected component or value, or a malformed JSON Pointer.
     ValidationFailed,
+    /// A `callRendererFunction` message that breaks its schema.
+    InvalidFunctionCall,
 }
 
 impl ErrorCode {
@@ -65,16 +70,23 @@ impl ErrorCode {
             Self::ExpressionError => "EXPRESSION_ERROR",
             Self::CatalogError => "CATALOG_ERROR",
             Self::ValidationFailed => "VALIDATION_FAILED",
+            Self::InvalidFunctionCall => "INVALID_FUNCTION_CALL",
         }
     }
 }
 
 /// An error raised by the runtime; [`Error::category`] and [`Error::code`] classify it.
-#[derive(Debug, Snafu)]
-pub struct Error(Inner);
+///
+/// An error from reading a message also carries where it happened: [`Error::path`],
+/// [`Error::surface_id`], [`Error::function_call_id`] and [`Error::details`].
+#[derive(Debug)]
+pub struct Error {
+    inner: Inner,
+    pub(crate) context: Option<Box<Context>>,
+}
 
-// `Result<_, Error>` stays under clippy's `result_large_err` threshold of 128 bytes.
-const _: () = assert!(size_of::<Error>() <= 128);
+// Clippy's `result_large_err` trips at 128 bytes, so `Result<_, Error>` must stay below it.
+const _: () = assert!(size_of::<Error>() < 128);
 
 // A loaded catalog is shared across threads and reactive scopes.
 const _: () = {
@@ -82,16 +94,43 @@ const _: () = {
     assert_send_sync::<crate::Catalog>();
 };
 
+impl From<Inner> for Error {
+    fn from(inner: Inner) -> Self {
+        Self {
+            inner,
+            context: None,
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.inner.source()
+    }
+}
+
+impl ErrorCompat for Error {
+    fn backtrace(&self) -> Option<&Backtrace> {
+        ErrorCompat::backtrace(&self.inner)
+    }
+}
+
 impl Error {
     /// The conformance category this error belongs to.
     pub fn category(&self) -> Category {
-        let (category, _) = self.0.class();
+        let (category, _) = self.inner.class();
         category
     }
 
     /// The A2UI code a renderer reports for this error.
     pub fn code(&self) -> ErrorCode {
-        let (_, code) = self.0.class();
+        let (_, code) = self.inner.class();
         code
     }
 }
@@ -106,7 +145,7 @@ pub(crate) enum Inner {
         backtrace: Backtrace,
     },
 
-    #[snafu(display("Invalid JSON Pointer '{path}': {reason}"))]
+    #[snafu(display("Invalid path syntax '{path}': {reason}"))]
     InvalidPointer {
         path: Quoted,
         reason: &'static str,
@@ -252,11 +291,9 @@ pub(crate) enum Inner {
     #[snafu(display("Component name 'Surface' is reserved for the surface root"))]
     ReservedComponent { backtrace: Backtrace },
 
-    #[snafu(display("Invalid UAX #31 {kind} identifier: '{name}'{context}"))]
+    #[snafu(display("{reason}"))]
     InvalidIdentifier {
-        kind: &'static str,
-        name: Quoted,
-        context: Reason,
+        reason: Reason,
         backtrace: Backtrace,
     },
 
@@ -317,6 +354,24 @@ pub(crate) enum Inner {
         function: Quoted,
         backtrace: Backtrace,
     },
+
+    #[snafu(display("{reason}"))]
+    MessageEnvelope {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{reason}"))]
+    MessageField {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{reason}"))]
+    FunctionCallShape {
+        reason: Reason,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {
@@ -357,7 +412,12 @@ impl Inner {
             | Self::CallShape { .. }
             | Self::SystemFunctionCatalog { .. }
             | Self::UnknownFunction { .. }
-            | Self::AgentOnlyCall { .. } => (Category::Validation, ErrorCode::ValidationFailed),
+            | Self::AgentOnlyCall { .. }
+            | Self::MessageEnvelope { .. }
+            | Self::MessageField { .. } => (Category::Validation, ErrorCode::ValidationFailed),
+            Self::FunctionCallShape { .. } => {
+                (Category::Validation, ErrorCode::InvalidFunctionCall)
+            }
         }
     }
 }

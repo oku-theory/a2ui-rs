@@ -50,15 +50,15 @@ fn parse_malformed_pointer_is_validation_error(#[case] input: &str) {
 #[rstest]
 #[case(
     "relative/a",
-    "Invalid JSON Pointer 'relative/a': an absolute pointer starts with '/'"
+    "Invalid path syntax 'relative/a': an absolute pointer starts with '/'"
 )]
 #[case(
     "/ok/bad~2escape/tail",
-    "Invalid JSON Pointer '/ok/bad~2escape/tail': '~' must be followed by '0' or '1'"
+    "Invalid path syntax '/ok/bad~2escape/tail': '~' must be followed by '0' or '1'"
 )]
 #[case(
     "/ok/trailing~",
-    "Invalid JSON Pointer '/ok/trailing~': '~' must be followed by '0' or '1'"
+    "Invalid path syntax '/ok/trailing~': '~' must be followed by '0' or '1'"
 )]
 fn parse_malformed_pointer_message_names_whole_path(#[case] input: &str, #[case] shown: &str) {
     let err = Pointer::parse(input).unwrap_err();

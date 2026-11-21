@@ -64,7 +64,8 @@ It builds for wasm32-unknown-unknown; running needs a JS host (getrandom `wasm_j
 
 One concept per module:
 
-- `message`: serde types `AgentMessage` / `RendererMessage`; `"version": "1.0"` checked on read.
+- `message`: hand-built types `AgentMessage` / `RendererMessage`, read after JSON Schema
+  validation (Decision 49 of Plan 3a; no serde); `"version": "1.0"` checked on read.
 - `pointer`: RFC 6901 JSON Pointer and relative-path resolution against a template scope.
 - `data`: `DataModel` over `serde_json::Value`; get/set/delete with missing-path creation; every
   write returns the paths it touched.

@@ -158,14 +158,38 @@ fn check_identifier(
     ensure!(
         is_identifier(name),
         InvalidIdentifierSnafu {
-            kind,
-            name,
-            context: owner.map_or(Reason::from(""), |(owner_kind, owner)| {
-                reason![" in ", owner_kind, " '", Quoted::new(owner), "'"]
-            }),
+            reason: identifier_reason(kind, name, owner)
         }
     );
     Ok(())
+}
+
+/// The wording of an invalid identifier, naming its owner when it has one.
+fn identifier_reason(
+    kind: &'static str,
+    name: &str,
+    owner: Option<(&'static str, &str)>,
+) -> Reason {
+    match owner {
+        Some((owner_kind, owner)) => reason![
+            "Invalid UAX #31 ",
+            kind,
+            " identifier: '",
+            Quoted::new(name),
+            "' in ",
+            owner_kind,
+            " '",
+            Quoted::new(owner),
+            "'"
+        ],
+        None => reason![
+            "Invalid UAX #31 ",
+            kind,
+            " identifier: '",
+            Quoted::new(name),
+            "'"
+        ],
+    }
 }
 
 fn entry<'a>(
