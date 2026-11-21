@@ -36,6 +36,11 @@ impl DataModel {
         }
     }
 
+    /// The whole document.
+    pub(crate) fn root(&self) -> &Value {
+        &self.root
+    }
+
     /// The value at `path`; a missing or `null` value is `None`.
     pub fn get(&self, path: &Pointer) -> Option<&Value> {
         descend(&self.root, path.segments())

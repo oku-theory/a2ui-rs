@@ -20,6 +20,8 @@ pub(crate) enum ProcessFailure {
     NotYetSupported { action: &'static str },
     /// A message that would take the processor past one of its `StateLimits`.
     StateLimit { what: &'static str, limit: usize },
+    /// A write replacing a data model root with a value that is not an object.
+    NonObjectRoot,
     /// Two components of one message sharing an id.
     DuplicateComponent { id: Quoted },
     /// A component or call with no catalogId on a surface with no default.
@@ -127,6 +129,7 @@ impl ProcessFailure {
             | Self::Unreachable { .. } => Category::Integrity,
             Self::NotYetSupported { .. }
             | Self::StateLimit { .. }
+            | Self::NonObjectRoot
             | Self::SchemaViolations { .. }
             | Self::EscapedKeyCollision { .. }
             | Self::MissingRoot
@@ -152,6 +155,7 @@ impl ProcessFailure {
             | Self::Unreachable { .. } => ErrorCode::IntegrityError,
             Self::NotYetSupported { .. }
             | Self::StateLimit { .. }
+            | Self::NonObjectRoot
             | Self::SchemaViolations { .. }
             | Self::EscapedKeyCollision { .. }
             | Self::MissingRoot => ErrorCode::ValidationFailed,
@@ -174,6 +178,7 @@ impl fmt::Display for ProcessFailure {
             Self::SurfaceNotFound { id } => write!(f, "Surface not found for message: {id}"),
             Self::NotYetSupported { action } => write!(f, "Action '{action}' is not handled yet"),
             Self::StateLimit { what, limit } => write!(f, "{what} limit of {limit} exceeded"),
+            Self::NonObjectRoot => f.write_str("The data model root must be an object"),
             Self::DuplicateComponent { id } => {
                 write!(f, "Duplicate component ID '{id}' in one message")
             }

@@ -178,6 +178,40 @@ fn update_data_model_root_replaces() {
 }
 
 #[test]
+fn update_data_model_root_null_resets_to_an_empty_object() {
+    let mut processor = processor();
+    processor.handle(&create("main")).unwrap();
+    processor.handle(&write("/a", json!(1))).unwrap();
+
+    processor.handle(&write("", Value::Null)).unwrap();
+
+    assert_that!(processor.surface("main").unwrap().data_model())
+        .is_equal_to(&DataModel::new(json!({})));
+}
+
+#[rstest]
+#[case::scalar(json!(5))]
+#[case::array(json!([1]))]
+fn update_data_model_non_object_root_is_refused(#[case] value: Value) {
+    let mut processor = processor();
+    processor.handle(&create("main")).unwrap();
+    processor.handle(&write("/a", json!(1))).unwrap();
+
+    let error = processor.handle(&write("", value)).unwrap_err();
+
+    let class = (Category::Validation, ErrorCode::ValidationFailed);
+    assert_error(
+        &error,
+        class,
+        "The data model root must be an object",
+        Some("main"),
+        None,
+    );
+    assert_that!(processor.surface("main").unwrap().data_model())
+        .is_equal_to(&DataModel::new(json!({"a": 1})));
+}
+
+#[test]
 fn update_data_model_bad_path_changes_nothing() {
     let mut processor = processor();
     processor.handle(&create("main")).unwrap();

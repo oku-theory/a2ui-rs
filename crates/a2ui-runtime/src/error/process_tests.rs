@@ -34,6 +34,11 @@ use super::*;
     "Surface limit of 64 exceeded",
     (Category::Validation, ErrorCode::ValidationFailed)
 )]
+#[case::non_object_root(
+    ProcessFailure::NonObjectRoot,
+    "The data model root must be an object",
+    (Category::Validation, ErrorCode::ValidationFailed)
+)]
 #[case::duplicate_component(
     ProcessFailure::DuplicateComponent { id: "c1".into() },
     "Duplicate component ID 'c1' in one message",

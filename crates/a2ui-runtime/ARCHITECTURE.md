@@ -18,12 +18,11 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
 - `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
   with named arguments); `\${` is literal; limits 10 000 characters, 1 000 parts, nesting 100.
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
-  `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
-  `validate_common_type` (cached; `FunctionCall` takes any function but `@index`).
+  `schemas/v1_0/` by `vendor/sync.sh`, with the `LICENSE`); `validate_common_type` (cached).
 - `keys`, `ident` (UAX #31). `validator`: `jsonschema` 2020-12, offline (build failures are
   `CatalogError`); maps a violation to a message, `DetailCode` and JSON Pointer.
-- `catalog`: `Catalog` (checked v1.0 catalog, per-entry validators, `validate_component`,
-  `derive`) and `CatalogSet` (by id, duplicates refused); see `src/catalog/ARCHITECTURE.md`.
+- `catalog`: `Catalog` (checked v1.0 catalog, `validate_component`, `derive`) and `CatalogSet`
+  (by id, duplicates refused); see `src/catalog/ARCHITECTURE.md`.
 - `bundle`, `walk`, `ref_pointer`, `target`, `position`, `check`: `$ref` bundling, walking and
   the v1.0 `$ref` rules (self, `catalog.json`, `common_types.json`; no anchor or inner `$id`).
 - `limits`: caps on agent JSON (64 levels, 128 KiB per pattern, nodes, calls, 256-byte keys,
@@ -43,7 +42,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   commit, on the merged view: `topology` (self-reference, dangling, Kahn cycle, missing root,
   unreachable, depth past 50), `composition` (`allowedParents`/`allowedChildren` of reachable
   edges with an end in the message or newly reached; `root` under `Surface`). `ValidationRules`
-  (strict by default), `StateLimits`; `handle_batch` stamps `message_index`; `Outcome` empty.
+  (strict by default), `StateLimits`; `handle_batch` stamps `message_index`; a non-object data
+  model root is refused; `Outcome` empty. `reports`: `capabilities`, `data_model_report`.
 
 ## Dependencies
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;

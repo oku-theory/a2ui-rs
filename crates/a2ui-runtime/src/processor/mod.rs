@@ -8,6 +8,7 @@ pub(crate) mod children;
 mod components;
 mod composition;
 mod limits;
+mod reports;
 mod resolve;
 mod rules;
 #[cfg(test)]
@@ -234,7 +235,7 @@ impl MessageProcessor {
         Ok(())
     }
 
-    /// Writes the message's value; a write past the node limit is undone and refused.
+    /// Writes the message's value; a scalar or array root is refused, and a write past the node limit is undone and refused.
     fn update_data_model(&mut self, update: &UpdateDataModel) -> Result<(), Error> {
         let max_nodes = self.state_limits.max_data_model_nodes();
         let model = self
@@ -244,6 +245,9 @@ impl MessageProcessor {
                 id: (&update.surface_id).into(),
             })?
             .data_model_mut();
+        if update.path.is_root() && !update.value.is_null() && !update.value.is_object() {
+            return Err(ProcessFailure::NonObjectRoot.into());
+        }
         if update.value.is_null() {
             // A deletion never adds a node.
             model.set(&update.path, Value::Null)?;

@@ -15,7 +15,7 @@
 //! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
 //! faults carry a [`Detail`]), and [`MessageProcessor`] (applies messages to each [`Surface`],
 //! checked against a [`CatalogSet`] under [`ValidationRules`] within [`StateLimits`], returning
-//! an [`Outcome`]).
+//! an [`Outcome`] and reporting the renderer's capabilities and data models).
 
 mod bundle;
 mod catalog;

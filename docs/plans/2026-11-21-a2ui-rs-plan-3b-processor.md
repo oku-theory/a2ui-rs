@@ -246,8 +246,8 @@ the 12-reviewer plan review).
     Value` adds `"inlineCatalogs": [...]`, each `Catalog::to_json()` plus `catalogId` and
     `protocolVersion`, empty `components`/`functions` omitted. `data_model_report(&self) ->
     Option<Value>` gives `{"version": "1.0", "surfaces": {id: root}}` for surfaces that send
-    their data model, `None` when there are none; a root that is not an object is reported as
-    `{}`, since `DataModel` stores an object root (checked by Task 5's test). The upstream
+    their data model, `None` when there are none; the root is always an object, since the processor refuses
+    an `updateDataModel` of a scalar or array at the root (`NonObjectRoot`; null resets to `{}`). The upstream
     report schemas are checked by the conformance cases (Task 7), not by runtime tests (the
     published package ships no `vendor/`).
 75. **Harness catalogs.** A case's catalogs, in order: `catalogPaths` files, `catalogs`
