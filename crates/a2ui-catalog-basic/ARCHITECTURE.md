@@ -8,7 +8,6 @@ The A2UI v1.0 basic catalog: 18 components and 14 functions, as published upstre
 - `src/lib.rs`: `CATALOG_ID`, `CATALOG_JSON` and `catalog()`, which loads it with
   `Catalog::parse` once, keeps it in a `OnceLock`, and returns the shared `&'static Catalog`;
   only success is kept, so a load error is owned and fresh on each call.
-
 - `src/options.rs`: `BasicOptions` (`Locale`, `UrlOpener`; default `EnUs`, `NoOpener`).
 - `src/locale.rs`: `Locale` (plural category, separators, currency, default decimals, month
   and weekday names typed with `time`, AM/PM), `PluralCategory`, `CurrencyFormat`, `EnUs`.
@@ -27,3 +26,7 @@ The A2UI v1.0 basic catalog: 18 components and 14 functions, as published upstre
   No clock or host time zone is read. `a2ui-conformance` runs `functions.yaml` on them.
 
 Depends on: `a2ui-runtime`, `serde_json`, `time` (parsing and macros only).
+
+Semver: `Month` and `Weekday` are `time` 0.3's own types, so moving to `time` 0.4 is a breaking
+release of this crate. `Locale` is a public trait hosts implement: a method added later needs a
+default body, or the addition breaks them.

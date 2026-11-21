@@ -70,8 +70,9 @@ One concept per module:
 - `data`: `DataModel` over `serde_json::Value`; get/set/delete with missing-path creation; every
   write returns the paths it touched.
 - `evaluate`: an `Evaluator` resolves literals, `@path` and `@call` in a `Scope` into an
-  `Evaluation` (value and errors); a failed binding yields `null` plus an `EXPRESSION_ERROR`,
-  siblings keep rendering (plan 4a, Decision 97).
+  `Evaluation` (value and errors); a failed binding yields `null` plus one classified error,
+  siblings keep rendering (plan 4a, Decision 97). One evaluation runs at most 10 000 calls and
+  template parts, and one interpolation writes at most 1 MiB of text (plan 4a, Decision 98).
 - `function`: `FunctionRegistry` binds implementations, `Fn(&Args, &mut CallContext) ->
   Result<Value>`, to the
   functions of the catalogs the host loaded, sharing each catalog, never copying it. It describes
@@ -83,8 +84,8 @@ One concept per module:
   never rebinds or loosens a host implementation (Plan 2b, Decision 40).
 - `validator`: catalog `pattern`s compile with `jsonschema`'s linear engine (128 KiB size and DFA
   limits, look-around refused, a per-catalog pattern cap); the `regex` function runs the A2UI
-  dialect on a bounded, memoized VM (`regex` module); the runtime never runs an unbounded
-  backtracking regex (plan 4a, Decision 97).
+  dialect on a bounded, linear (backward-pass) VM (`regex` module); the runtime never runs an
+  unbounded backtracking regex (plan 4a, Decision 97).
 - `catalog`: catalog loading and validation (no allowed top-level key list, since upstream
   accepts `theme`, catalog-level `metadata` and vendor keys; restricted `$ref` targets never
   fetched; reserved `Surface` name; size and depth caps; parent/child rules); a surface's

@@ -250,3 +250,52 @@ fn evaluate_malformed_call_is_a_validation_error() {
     assert_that!(error.to_string())
         .is_equal_to("Invalid function call: args of 'echo' must be an object".to_owned());
 }
+
+/// `count` calls to `site`, side by side in one array.
+fn sibling_calls(count: usize) -> Value {
+    Value::Array(vec![json!({"@call": "site"}); count])
+}
+
+#[rstest]
+#[case::at_budget(MAX_EVALUATION_STEPS, 0)]
+#[case::one_past_budget(MAX_EVALUATION_STEPS + 1, 1)]
+fn evaluate_steps_past_budget_raise_one_error(#[case] count: usize, #[case] errors: usize) {
+    let data = DataModel::default();
+
+    let evaluation = evaluate(&sibling_calls(count), &Scope::new("s1", Some("c"), &data));
+
+    assert_that!(evaluation.errors).has_length(errors);
+    let last = evaluation
+        .value
+        .as_array()
+        .and_then(|items| items.last())
+        .cloned();
+    let expected = if errors == 0 { json!("c") } else { Value::Null };
+    assert_that!(last).is_equal_to(Some(expected));
+}
+
+#[test]
+fn evaluate_steps_past_budget_is_recursion_limit_exceeded() {
+    let data = DataModel::default();
+    let scope = Scope::new("s1", Some("c"), &data);
+
+    let error = only_error(evaluate(&sibling_calls(MAX_EVALUATION_STEPS + 1), &scope));
+
+    assert_that!(error.category()).is_equal_to(Category::Recursion);
+    assert_that!(error.code()).is_equal_to(ErrorCode::RecursionLimitExceeded);
+    assert_that!(error.to_string())
+        .is_equal_to("Evaluation takes more than 10000 steps".to_owned());
+}
+
+#[test]
+fn evaluate_template_parts_count_against_budget() {
+    // Each `fmt` call is one step and each of its parts another: 5 000 calls of one part each
+    // fit the budget exactly, so the walk stops at the next.
+    let data = DataModel::default();
+    let call = json!({"@call": "fmt", "args": {"value": "${true}"}});
+    let value = Value::Array(vec![call; MAX_EVALUATION_STEPS / 2 + 1]);
+
+    let error = only_error(evaluate(&value, &Scope::new("s1", Some("c"), &data)));
+
+    assert_that!(error.code()).is_equal_to(ErrorCode::RecursionLimitExceeded);
+}

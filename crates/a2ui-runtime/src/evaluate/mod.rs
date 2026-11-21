@@ -1,9 +1,10 @@
 //! Evaluation of dynamic values: literals, `@path` and `@call` bindings, nested.
 //!
 //! `scope` holds where a value is evaluated, `call` the function calls and `@index`, `select`
-//! which catalog a component or call resolves in. A failed binding becomes `null` and one
-//! error; its siblings are still evaluated.
+//! which catalog a component or call resolves in, `budget` the steps an evaluation may run. A
+//! failed binding becomes `null` and one error; its siblings are still evaluated.
 
+mod budget;
 mod call;
 mod scope;
 mod select;
@@ -18,11 +19,28 @@ use crate::error::{Error, EvalFailure, ProcessFailure};
 use crate::function::FunctionRegistry;
 use crate::keys::{CALL_KEY, PATH_KEY};
 
+use budget::Budget;
+
 pub use scope::Scope;
 pub use select::{select_catalog, select_supported};
 
 /// Deepest nesting of objects, arrays, call arguments and template parts an evaluation enters.
 pub const MAX_EVALUATION_DEPTH: usize = 100;
+
+/// Most function calls and template parts one evaluation runs, nested ones included.
+///
+/// Depth alone does not bound the work: a `formatString` template read from the data model can
+/// call `formatString` twice on the next entry, doubling the work at each level. One budget is
+/// shared by an evaluation and every template it interpolates; past it, the evaluation records
+/// one `RECURSION_LIMIT_EXCEEDED` error and each binding still to run is `null`.
+pub const MAX_EVALUATION_STEPS: usize = 10_000;
+
+/// Longest text, in UTF-8 bytes, one interpolation produces: the default message size, 1 MiB.
+///
+/// A template of [`crate::MAX_TEMPLATE_CHARS`] characters can repeat one data string in each of
+/// its parts, so its text can be a thousand times the data it reads. Text past this cap is an
+/// `EXPRESSION_ERROR`, raised before the part that would cross it is appended.
+pub const MAX_INTERPOLATED_BYTES: usize = 1_048_576;
 
 /// What evaluating a value gave: the value, and every error raised on the way.
 #[non_exhaustive]
@@ -60,27 +78,36 @@ impl<'a> Evaluator<'a> {
     /// evaluated member by member, one `@` stripped from keys starting `@@` (`@@<k>` beside
     /// `@<k>` is an error and `@<k>` becomes `null`); arrays item by item. Nesting past
     /// [`MAX_EVALUATION_DEPTH`] is a `RECURSION_LIMIT_EXCEEDED` error.
+    ///
+    /// The evaluation, templates interpolated by its calls included, runs at most
+    /// [`MAX_EVALUATION_STEPS`] function calls and template parts. The step past it records one
+    /// `RECURSION_LIMIT_EXCEEDED` error, last; every binding left to run is then `null` and adds
+    /// no error, so the walk ends in time linear in what remains of `value`.
     pub fn evaluate(&self, value: &Value, scope: &Scope<'_>) -> Evaluation {
+        let budget = Budget::default();
         let mut walk = Walk {
             frame: Frame {
                 evaluator: *self,
                 scope,
+                budget: &budget,
             },
             errors: Vec::new(),
         };
         let value = walk.value(value, 0);
-        Evaluation {
-            value,
-            errors: walk.errors,
+        let mut errors = walk.errors;
+        if budget.exhausted() {
+            errors.push(budget::over_budget());
         }
+        Evaluation { value, errors }
     }
 }
 
-/// An evaluator and the scope it evaluates in.
+/// An evaluator, the scope it evaluates in and the step budget its evaluation shares.
 #[derive(Clone, Copy)]
 struct Frame<'w> {
     evaluator: Evaluator<'w>,
     scope: &'w Scope<'w>,
+    budget: &'w Budget,
 }
 
 /// One evaluation in progress, collecting the errors of failed bindings.
@@ -174,7 +201,13 @@ impl Walk<'_> {
     }
 
     /// The value of `result`, or `null` with its error recorded.
+    ///
+    /// Once the budget is exhausted every binding is `null` and records nothing: what fails
+    /// then fails for want of steps, which [`Evaluator::evaluate`] reports once.
     fn settle(&mut self, result: Result<Value, Error>) -> Value {
+        if self.frame.budget.exhausted() {
+            return Value::Null;
+        }
         result.unwrap_or_else(|error| {
             self.errors.push(error);
             Value::Null

@@ -3,20 +3,17 @@
 use std::fmt;
 
 use crate::coerce;
-use crate::error::Error;
+use crate::error::{Error, EvalFailure};
+use crate::evaluate::MAX_INTERPOLATED_BYTES;
 use crate::expression::{Expr, parse_template};
 
 /// Evaluates template parts for [`CallContext::interpolate`]; the evaluator implements it.
 pub(crate) trait Interpolate {
-    /// Each of `parts` as a value, calls in catalog `catalog_id`, at evaluation depth `depth`.
+    /// `part` as a value, calls in catalog `catalog_id`, at evaluation depth `depth`.
     ///
-    /// The first error any part raises is returned.
-    fn parts(
-        &self,
-        parts: &[Expr],
-        catalog_id: &str,
-        depth: usize,
-    ) -> Result<Vec<serde_json::Value>, Error>;
+    /// The first error the part raises is returned.
+    fn part(&self, part: &Expr, catalog_id: &str, depth: usize)
+    -> Result<serde_json::Value, Error>;
 }
 
 /// The call an implementation runs in: its surface, catalog and user activation.
@@ -75,15 +72,28 @@ impl<'a> CallContext<'a> {
     /// `template`'s `${…}` parts evaluated in this call's scope and joined as text.
     ///
     /// A function call in the template runs in this call's catalog (`@index` names none); each
-    /// value is converted with [`coerce::text`].
+    /// value is converted with [`coerce::text`]. Each part is one step of the evaluation's
+    /// budget ([`crate::MAX_EVALUATION_STEPS`]).
     ///
     /// # Errors
     ///
-    /// The template's parse error, or the first error a part raises.
+    /// The template's parse error, the first error a part raises, or an `EXPRESSION_ERROR`
+    /// once the text would pass [`MAX_INTERPOLATED_BYTES`], checked before each part is added.
     pub fn interpolate(&mut self, template: &str) -> Result<String, Error> {
         let parts = parse_template(template)?;
-        let values = self.evaluator.parts(&parts, self.catalog_id, self.depth)?;
-        Ok(values.iter().map(coerce::text).collect())
+        let mut text = String::new();
+        for part in &parts {
+            let value = self.evaluator.part(part, self.catalog_id, self.depth)?;
+            let piece = coerce::text(&value);
+            if text.len().saturating_add(piece.len()) > MAX_INTERPOLATED_BYTES {
+                return Err(EvalFailure::Output {
+                    limit: MAX_INTERPOLATED_BYTES,
+                }
+                .into());
+            }
+            text.push_str(&piece);
+        }
+        Ok(text)
     }
 }
 

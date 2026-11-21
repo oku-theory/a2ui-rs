@@ -275,6 +275,31 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     linear VM (`regex` module); the runtime never runs an unbounded backtracking regex".
     §2 `dynamic` becomes `evaluate` (`Scope`, `Evaluator`, `Evaluation`), `Fn(&Args, &mut
     CallContext)`. Dependency list: `nom` in the runtime, `time` in `a2ui-catalog-basic`.
+98. **Evaluation budget** (final review). Depth alone left the work unbounded: `/t{i}` =
+    `${formatString(value: ${/t{i+1}})}` twice, evaluated from `/t0`, doubles at each level
+    (30 levels: about 20 minutes and 2 GiB), and a 1 000-part template copies one data string
+    1 000 times. Two bounds, both public constants in `evaluate`:
+    1. `MAX_EVALUATION_STEPS: usize = 10_000`. One `Budget` (`evaluate/budget.rs`, `Cell`s)
+       per `Evaluator::evaluate`, shared through `Frame` with every nested walk
+       `CallContext::interpolate` starts. Each JSON call (`@index` included) and each template
+       part is a step. The step past the budget fails with `EvalFailure::Steps`
+       (`RECURSION_LIMIT_EXCEEDED`, `RecursionError`, like `Depth`: both bound the size of the
+       evaluation, not its input's validity). From then on every binding settles to `null`
+       and records nothing, and each interpolation fails at its next part, so the walk ends
+       in time linear in the rest of the input; `evaluate` appends the one `Steps` error last.
+    2. `MAX_INTERPOLATED_BYTES: usize = 1_048_576`, the default message size: no existing
+       value constant fits (`MAX_VALUE_CHARS` is the regex input cap, 4 096 code points, far
+       below a legitimate paragraph). `interpolate` appends part by part and checks the cap
+       before each append, so no oversized string is built; past it, `EvalFailure::Output`
+       (`EXPRESSION_ERROR`, `ExpressionError`), returned by the call as any function error.
+    A data-model string passed to formatString is interpolated as a template on purpose: the
+    protocol is silent, and `formatString(value: {"@path": …})` is the only way to format a
+    template the agent stores in the data model. The consequence is accepted and documented:
+    a user-typed `${/path}` bound into such a string reads other data of the same surface's
+    model (never another surface's), so an app must not route user input there unescaped.
+    Tests: `tests/regressions/issue_1709_evaluation_budget.rs` (30 levels, under 10 s, one
+    `RECURSION_LIMIT_EXCEEDED`), the step boundary (10 000 pass, 10 001 fail), template parts
+    counted, and the text cap at 1 MiB and one byte past it, and 1 000 × 64 KiB.
 
 ## File Structure
 

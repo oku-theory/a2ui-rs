@@ -18,8 +18,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
 - `expression`: `parse_template` turns `${…}` templates into `Expr` parts (literal, path, call
   with named arguments); `\${` is literal; limits 10 000 characters, 1 000 parts, nesting 100.
 - `schema`: embedded v1.0 `common_types`, `agent_to_renderer`; `validate_common_type` (cached).
-- `function`: `FunctionRegistry`, `CallContext` (`interpolate`); `coerce`: boolean, number, text.
-- `evaluate`: `Evaluator` in a `Scope` (a failure: `null` + one error; depth 100); `select_catalog`.
+- `function`: `FunctionRegistry`, `CallContext` (`interpolate`, ≤ 1 MiB); `coerce`. `evaluate`:
+  `Evaluator`, `Scope` (failure `null` + 1 error; depth 100; `budget`: 10 000 steps), `select_*`.
 - `regex`: `DialectRegex`: nom `parse` (heap stack), `safety`, `compile` (≤ 4096), backward `vm`.
 - `keys`, `ident` (UAX #31). `validator`: `jsonschema` 2020-12, offline (build failures are
   `CatalogError`); maps a violation to a message, `DetailCode` and JSON Pointer. `catalog`:

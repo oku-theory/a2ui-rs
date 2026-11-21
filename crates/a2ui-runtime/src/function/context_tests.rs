@@ -1,8 +1,9 @@
+use rstest::rstest;
 use serde_json::json;
 use speculoos::prelude::*;
 
 use crate::evaluate::test_support::{clean, evaluate, failed};
-use crate::evaluate::{Evaluation, Scope};
+use crate::evaluate::{Evaluation, MAX_INTERPOLATED_BYTES, Scope};
 use crate::{DataModel, ErrorCode, Pointer};
 
 /// `template` interpolated by `fmt` of catalog `d` on a surface whose default is `c`, in item 2
@@ -47,4 +48,38 @@ fn interpolate_syntax_error_is_returned() {
     let error = failed(interpolated("${a b}"));
 
     assert_that!(error.to_string()).contains("Unexpected characters");
+}
+
+/// `fmt` on `template`, over data holding `/big`, a string of `big` bytes.
+fn over_big(template: &str, big: usize) -> Evaluation {
+    let data = DataModel::new(json!({"big": "a".repeat(big)}));
+    let call = json!({"@call": "fmt", "args": {"value": template}});
+    evaluate(&call, &Scope::new("s1", Some("c"), &data))
+}
+
+#[rstest]
+#[case::at_cap("", MAX_INTERPOLATED_BYTES)]
+#[case::one_byte_past_cap("x", MAX_INTERPOLATED_BYTES + 1)]
+fn interpolate_text_near_cap_has_its_length(#[case] tail: &str, #[case] length: usize) {
+    // 512 copies of a 2 KiB string are exactly 1 MiB.
+    let template = format!("{}{tail}", "${/big}".repeat(512));
+
+    let evaluation = over_big(&template, 2048);
+
+    let fits = length <= MAX_INTERPOLATED_BYTES;
+    assert_that!(evaluation.errors.is_empty()).is_equal_to(fits);
+    let text = evaluation.value.as_str().map(str::len);
+    assert_that!(text).is_equal_to(fits.then_some(length));
+}
+
+#[test]
+fn interpolate_amplified_data_is_an_expression_error() {
+    // 1 000 parts, each copying a 64 KiB string: 64 MiB were it built.
+    let template = "${/big}".repeat(1000);
+
+    let error = failed(over_big(&template, 65_536));
+
+    assert_that!(error.code()).is_equal_to(ErrorCode::ExpressionError);
+    assert_that!(error.to_string())
+        .is_equal_to("Interpolated text exceeds 1048576 bytes".to_owned());
 }

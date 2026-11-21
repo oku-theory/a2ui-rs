@@ -1,5 +1,7 @@
 //! The `evaluate_function` and `select_catalog` actions: calls and catalog selection.
 
+use std::sync::OnceLock;
+
 use a2ui_catalog_basic::{BasicOptions, CATALOG_ID, CATALOG_JSON, functions};
 use a2ui_runtime::{
     Catalog, CatalogSet, DataModel, Error, Evaluation, Evaluator, FunctionRegistry,
@@ -77,18 +79,31 @@ fn direct(
     if let Some(key) = SURFACE_ONLY_KEYS.iter().find(|key| case.get(key).is_some()) {
         return Err(format!("{at}: `{key}` needs a `surface` block"));
     }
-    let catalog = Catalog::parse(CATALOG_JSON, None, None)
-        .map_err(|err| format!("{at}: basic catalog: {err}"))?;
-    let mut set = CatalogSet::new();
-    set.insert(catalog)
-        .map_err(|err| format!("{at}: basic catalog not registered: {err}"))?;
+    let set = basic_set(at)?;
     let registry = basic_functions(at)?;
     let data = DataModel::default();
     let scope = Scope::new(SURFACE_ID, Some(CATALOG_ID), &data).with_user_activation(true);
     let call = json!({"@call": function, "args": args});
     Ok(first_error(
-        Evaluator::new(&set, &registry).evaluate(&call, &scope),
+        Evaluator::new(set, &registry).evaluate(&call, &scope),
     ))
+}
+
+/// A set holding only the basic catalog, loaded on the first direct call and then shared.
+///
+/// `a2ui_catalog_basic::catalog()` lends a `&'static Catalog` and `Catalog` is not `Clone`, so
+/// the set keeps a catalog of its own, parsed once rather than once per case.
+fn basic_set(at: &str) -> Result<&'static CatalogSet, String> {
+    static BASIC: OnceLock<CatalogSet> = OnceLock::new();
+    if let Some(set) = BASIC.get() {
+        return Ok(set);
+    }
+    let catalog = Catalog::parse(CATALOG_JSON, None, None)
+        .map_err(|err| format!("{at}: basic catalog: {err}"))?;
+    let mut set = CatalogSet::new();
+    set.insert(catalog)
+        .map_err(|err| format!("{at}: basic catalog not registered: {err}"))?;
+    Ok(BASIC.get_or_init(|| set))
 }
 
 /// `function` called on surface `main`, created from the case's catalogs and `surface` block.

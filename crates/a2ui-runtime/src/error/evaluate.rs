@@ -22,6 +22,10 @@ pub(crate) enum EvalFailure {
     IndexOutsideTemplate,
     /// A value nested past the evaluation depth limit.
     Depth { limit: usize },
+    /// An evaluation running more function calls and template parts than its budget.
+    Steps { limit: usize },
+    /// An interpolation whose text grows past its byte cap.
+    Output { limit: usize },
     /// A catalog the surface does not support.
     UnsupportedCatalog { catalog: Quoted, surface: Quoted },
     /// An implementation refusing its arguments or input.
@@ -35,13 +39,14 @@ impl EvalFailure {
     pub(crate) fn category(&self) -> Category {
         match self {
             Self::UndeclaredFunction { .. } | Self::UnsupportedCatalog { .. } => Category::Catalog,
-            Self::Depth { .. } => Category::Recursion,
+            Self::Depth { .. } | Self::Steps { .. } => Category::Recursion,
             Self::UnknownFunction { .. }
             | Self::RendererForbidden { .. }
             | Self::ActivationRequired { .. }
             | Self::NotImplemented { .. }
             | Self::IndexOutsideTemplate
             | Self::Function { .. }
+            | Self::Output { .. }
             | Self::Regex { .. } => Category::Expression,
         }
     }
@@ -52,13 +57,14 @@ impl EvalFailure {
             Self::UndeclaredFunction { .. } | Self::UnsupportedCatalog { .. } => {
                 ErrorCode::CatalogError
             }
-            Self::Depth { .. } => ErrorCode::RecursionLimitExceeded,
+            Self::Depth { .. } | Self::Steps { .. } => ErrorCode::RecursionLimitExceeded,
             Self::UnknownFunction { .. }
             | Self::RendererForbidden { .. }
             | Self::ActivationRequired { .. }
             | Self::NotImplemented { .. }
             | Self::IndexOutsideTemplate
             | Self::Function { .. }
+            | Self::Output { .. }
             | Self::Regex { .. } => ErrorCode::ExpressionError,
         }
     }
@@ -91,6 +97,8 @@ impl fmt::Display for EvalFailure {
                  scope.",
             ),
             Self::Depth { limit } => write!(f, "Evaluation nests deeper than {limit} levels"),
+            Self::Steps { limit } => write!(f, "Evaluation takes more than {limit} steps"),
+            Self::Output { limit } => write!(f, "Interpolated text exceeds {limit} bytes"),
             Self::UnsupportedCatalog { catalog, surface } => {
                 write!(
                     f,

@@ -161,6 +161,17 @@ other scheme with `ExpressionError`, then calls the opener and returns `null`.
    bypassing `FunctionDef` policy as the guide asks. None of them names another catalog
    (checked). Policy is tested on the surface path only.
 6. **The `// MVP:` marker** names the Oku task of 4b's agent routing, created before 4a's code.
+7. **Evaluation budget** (plan Decision 98, from the final review). Depth does not bound work:
+   formatString templates read from the data model can fan out exponentially, and one template
+   can copy a data string in each of its 1 000 parts. One evaluation, templates included, runs
+   at most `MAX_EVALUATION_STEPS` = 10 000 function calls and template parts; the step past it
+   is `RecursionError`, `RECURSION_LIMIT_EXCEEDED` (the code of the other size bound, depth),
+   reported once, and the rest of the evaluation gives `null` without further errors. One
+   interpolation writes at most `MAX_INTERPOLATED_BYTES` = 1 MiB (the default message size),
+   checked before each part is appended; past it, `ExpressionError`, `EXPRESSION_ERROR`. A
+   data-model string passed to formatString is interpolated as a template on purpose (the
+   protocol is silent on this): it is how a stored template is formatted. So a user-typed
+   `${/path}` that reaches such a string reads other data in the surface's model.
 
 ## Left to the plan (builder's calls)
 

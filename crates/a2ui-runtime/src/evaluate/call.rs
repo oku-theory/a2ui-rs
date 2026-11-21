@@ -3,7 +3,7 @@
 use serde_json::{Map, Value};
 use snafu::OptionExt;
 
-use super::{Frame, MAX_EVALUATION_DEPTH, Walk};
+use super::{Frame, MAX_EVALUATION_DEPTH, Walk, budget};
 use crate::catalog::{AllowedCallers, Catalog};
 use crate::coerce;
 use crate::error::{CallShapeSnafu, Error, EvalFailure, ProcessFailure};
@@ -73,10 +73,11 @@ impl<'w> Walk<'w> {
     // Like `value` and `object`, these recurse; `parse` and `resolve` keep the error building
     // out of their frames.
 
-    /// The JSON call `map`, entered at `depth`.
+    /// The JSON call `map`, entered at `depth`, one step of the budget.
     ///
     /// A call naming no `catalogId` runs in the surface default, never in an enclosing call's.
     pub(super) fn call(&mut self, map: &Map<String, Value>, depth: usize) -> Result<Value, Error> {
+        self.frame.budget.step()?;
         let Parsed { name, own, args } = parse(map)?;
         let args = Arguments::Json(args);
         if name == INDEX {
@@ -96,7 +97,9 @@ impl<'w> Walk<'w> {
     ) -> Result<Value, Error> {
         let catalog = self.resolve(name, own)?;
         let args = self.arguments(args, depth);
-        let Frame { evaluator, scope } = self.frame;
+        let Frame {
+            evaluator, scope, ..
+        } = self.frame;
         // MVP: t-1710 (a schema-only function becomes a callAgentFunction)
         let implementation = evaluator
             .functions
@@ -123,7 +126,9 @@ impl<'w> Walk<'w> {
     /// No catalog selected or loaded, no such function, an `agentOnly` function, or one
     /// requiring a user activation the scope does not hold.
     fn resolve(&self, name: &str, own: Option<&str>) -> Result<&'w Catalog, Error> {
-        let Frame { evaluator, scope } = self.frame;
+        let Frame {
+            evaluator, scope, ..
+        } = self.frame;
         let surface = scope.surface_id();
         let id = select_catalog(own, scope.default_catalog(), surface, "function", name)?;
         let catalog = evaluator
@@ -178,10 +183,14 @@ impl<'w> Walk<'w> {
         values
     }
 
-    /// The template part `expr`, below `depth` entered levels; its calls run in `catalog`.
+    /// The template part `expr`, below `depth` entered levels, one step of the budget; its calls
+    /// run in `catalog`.
     fn expr(&mut self, expr: &Expr, catalog: &str, depth: usize) -> Value {
         if depth >= MAX_EVALUATION_DEPTH {
             return self.too_deep();
+        }
+        if let Err(error) = self.frame.budget.step() {
+            return self.settle(Err(error));
         }
         let depth = depth + 1;
         let result = match expr {
@@ -231,19 +240,20 @@ fn integer(value: &Value) -> Option<i64> {
 }
 
 impl Interpolate for Frame<'_> {
-    fn parts(&self, parts: &[Expr], catalog_id: &str, depth: usize) -> Result<Vec<Value>, Error> {
+    fn part(&self, part: &Expr, catalog_id: &str, depth: usize) -> Result<Value, Error> {
         let mut walk = Walk {
             frame: *self,
             errors: Vec::new(),
         };
-        let mut values = Vec::with_capacity(parts.len());
-        for part in parts {
-            values.push(walk.expr(part, catalog_id, depth));
-            if let Some(first) = std::mem::take(&mut walk.errors).into_iter().next() {
-                return Err(first);
-            }
+        let value = walk.expr(part, catalog_id, depth);
+        if self.budget.exhausted() {
+            // The walk recorded nothing; failing here stops the template at once.
+            return Err(budget::over_budget());
         }
-        Ok(values)
+        match walk.errors.into_iter().next() {
+            Some(first) => Err(first),
+            None => Ok(value),
+        }
     }
 }
 

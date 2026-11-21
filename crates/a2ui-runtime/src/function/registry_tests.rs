@@ -21,8 +21,8 @@ fn catalog(id: &str) -> Catalog {
 struct NoTemplates;
 
 impl Interpolate for NoTemplates {
-    fn parts(&self, _: &[Expr], _: &str, _: usize) -> Result<Vec<Value>, crate::Error> {
-        Ok(Vec::new())
+    fn part(&self, _: &Expr, _: &str, _: usize) -> Result<Value, crate::Error> {
+        Ok(Value::Null)
     }
 }
 

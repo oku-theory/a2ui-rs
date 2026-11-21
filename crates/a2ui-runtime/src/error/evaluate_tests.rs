@@ -40,6 +40,16 @@ use crate::error::Error;
     "Evaluation nests deeper than 100 levels",
     (Category::Recursion, ErrorCode::RecursionLimitExceeded)
 )]
+#[case::steps(
+    EvalFailure::Steps { limit: 10_000 },
+    "Evaluation takes more than 10000 steps",
+    (Category::Recursion, ErrorCode::RecursionLimitExceeded)
+)]
+#[case::output(
+    EvalFailure::Output { limit: 1_048_576 },
+    "Interpolated text exceeds 1048576 bytes",
+    (Category::Expression, ErrorCode::ExpressionError)
+)]
 #[case::unsupported_catalog(
     EvalFailure::UnsupportedCatalog { catalog: "c".into(), surface: "s".into() },
     "Catalog 'c' is not supported by surface 's'.",

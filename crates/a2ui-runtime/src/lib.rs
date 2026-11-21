@@ -14,11 +14,12 @@
 //! a [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
 //! faults carry a [`Detail`]), [`FunctionRegistry`] (binds implementations to catalog functions,
 //! with [`CallContext`] and the [`coerce`] conversions), [`Evaluator`] (evaluates bindings and
-//! calls in a [`Scope`] into an [`Evaluation`], at most [`MAX_EVALUATION_DEPTH`] deep, with
+//! calls in a [`Scope`] into an [`Evaluation`], at most [`MAX_EVALUATION_DEPTH`] deep and
+//! [`MAX_EVALUATION_STEPS`] steps, its text within [`MAX_INTERPOLATED_BYTES`], with
 //! [`select_catalog`] and [`select_supported`]), [`DialectRegex`] (the A2UI regex dialect, within
-//! [`MAX_PATTERN_CHARS`], [`MAX_PROGRAM`] and [`MAX_VALUE_CHARS`]), and [`MessageProcessor`]
-//! (applies messages to each [`Surface`], checked against a [`CatalogSet`] under
-//! [`ValidationRules`] within [`StateLimits`], returning an [`Outcome`] and reporting the
+//! [`MAX_PATTERN_CHARS`], [`MAX_PROGRAM`] and [`MAX_VALUE_CHARS`]), and
+//! [`MessageProcessor`] (applies messages to each [`Surface`], checked against a [`CatalogSet`]
+//! under [`ValidationRules`] within [`StateLimits`], returning an [`Outcome`] and reporting the
 //! renderer's capabilities and data models).
 
 mod bundle;
@@ -54,7 +55,8 @@ pub use data::{DataModel, Write};
 pub use detail::{Detail, DetailCode};
 pub use error::{Category, Error, ErrorCode};
 pub use evaluate::{
-    Evaluation, Evaluator, MAX_EVALUATION_DEPTH, Scope, select_catalog, select_supported,
+    Evaluation, Evaluator, MAX_EVALUATION_DEPTH, MAX_EVALUATION_STEPS, MAX_INTERPOLATED_BYTES,
+    Scope, select_catalog, select_supported,
 };
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
 pub use function::{Args, CallContext, FunctionRegistry, Implementation};
