@@ -15,7 +15,8 @@ cargo-fuzz or AddressSanitizer (t-1660); `just fuzz-check` lints it and tests `s
   `parse_then_validate` (component, [id,] then an agent catalog parsed twice: same JSON, same
   outcome in its `Catalog` lookup and in the basic one's `[Catalog]`), `template_parse`,
   `pointer_parse` (no forbidden or empty segment; written pointers parse back), `message_parse`
-  (`AgentMessage::parse` under the default limits; a refusal builds its `RendererMessage`).
+  (`AgentMessage::parse` under the default limits; a refusal builds its `RendererMessage`),
+  `regex_match` (pattern, then value: `DialectRegex::new`, then `is_match`, the same twice).
 - `a2ui.dict`: JSON and A2UI tokens for libFuzzer's `-dict=`.
 - `fuzz-only.lock`: pins for what only this workspace uses; `Cargo.lock` is generated from the
   root lock (plan 2b, Decision 45). `corpus/` and `artifacts/` are local, ignored by git.

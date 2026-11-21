@@ -119,6 +119,11 @@ class SeedsTest(unittest.TestCase):
         self.assertEqual(len(parts), 3)
         self.assertIn("catalogId", json.loads(parts[2]))
 
+    def test_seeds_regex_match_pattern_then_value(self):
+        for seed in seeds("regex_match"):
+            with self.subTest(seed=seed[:40]):
+                self.assertEqual(len(seed.split(b"\0")), 2)
+
     def test_main_seed_writes_hash_named_files(self):
         with tempfile.TemporaryDirectory() as directory:
             corpus = pathlib.Path(directory) / "corpus"

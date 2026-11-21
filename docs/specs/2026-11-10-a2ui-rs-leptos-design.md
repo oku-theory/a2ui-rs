@@ -69,9 +69,12 @@ One concept per module:
 - `pointer`: RFC 6901 JSON Pointer and relative-path resolution against a template scope.
 - `data`: `DataModel` over `serde_json::Value`; get/set/delete with missing-path creation; every
   write returns the paths it touched.
-- `dynamic`: `Dynamic<T>` (literal, `@path`, `@call`) and an `Evaluator` resolving in a scope; a
-  failed binding yields `null` plus an `EXPRESSION_ERROR`, siblings keep rendering.
-- `function`: `FunctionRegistry` binds implementations, `Fn(&Args, &Ctx) -> Result<Value>`, to the
+- `evaluate`: an `Evaluator` resolves literals, `@path` and `@call` in a `Scope` into an
+  `Evaluation` (value and errors); a failed binding yields `null` plus one classified error,
+  siblings keep rendering (plan 4a, Decision 97). One evaluation runs at most 10 000 calls and
+  template parts, and one interpolation writes at most 1 MiB of text (plan 4a, Decision 98).
+- `function`: `FunctionRegistry` binds implementations, `Fn(&Args, &mut CallContext) ->
+  Result<Value>`, to the
   functions of the catalogs the host loaded, sharing each catalog, never copying it. It describes
   no function itself: the return type, `allowedCallers` (`AllowedCallers`),
   `requiresUserActivation` and argument validator are the catalog's `FunctionDef`, read through
@@ -79,9 +82,10 @@ One concept per module:
   always), else goes to the agent as `callAgentFunction`, schema-only declarations included;
   `AllowedCallers` and `requires_user_activation()` gate both routes. A catalog the agent sends
   never rebinds or loosens a host implementation (Plan 2b, Decision 40).
-- `validator`: catalog `pattern`s compile with `jsonschema`'s `regex` engine (linear time, 128 KiB
-  size and DFA limits, look-around refused, a per-catalog pattern cap); the runtime never runs a
-  backtracking regex.
+- `validator`: catalog `pattern`s compile with `jsonschema`'s linear engine (128 KiB size and DFA
+  limits, look-around refused, a per-catalog pattern cap); the `regex` function runs the A2UI
+  dialect on a bounded, linear (backward-pass) VM (`regex` module); the runtime never runs an
+  unbounded backtracking regex (plan 4a, Decision 97).
 - `catalog`: catalog loading and validation (no allowed top-level key list, since upstream
   accepts `theme`, catalog-level `metadata` and vendor keys; restricted `$ref` targets never
   fetched; reserved `Surface` name; size and depth caps; parent/child rules); a surface's
@@ -118,7 +122,7 @@ capped values, which the compiler checks (no `String` reaches it). A third-party
 whole (a `jsonschema` violation) can lose wording from its middle. Quotes and backslashes are
 kept, so literal `\n` text reads like an escape: that misleads within one line, never forges one.
 
-Dependencies: `serde`, `serde_json`, `snafu`, `regex`, `time`, `unicode-ident`,
+Dependencies: `serde`, `serde_json`, `snafu`, `nom` (the A2UI regex dialect), `unicode-ident`,
 `percent-encoding`, and `jsonschema` (default features off: no HTTP or file `$ref` resolution;
 patterns on the linear `regex` engine; builds offline). The published v1.0 schemas are the
 runtime's models: it embeds `common_types.json` and `agent_to_renderer.json` and validates
@@ -132,7 +136,8 @@ hash maps; that is the only path (`just deps` checks it) and no outcome depends 
 `a2ui-runtime::catalog`; the functions `required`, `regex`, `length`, `numeric`, `email`,
 `formatString`, `formatNumber`, `formatCurrency`, `formatDate`, `pluralize`, `openUrl`, `and`,
 `or`, `not`. Locale formatting takes an injected `Locale` (no ICU by default, optional `icu`
-feature); `openUrl` delegates to an injected `UrlOpener`.
+feature); `openUrl` delegates to an injected `UrlOpener`. It depends on `time` for `formatDate`
+(plan 4a, Decision 97).
 
 `a2ui-leptos`:
 

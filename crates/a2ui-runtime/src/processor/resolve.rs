@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 
 use crate::catalog::{Catalog, CatalogSet};
 use crate::error::{ComponentShapeSnafu, Error, ProcessFailure};
+use crate::evaluate::select_catalog;
 
 /// The catalog `component`, whose id is `id`, names, else its surface's default.
 ///
@@ -28,14 +29,7 @@ pub(crate) fn component_catalog<'a>(
         }
         None => None,
     };
-    let Some(catalog) = own.or(surface_default) else {
-        return Err(ProcessFailure::NoDefaultCatalog {
-            surface: surface_id.into(),
-            what: "component",
-            name: id.into(),
-        }
-        .into());
-    };
+    let catalog = select_catalog(own, surface_default, surface_id, "component", id)?;
     set.get(catalog)
         .ok_or_else(|| ProcessFailure::CatalogNotFound { id: catalog.into() }.into())
 }

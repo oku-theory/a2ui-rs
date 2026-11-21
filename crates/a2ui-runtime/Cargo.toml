@@ -30,6 +30,7 @@ serde_json.workspace = true
 unicode-ident.workspace = true
 jsonschema.workspace = true
 percent-encoding.workspace = true
+nom.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

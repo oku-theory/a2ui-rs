@@ -21,6 +21,8 @@ use serde_json::Value;
 
 use crate::catalog::CatalogSet;
 use crate::error::{Error, ProcessFailure};
+use crate::evaluate::{Evaluation, Evaluator, Scope};
+use crate::function::FunctionRegistry;
 use crate::message::{
     AgentMessage, CreateSurface, MessageLimits, UpdateComponents, UpdateDataModel,
 };
@@ -30,18 +32,20 @@ pub use limits::StateLimits;
 pub use rules::ValidationRules;
 
 /// What handling a message produced; later versions add fields.
-// MVP: t-1688 (outbound messages), t-1689 (ChangeSet)
+// MVP: t-1710 (outbound messages), t-1689 (ChangeSet)
 #[non_exhaustive]
 #[derive(Debug, Default, PartialEq)]
 pub struct Outcome {}
 
 /// Keeps a renderer's surfaces and applies the agent's messages to them.
 ///
-/// It owns the [`CatalogSet`] the surfaces' components are checked against. It does no I/O:
-/// the host reads messages from its transport and hands them over.
+/// It owns the [`CatalogSet`] the surfaces' components are checked against and the
+/// [`FunctionRegistry`] their calls run. It does no I/O: the host reads messages from its
+/// transport and hands them over.
 #[derive(Debug)]
 pub struct MessageProcessor {
     catalogs: CatalogSet,
+    functions: FunctionRegistry,
     surfaces: BTreeMap<String, Surface>,
     limits: MessageLimits,
     state_limits: StateLimits,
@@ -53,6 +57,7 @@ impl MessageProcessor {
     pub fn new(catalogs: CatalogSet) -> Self {
         Self {
             catalogs,
+            functions: FunctionRegistry::new(),
             surfaces: BTreeMap::new(),
             limits: MessageLimits::default(),
             state_limits: StateLimits::default(),
@@ -71,6 +76,11 @@ impl MessageProcessor {
             state_limits: limits,
             ..self
         }
+    }
+
+    /// This processor running calls with the implementations `functions` binds.
+    pub fn with_functions(self, functions: FunctionRegistry) -> Self {
+        Self { functions, ..self }
     }
 
     /// This processor checking components under `rules` unless a call names others.
@@ -112,14 +122,14 @@ impl MessageProcessor {
                 self.surfaces.remove(&delete.surface_id);
                 Ok(())
             }
-            // MVP: t-1688
+            // MVP: t-1710
             AgentMessage::CallRendererFunction(call) => {
                 Err(Error::from(ProcessFailure::NotYetSupported {
                     action: "callRendererFunction",
                 })
                 .with_function_call(&call.function_call_id))
             }
-            // MVP: t-1688
+            // MVP: t-1710
             AgentMessage::AgentFunctionResponse(_) => Err(ProcessFailure::NotYetSupported {
                 action: "agentFunctionResponse",
             }
@@ -167,6 +177,37 @@ impl MessageProcessor {
     /// The catalogs surfaces are checked against.
     pub fn catalogs(&self) -> &CatalogSet {
         &self.catalogs
+    }
+
+    /// The function implementations calls run.
+    pub fn functions(&self) -> &FunctionRegistry {
+        &self.functions
+    }
+
+    /// `value` evaluated in the root scope of surface `surface_id`.
+    ///
+    /// Calls resolve in the surface's default catalog unless they name one; `user_activation`
+    /// tells whether the evaluation runs inside a user gesture.
+    ///
+    /// # Errors
+    ///
+    /// An `IntegrityError` when the processor holds no surface `surface_id`. Failed bindings are
+    /// not errors here: they are in [`Evaluation::errors`].
+    pub fn evaluate(
+        &self,
+        surface_id: &str,
+        value: &Value,
+        user_activation: bool,
+    ) -> Result<Evaluation, Error> {
+        let surface = self.surfaces.get(surface_id).ok_or_else(|| {
+            Error::from(ProcessFailure::SurfaceNotFound {
+                id: surface_id.into(),
+            })
+            .with_surface(surface_id)
+        })?;
+        let scope = Scope::new(surface.id(), surface.catalog_id(), surface.data_model())
+            .with_user_activation(user_activation);
+        Ok(Evaluator::new(&self.catalogs, &self.functions).evaluate(value, &scope))
     }
 
     /// Checks a `createSurface` (duplicate, surface count, catalog, components, data model size),

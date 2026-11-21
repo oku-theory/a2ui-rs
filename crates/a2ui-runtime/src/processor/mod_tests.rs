@@ -4,7 +4,8 @@ use speculoos::prelude::*;
 
 use super::*;
 use crate::catalog::test_support::{load, v10};
-use crate::{Category, DataModel, ErrorCode, Pointer};
+use crate::evaluate::test_support as evaluate_support;
+use crate::{Category, DataModel, ErrorCode, FunctionRegistry, Pointer};
 
 const V: &str = "1.0";
 
@@ -416,4 +417,37 @@ fn surface_data_model_pointer_reads_written_value() {
 
     let model = processor.surface("main").unwrap().data_model();
     assert_that!(model.get(&Pointer::parse("/n").unwrap())).is_equal_to(Some(&json!(3)));
+}
+
+#[test]
+fn evaluate_unknown_surface_is_surface_not_found() {
+    let processor = processor();
+
+    let error = processor
+        .evaluate("missing_surface", &json!(1), false)
+        .unwrap_err();
+
+    let class = (Category::Integrity, ErrorCode::IntegrityError);
+    let text = "Surface not found for message: missing_surface";
+    assert_error(&error, class, text, Some("missing_surface"), None);
+}
+
+#[test]
+fn evaluate_uses_surface_default_and_data() {
+    let mut catalogs = CatalogSet::new();
+    catalogs.insert(evaluate_support::catalog("d")).unwrap();
+    let mut functions = FunctionRegistry::new();
+    evaluate_support::bind(&mut functions, &evaluate_support::catalog("d"));
+    let mut processor = MessageProcessor::new(catalogs).with_functions(functions);
+    processor
+        .handle(&message(json!({"version": V, "createSurface": {
+            "surfaceId": "main", "catalogId": "d", "dataModel": {"n": 3}}})))
+        .unwrap();
+    let call = json!({"@call": "echo", "args": {"value": {"@path": "/n"}}});
+
+    let evaluation = processor.evaluate("main", &call, false).unwrap();
+
+    assert_that!(evaluation.errors).is_empty();
+    assert_that!(evaluation.value).is_equal_to(json!({"catalog": "d", "value": 3}));
+    assert_that!(format!("{:?}", processor.functions())).contains(r#"("d", "echo")"#);
 }

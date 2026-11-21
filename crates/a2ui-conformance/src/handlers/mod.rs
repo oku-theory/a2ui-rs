@@ -8,6 +8,7 @@ mod data_model;
 mod derive;
 mod expression;
 mod from_json;
+pub mod functions;
 mod processing;
 mod reports;
 mod resolve_path;
@@ -40,6 +41,8 @@ pub fn handler(action: &str) -> Option<Handler> {
         "validate" => Some(processing::validate),
         "get_renderer_capabilities" => Some(reports::capabilities),
         "get_renderer_data_model" => Some(reports::data_model),
+        "evaluate_function" => Some(functions::run),
+        "select_catalog" => Some(functions::select),
         _ => None,
     }
 }

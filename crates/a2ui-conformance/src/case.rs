@@ -13,6 +13,9 @@ pub const UPSTREAM_DEFAULT_VERSION: &str = "0.9";
 const VERSION_NEUTRAL_ACTIONS: [&str; 3] =
     ["data_model", "resolve_path", "parse_expression_template"];
 
+/// The action whose case, naming no catalog, runs in the basic catalog of the default version.
+const DEFAULT_CATALOG_ACTION: &str = "evaluate_function";
+
 /// Why a case's protocol version could not be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VersionError {
@@ -60,8 +63,9 @@ impl Case {
     ///
     /// The first rule that answers wins: top-level `protocolVersion`, `catalog.protocolVersion`,
     /// the first message's `version`, `args.version`, the first catalog (`catalogs`,
-    /// `catalogPaths`, `catalogPath` or an inline `catalog`; one without a version is at
-    /// [`UPSTREAM_DEFAULT_VERSION`]), a v0.8 envelope key, the suite name's `_vN_M` suffix.
+    /// `catalogPaths`, `catalogPath` or an inline `catalog`; one without a version, or none for
+    /// `evaluate_function`, is at [`UPSTREAM_DEFAULT_VERSION`]), a v0.8 envelope key, the suite
+    /// name's `_vN_M` suffix.
     /// Only a version-neutral action may stay unclassified (`None`); any other is
     /// [`VersionError::Unclassified`].
     pub fn effective_version(&self, root: &Path) -> Result<Option<String>, VersionError> {
@@ -139,10 +143,12 @@ impl Case {
         let (key, path) = match (first("catalogPaths"), self.get("catalogPath")) {
             (Some(path), _) => ("catalogPaths", path),
             (None, Some(path)) => ("catalogPath", path),
+            // An `evaluate_function` case naming no catalog runs in the case's default catalog,
+            // the basic catalog of the version upstream assumes when none is declared.
             (None, None) => {
-                return Ok(self
-                    .get("catalog")
-                    .map(|_| UPSTREAM_DEFAULT_VERSION.to_owned()));
+                let defaulted =
+                    self.get("catalog").is_some() || self.action == DEFAULT_CATALOG_ACTION;
+                return Ok(defaulted.then(|| UPSTREAM_DEFAULT_VERSION.to_owned()));
             }
         };
         let Value::String(path) = path else {
