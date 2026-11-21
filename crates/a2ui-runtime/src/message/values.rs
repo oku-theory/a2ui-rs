@@ -19,7 +19,11 @@ pub(crate) fn check_depth(action: Action, body: &Map<String, Value>) -> Result<(
     let located = |error: Error| located(error, action, body);
     let check = |value: &Value, path: String| {
         if deeper_than(value, MAX_MESSAGE_DEPTH) {
-            let error: Error = ValueDepthSnafu.build().into();
+            let error: Error = ValueDepthSnafu {
+                limit: MAX_MESSAGE_DEPTH,
+            }
+            .build()
+            .into();
             return Err(located(error.with_path(path)));
         }
         Ok(())
@@ -135,7 +139,11 @@ fn walk(component: &Value) -> Result<(), Error> {
                 if map.contains_key(CALL_KEY) {
                     calls += 1;
                     if calls > MAX_CALL_DEPTH {
-                        let error = CallDepthSnafu { depth: calls }.build();
+                        let error = CallDepthSnafu {
+                            depth: calls,
+                            limit: MAX_CALL_DEPTH,
+                        }
+                        .build();
                         return Err(fail(error.into()));
                     }
                 }

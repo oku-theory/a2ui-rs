@@ -129,6 +129,9 @@ impl Case {
                 .and_then(|a| a.first())
         };
         if let Some(catalog) = first("catalogs") {
+            if !catalog.is_object() {
+                return Err(format!("{}: `catalogs` entries must be objects", self.at()));
+            }
             return self
                 .string_of(catalog.get("protocolVersion"), "protocolVersion")
                 .map(|v| Some(v.unwrap_or_else(|| UPSTREAM_DEFAULT_VERSION.to_owned())));

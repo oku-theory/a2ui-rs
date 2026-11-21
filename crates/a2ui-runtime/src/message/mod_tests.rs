@@ -272,6 +272,25 @@ fn from_json_value_over_cap_is_refused() {
     assert_that!(error.category()).is_equal_to(Category::Validation);
 }
 
+#[test]
+fn parse_small_numbers_under_the_exact_text_length_are_accepted() {
+    // About 200 KB of text for 100 000 numbers: the exact length is far under 1 MiB, while the
+    // estimate (24 bytes per number) would be over it.
+    let numbers = vec![1; 100_000];
+    let message = json!({
+        "version": V,
+        "updateDataModel": {"surfaceId": "s1", "value": numbers},
+    });
+    let text = message.to_string();
+    assert_that!(text.len()).is_less_than(limits().max_bytes());
+    assert_that!(AgentMessage::parse(&text, &limits())).is_ok();
+    // `from_json` has no text, only the estimate, so it refuses the same message.
+    let error = AgentMessage::from_json(&message, &limits()).err();
+    assert_that!(error.map(|e| e.to_string()))
+        .is_some()
+        .contains("limit");
+}
+
 fn delete(id: &str) -> Value {
     json!({"version": V, "deleteSurface": {"surfaceId": id}})
 }

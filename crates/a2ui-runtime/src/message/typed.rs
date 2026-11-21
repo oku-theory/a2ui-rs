@@ -18,7 +18,10 @@ pub(crate) fn read(action: Action, body: &Value) -> Result<AgentMessage, Error> 
         Action::CreateSurface => AgentMessage::CreateSurface(create_surface(body)?),
         Action::UpdateComponents => AgentMessage::UpdateComponents(UpdateComponents {
             surface_id: string(body, "surfaceId")?,
-            components: components(body)?,
+            components: body
+                .get("components")
+                .ok_or_else(|| missing("components"))
+                .and_then(components)?,
         }),
         Action::UpdateDataModel => AgentMessage::UpdateDataModel(update_data_model(body)?),
         Action::DeleteSurface => AgentMessage::DeleteSurface(DeleteSurface {
@@ -70,14 +73,17 @@ fn optional_object(
         .transpose()
 }
 
-fn components(body: &Map<String, Value>) -> Result<Vec<Value>, Error> {
+fn components(value: &Value) -> Result<Vec<Value>, Error> {
+    value
+        .as_array()
+        .cloned()
+        .ok_or_else(|| missing("components"))
+}
+
+/// `createSurface` may omit its components; `updateComponents` may not.
+fn optional_components(body: &Map<String, Value>) -> Result<Vec<Value>, Error> {
     body.get("components")
-        .map(|value| {
-            value
-                .as_array()
-                .cloned()
-                .ok_or_else(|| missing("components"))
-        })
+        .map(components)
         .transpose()
         .map(Option::unwrap_or_default)
 }
@@ -91,7 +97,7 @@ fn create_surface(body: &Map<String, Value>) -> Result<CreateSurface, Error> {
         surface_id: string(body, "surfaceId")?,
         catalog_id: optional_string(body, "catalogId")?,
         send_data_model,
-        components: components(body)?,
+        components: optional_components(body)?,
         data_model: optional_object(body, "dataModel")?,
         metadata: optional_object(body, "metadata")?,
     })

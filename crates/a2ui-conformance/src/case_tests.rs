@@ -7,7 +7,7 @@ const SUITE: &str = r#"
 - name: test_top_level_version
   action: validate
   protocolVersion: "1.0"
-- name: test_catalog_version
+- name: test_data_model_no_version
   action: data_model
 - name: test_no_version
   action: parse_expression_template
@@ -20,7 +20,7 @@ fn parse_suite_three_cases_keeps_order() {
     let names: Vec<_> = cases.iter().map(|case| case.name.as_str()).collect();
     assert_that!(names).is_equal_to(vec![
         "test_top_level_version",
-        "test_catalog_version",
+        "test_data_model_no_version",
         "test_no_version",
     ]);
 }
@@ -178,4 +178,12 @@ fn effective_version_non_string_catalog_paths_entry_names_catalog_paths() {
     let case = in_suite("core/x.yaml", r#"{"catalogPaths": [3]}"#);
     let error = case.effective_version(&root()).unwrap_err();
     assert_that!(error.to_string()).contains("`catalogPaths` must be a string");
+}
+
+#[test]
+fn effective_version_non_object_first_catalog_names_the_case_and_catalogs() {
+    let case = in_suite("core/x.yaml", r#"{"catalogs": ["c.json"]}"#);
+    let error = case.effective_version(&root()).unwrap_err();
+    assert_that!(error.to_string()).contains("core/x.yaml#t");
+    assert_that!(error.to_string()).contains("`catalogs`");
 }

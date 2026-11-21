@@ -388,11 +388,15 @@ pub(crate) enum Inner {
         backtrace: Backtrace,
     },
 
-    #[snafu(display("Global recursion limit exceeded: more than 50 nested containers"))]
-    ValueDepth { backtrace: Backtrace },
+    #[snafu(display("Global recursion limit exceeded: more than {limit} nested containers"))]
+    ValueDepth { limit: usize, backtrace: Backtrace },
 
-    #[snafu(display("functionCall depth {depth} exceeds the limit of 5"))]
-    CallDepth { depth: usize, backtrace: Backtrace },
+    #[snafu(display("functionCall depth {depth} exceeds the limit of {limit}"))]
+    CallDepth {
+        depth: usize,
+        limit: usize,
+        backtrace: Backtrace,
+    },
 }
 
 impl Inner {

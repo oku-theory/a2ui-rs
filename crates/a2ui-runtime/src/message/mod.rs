@@ -107,11 +107,12 @@ pub struct AgentFunctionResponse {
 }
 
 impl AgentMessage {
-    /// Reads one message from JSON text: size, then syntax, then [`AgentMessage::from_json`].
+    /// Reads one message from JSON text: exact size, then syntax, then the stages of
+    /// [`AgentMessage::from_json`] after its estimated size check.
     ///
     /// # Errors
     ///
-    /// A validation error when the text passes `limits`; a parse error when it is not JSON;
+    /// A validation error when the text exceeds `limits`; a parse error when it is not JSON;
     /// otherwise those of [`AgentMessage::from_json`].
     pub fn parse(text: &str, limits: &MessageLimits) -> Result<Self, Error> {
         if text.len() > limits.max_bytes() {
@@ -123,7 +124,7 @@ impl AgentMessage {
             }
             .build()
         })?;
-        Self::from_json(&value, limits)
+        Self::read(&value)
     }
 
     /// Reads one message from JSON: size, envelope, depth, schema, typed fields, then bindings.
@@ -136,6 +137,11 @@ impl AgentMessage {
         if limits::encoded_len_exceeds(value, limits.max_bytes()) {
             return Err(too_large(limits));
         }
+        Self::read(value)
+    }
+
+    /// Envelope, depth, schema, typed fields and bindings: every stage after the size check.
+    fn read(value: &Value) -> Result<Self, Error> {
         let (action, body) = envelope::precheck(value)?;
         if let Value::Object(map) = body {
             values::check_depth(action, map)?;

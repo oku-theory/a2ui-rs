@@ -24,8 +24,9 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
   `path`, `surfaceId`, `functionCallId`, `details` (index and length), `rendererError`; any other
   key fails.
 - `outbound`: `check_renderer_error` validates `RendererMessage::error(..)` against upstream's
-  `renderer_to_agent.json` (`common_types.json` registered under its `$id`) and matches
-  `version` and `error.{code,surfaceId,functionCallId,path,message}`.
+  `renderer_to_agent.json` (`common_types.json` registered under its `$id`, a stand-in
+  `catalog.json` resource satisfying its `anyFunction` ref) and matches `version` and
+  `error.{code,surfaceId,functionCallId,path,message}`; a missing error body or message fails.
 - `manifest`: upstream's executed-case JSONL, written whenever `A2UI_CONFORMANCE_MANIFEST_DIR`
   is set (`just conformance-manifest` sets it).
 - `paths`: `upstream_root`, the vendored `vendor/a2ui` found from the crate directory; `read_json`;

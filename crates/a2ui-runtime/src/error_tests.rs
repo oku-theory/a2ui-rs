@@ -143,12 +143,16 @@ fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expec
     ErrorCode::ValidationFailed
 )]
 #[case::value_depth(
-    ValueDepthSnafu.build(),
+    ValueDepthSnafu { limit: 50_usize }.build(),
     Category::Recursion,
     ErrorCode::RecursionLimitExceeded
 )]
 #[case::call_depth(
-    CallDepthSnafu { depth: 6_usize }.build(),
+    CallDepthSnafu {
+        depth: 6_usize,
+        limit: 5_usize
+    }
+    .build(),
     Category::Recursion,
     ErrorCode::RecursionLimitExceeded
 )]

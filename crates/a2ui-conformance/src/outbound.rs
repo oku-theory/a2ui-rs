@@ -3,7 +3,7 @@
 use std::sync::LazyLock;
 
 use jsonschema::{Draft, Registry, Validator};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use crate::compare::message_matches;
 use crate::keys::assert_known_keys;
@@ -73,9 +73,9 @@ pub fn check_renderer_error(
         &["code", "surfaceId", "functionCallId", "path", "message"],
         at,
     )?;
-    let body = envelope.get("error").and_then(Value::as_object);
-    let empty = Map::new();
-    let body = body.unwrap_or(&empty);
+    let Some(body) = envelope.get("error").and_then(Value::as_object) else {
+        return Err(format!("{at}: the renderer message has no `error` body"));
+    };
     for (key, want) in expected_body {
         let have = body.get(key);
         if key == "message" {
@@ -105,7 +105,11 @@ fn message(have: Option<&Value>, want: &Value, at: &str) -> Result<(), String> {
             "{at}: rendererError.error.message must be a string"
         ));
     };
-    let text = have.and_then(Value::as_str).unwrap_or_default();
+    let Some(text) = have.and_then(Value::as_str) else {
+        return Err(format!(
+            "{at}: rendererError.error.message is missing in the renderer message"
+        ));
+    };
     if message_matches(text, pattern) {
         Ok(())
     } else {
