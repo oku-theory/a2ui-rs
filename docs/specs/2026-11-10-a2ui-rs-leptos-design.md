@@ -86,12 +86,18 @@ One concept per module:
   accepts `theme`, catalog-level `metadata` and vendor keys; restricted `$ref` targets never
   fetched; reserved `Surface` name; size and depth caps; parent/child rules); a surface's
   `CatalogSet`.
-- `surface`: `Surface` = id → `ComponentNode` map, buffer until `root`, default catalog, `DataModel`.
-- `processor`: `MessageProcessor::handle(msg) -> Outcome { outbound: Vec<RendererMessage>,
-  changes: ChangeSet }`; no I/O, no async — transport belongs to the application. User input goes
-  through `input(surface, path, value)` and `gesture(...)`.
+- `surface`: `Surface` = id → component map (JSON objects until Plan 5's `ComponentNode`), catalog
+  id (no default), `sendDataModel`, metadata, `DataModel`; buffering until `root` exists only under
+  `allow_missing_root`.
+- `processor`: `MessageProcessor::new(CatalogSet)`, `handle(&msg) -> Result<Outcome, Error>` and
+  `handle_batch` (stops at the first error, stamped with its `message_index`); a refused message
+  changes nothing, an oversized data model write is undone. `StateLimits` cap surfaces (64),
+  components (10 000 per surface and per message) and data model nodes (100 000). `Outcome` gains
+  `outbound: Vec<RendererMessage>` (t-1688) and `changes: ChangeSet` (t-1689). No I/O, no async —
+  transport belongs to the application. User input goes through `input(surface, path, value)` and
+  `gesture(...)`.
 - `action`: gesture → pipeline (write → function → event), stopping at the first failing step.
-- `subscribe`: `ChangeSet` (surfaces created/deleted, components changed, paths changed) and
+- `subscribe`: `ChangeSet` (t-1689: surfaces created/deleted, components changed, paths changed) and
   `Watchers` mapping paths/components to subscriber ids; a path change notifies ancestors and
   descendants.
 

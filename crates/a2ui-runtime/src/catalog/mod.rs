@@ -2,7 +2,8 @@
 //!
 //! [`Catalog::from_json`] checks an authored catalog document, keeps it for
 //! [`Catalog::to_json`], compiles one validator per entry, which its [`ComponentDef`] or
-//! [`FunctionDef`] holds, and builds [`Catalog::validation_schema`].
+//! [`FunctionDef`] holds, and builds [`Catalog::validation_schema`]. A [`CatalogSet`] holds the
+//! catalogs a renderer has loaded.
 
 mod compile;
 mod derive;
@@ -10,6 +11,7 @@ mod document;
 mod entries;
 mod flatten;
 mod load;
+mod set;
 mod shape;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -23,6 +25,7 @@ use jsonschema::Validator;
 use serde_json::{Map, Value};
 
 pub use derive::{Derivation, DeriveEntry};
+pub use set::CatalogSet;
 pub use shape::ComponentShape;
 pub use validate::CatalogLookup;
 

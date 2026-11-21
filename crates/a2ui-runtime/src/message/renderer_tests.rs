@@ -108,3 +108,48 @@ fn recursion_error_writes_only_surface_id() {
         },
     }));
 }
+
+/// The error `MessageProcessor` raises on the last of `messages`, with no catalog loaded.
+fn processed(messages: &[Value]) -> Error {
+    let mut processor = crate::MessageProcessor::new(crate::CatalogSet::new());
+    let limits = MessageLimits::default();
+    let (last, first) = messages.split_last().expect("one message at least");
+    for message in first {
+        processor
+            .handle(&AgentMessage::from_json(message, &limits).unwrap())
+            .unwrap();
+    }
+    processor
+        .handle(&AgentMessage::from_json(last, &limits).unwrap())
+        .expect_err("a refused message")
+}
+
+#[test]
+fn integrity_error_writes_only_surface_id() {
+    let create = json!({"version": "1.0", "createSurface": {"surfaceId": "main"}});
+    let error = processed(&[create.clone(), create]);
+
+    assert_that!(RendererMessage::error(&error).to_json()).is_equal_to(json!({
+        "version": "1.0",
+        "error": {
+            "code": "INTEGRITY_ERROR",
+            "message": "Surface 'main' already exists",
+            "surfaceId": "main",
+        },
+    }));
+}
+
+#[test]
+fn catalog_not_found_writes_only_surface_id() {
+    let error = processed(&[json!({"version": "1.0",
+        "createSurface": {"surfaceId": "main", "catalogId": "missing-catalog"}})]);
+
+    assert_that!(RendererMessage::error(&error).to_json()).is_equal_to(json!({
+        "version": "1.0",
+        "error": {
+            "code": "CATALOG_NOT_FOUND",
+            "message": "Catalog not found: missing-catalog",
+            "surfaceId": "main",
+        },
+    }));
+}

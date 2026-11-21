@@ -31,11 +31,16 @@ impl DetailCode {
 pub struct Detail {
     path: String,
     code: DetailCode,
+    pub(crate) surface_id: Option<String>,
 }
 
 impl Detail {
     pub(crate) fn new(path: String, code: DetailCode) -> Self {
-        Self { path, code }
+        Self {
+            path,
+            code,
+            surface_id: None,
+        }
     }
 
     /// The dot path from the message root, such as `createSurface.surfaceId`.
@@ -47,6 +52,11 @@ impl Detail {
     pub fn code(&self) -> DetailCode {
         self.code
     }
+
+    /// The surface the refused field belongs to, when known.
+    pub fn surface_id(&self) -> Option<&str> {
+        self.surface_id.as_deref()
+    }
 }
 
 /// What an [`Error`] knows about where it happened; boxed so that a plain error stays small.
@@ -55,6 +65,7 @@ pub(crate) struct Context {
     path: Option<String>,
     surface_id: Option<String>,
     function_call_id: Option<String>,
+    message_index: Option<usize>,
     details: Vec<Detail>,
 }
 
@@ -74,6 +85,11 @@ impl Error {
         self.context.as_deref()?.function_call_id.as_deref()
     }
 
+    /// The index of the refused message in its batch, for an error from a batch.
+    pub fn message_index(&self) -> Option<usize> {
+        self.context.as_deref()?.message_index
+    }
+
     /// The refused fields; empty when the error names none.
     pub fn details(&self) -> &[Detail] {
         self.context
@@ -85,12 +101,13 @@ impl Error {
         self.context.get_or_insert_with(Box::default)
     }
 
-    /// Prefixes each detail path with `messages.<index>.`, for a message read from a batch.
+    /// Records `index` as the message index and prefixes each detail path with
+    /// `messages.<index>.`, for a message read from a batch.
     pub(crate) fn at_message(mut self, index: usize) -> Self {
-        if let Some(context) = self.context.as_deref_mut() {
-            for detail in &mut context.details {
-                detail.path = format!("messages.{index}.{}", detail.path);
-            }
+        let context = self.context_mut();
+        context.message_index = Some(index);
+        for detail in &mut context.details {
+            detail.path = format!("messages.{index}.{}", detail.path);
         }
         self
     }
@@ -110,8 +127,13 @@ impl Error {
         self
     }
 
+    /// Sets the surface id, and that of every detail which names none.
     pub(crate) fn with_surface(mut self, id: &str) -> Self {
-        self.context_mut().surface_id = Some(id.to_owned());
+        let context = self.context_mut();
+        context.surface_id = Some(id.to_owned());
+        for detail in &mut context.details {
+            detail.surface_id.get_or_insert_with(|| id.to_owned());
+        }
         self
     }
 

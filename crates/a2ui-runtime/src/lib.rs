@@ -13,7 +13,8 @@
 //! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
 //! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
 //! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
-//! faults carry a [`Detail`]).
+//! faults carry a [`Detail`]), and [`MessageProcessor`] (applies messages to each [`Surface`],
+//! checked against a [`CatalogSet`] within [`StateLimits`], returning an [`Outcome`]).
 
 mod bundle;
 mod catalog;
@@ -27,15 +28,17 @@ mod keys;
 mod limits;
 mod message;
 mod pointer;
+mod processor;
 mod quoted;
 mod schema;
 mod subscribe;
+mod surface;
 mod validator;
 pub use subscribe::Watchers;
 
 pub use catalog::{
-    AllowedCallers, Catalog, CatalogLookup, ComponentDef, ComponentShape, Derivation, DeriveEntry,
-    FunctionDef,
+    AllowedCallers, Catalog, CatalogLookup, CatalogSet, ComponentDef, ComponentShape, Derivation,
+    DeriveEntry, FunctionDef,
 };
 pub use context::resolve_path;
 pub use data::{DataModel, Write};
@@ -47,4 +50,6 @@ pub use message::{
     MessageLimits, RendererMessage, UpdateComponents, UpdateDataModel,
 };
 pub use pointer::{MAX_LIST_INDEX, Pointer};
+pub use processor::{MessageProcessor, Outcome, StateLimits};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};
+pub use surface::Surface;

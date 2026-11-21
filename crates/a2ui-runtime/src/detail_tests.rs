@@ -20,3 +20,9 @@ fn detail_new_reads_back_path_and_code() {
     assert_that!(detail.path()).is_equal_to("createSurface.surfaceId");
     assert_that!(detail.code()).is_equal_to(DetailCode::TypeMismatch);
 }
+
+#[test]
+fn detail_new_has_no_surface_id() {
+    let detail = Detail::new("a".to_owned(), DetailCode::MissingField);
+    assert_that!(detail.surface_id()).is_none();
+}

@@ -33,7 +33,9 @@ impl RendererMessage {
             | ErrorCode::ExpressionError
             | ErrorCode::CatalogError
             | ErrorCode::InvalidFunctionCall
-            | ErrorCode::RecursionLimitExceeded => {
+            | ErrorCode::RecursionLimitExceeded
+            | ErrorCode::IntegrityError
+            | ErrorCode::CatalogNotFound => {
                 match (error.surface_id(), error.function_call_id()) {
                     (Some(surface), _) => body.insert("surfaceId".to_owned(), json!(surface)),
                     (None, Some(call)) => body.insert("functionCallId".to_owned(), json!(call)),

@@ -3,6 +3,7 @@ use speculoos::prelude::*;
 
 use super::*;
 use crate::detail::{Detail, DetailCode};
+use crate::error::process::ProcessFailure;
 use crate::limits::MAX_QUOTED_CHARS;
 use crate::quoted::reason;
 
@@ -67,6 +68,8 @@ fn error_debug_large_field_is_capped() {
 #[case::validation(ErrorCode::ValidationFailed, "VALIDATION_FAILED")]
 #[case::function_call(ErrorCode::InvalidFunctionCall, "INVALID_FUNCTION_CALL")]
 #[case::recursion(ErrorCode::RecursionLimitExceeded, "RECURSION_LIMIT_EXCEEDED")]
+#[case::integrity(ErrorCode::IntegrityError, "INTEGRITY_ERROR")]
+#[case::catalog_not_found(ErrorCode::CatalogNotFound, "CATALOG_NOT_FOUND")]
 fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expected: &str) {
     assert_that!(code.as_str()).is_equal_to(expected);
 }
@@ -156,6 +159,16 @@ fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expec
     Category::Recursion,
     ErrorCode::RecursionLimitExceeded
 )]
+#[case::surface_exists(
+    process(ProcessFailure::SurfaceExists { id: "main".into() }),
+    Category::Integrity,
+    ErrorCode::IntegrityError
+)]
+#[case::catalog_not_found(
+    process(ProcessFailure::CatalogNotFound { id: "missing".into() }),
+    Category::Catalog,
+    ErrorCode::CatalogNotFound
+)]
 fn error_class_of_variant_is_its_upstream_category_and_code(
     #[case] inner: Inner,
     #[case] category: Category,
@@ -163,6 +176,14 @@ fn error_class_of_variant_is_its_upstream_category_and_code(
 ) {
     let error: Error = inner.into();
     assert_that!((error.category(), error.code())).is_equal_to((category, code));
+}
+
+/// `failure` as the inner error the processor raises.
+fn process(failure: ProcessFailure) -> Inner {
+    ProcessSnafu {
+        failure: Box::new(failure),
+    }
+    .build()
 }
 
 fn value_limit() -> Error {
@@ -210,9 +231,51 @@ fn error_source_is_none_for_a_leaf_variant() {
     assert_that!(std::error::Error::source(&error).is_none()).is_true();
 }
 
+#[rstest]
+#[case::recursion(Category::Recursion, "RecursionError")]
+#[case::integrity(Category::Integrity, "IntegrityError")]
+fn category_as_str_spells_the_suite_category(#[case] category: Category, #[case] expected: &str) {
+    assert_that!(category.as_str()).is_equal_to(expected);
+}
+
 #[test]
-fn category_recursion_is_spelled_recursion_error() {
-    assert_that!(Category::Recursion.as_str()).is_equal_to("RecursionError");
+fn error_size_stays_within_128_bytes() {
+    assert_that!(size_of::<Error>()).is_less_than(128);
+}
+
+#[test]
+fn at_message_without_context_names_its_index() {
+    let error = value_limit().at_message(3);
+    assert_that!(error.message_index()).is_equal_to(Some(3));
+    assert_that!(error.details().is_empty()).is_true();
+}
+
+#[test]
+fn at_message_prefixes_detail_paths_and_names_its_index() {
+    let detail = Detail::new(
+        "deleteSurface.surfaceId".to_owned(),
+        DetailCode::MissingField,
+    );
+    let error = value_limit().with_detail(detail).at_message(1);
+    assert_that!(error.message_index()).is_equal_to(Some(1));
+    assert_that!(error.details()[0].path()).is_equal_to("messages.1.deleteSurface.surfaceId");
+}
+
+#[test]
+fn error_without_batch_has_no_message_index() {
+    assert_that!(value_limit().with_surface("s1").message_index()).is_none();
+}
+
+#[test]
+fn with_surface_stamps_details_that_have_none() {
+    let mut named = Detail::new("b".to_owned(), DetailCode::InvalidValue);
+    named.surface_id = Some("other".to_owned());
+    let error = value_limit()
+        .with_detail(Detail::new("a".to_owned(), DetailCode::InvalidValue))
+        .with_detail(named)
+        .with_surface("s1");
+    let surfaces: Vec<Option<&str>> = error.details().iter().map(Detail::surface_id).collect();
+    assert_that!(surfaces).is_equal_to(vec![Some("s1"), Some("other")]);
 }
 
 #[test]

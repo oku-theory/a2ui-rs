@@ -98,14 +98,30 @@ impl DataModel {
 
     /// Fails like `set` would, without changing anything.
     fn check_writable(&self, path: &Pointer) -> Result<(), Error> {
+        self.walk_writable(path, |_, _| {})
+    }
+
+    /// Walks `path` as `set` would, failing where it would.
+    ///
+    /// `visit` sees the depth of each segment whose container exists, with that container and
+    /// the slot the segment takes in it; none is seen past the first missing or `null` slot.
+    fn walk_writable<'a>(
+        &'a self,
+        path: &'a Pointer,
+        mut visit: impl FnMut(usize, Parent<'a>),
+    ) -> Result<(), Error> {
         let mut node = Some(&self.root);
-        for segment in path.segments() {
+        for (depth, segment) in path.segments().iter().enumerate() {
             node = match node {
                 Some(Value::Object(map)) => {
+                    visit(depth, Parent::Object(map, segment));
                     map.get(segment.as_str()).filter(|value| !value.is_null())
                 }
                 Some(Value::Array(items)) => match list_index(segment) {
-                    ListIndex::At(index) => items.get(index).filter(|value| !value.is_null()),
+                    ListIndex::At(index) => {
+                        visit(depth, Parent::List(items, index));
+                        items.get(index).filter(|value| !value.is_null())
+                    }
                     ListIndex::TooLarge => return Err(out_of_range(path, segment)),
                     ListIndex::NotIndex => return Err(non_numeric(path, segment)),
                 },
@@ -118,6 +134,106 @@ impl DataModel {
         }
         Ok(())
     }
+
+    /// Writes a non-`null` `value` at `path` as `set` does, returning how to undo it exactly.
+    ///
+    /// The [`Undo`] restores the first slot the write changed as it was, `null` entries and
+    /// list lengths included, so containers the write created go too. `None`: nothing changed.
+    pub(crate) fn set_undoable(
+        &mut self,
+        path: &Pointer,
+        value: Value,
+    ) -> Result<Option<Undo>, Error> {
+        let mut point = None;
+        self.walk_writable(path, |depth, parent| point = Some((depth, parent)))?;
+        let undo = match point {
+            None => Undo::Root(self.root.clone()),
+            Some((depth, Parent::Object(map, key))) => Undo::Slot {
+                path: path.clone(),
+                depth,
+                previous: map
+                    .get(key)
+                    .cloned()
+                    .map_or(Previous::Absent, Previous::Value),
+            },
+            Some((depth, Parent::List(items, index))) => Undo::Slot {
+                path: path.clone(),
+                depth,
+                previous: items
+                    .get(index)
+                    .cloned()
+                    .map_or(Previous::Length(items.len()), Previous::Value),
+            },
+        };
+        Ok(self.set(path, value)?.map(|_| undo))
+    }
+
+    /// Puts back what the write `undo` came from changed.
+    pub(crate) fn undo(&mut self, undo: Undo) -> Result<(), Error> {
+        let (path, depth, previous) = match undo {
+            Undo::Root(root) => {
+                self.root = root;
+                return Ok(());
+            }
+            Undo::Slot {
+                path,
+                depth,
+                previous,
+            } => (path, depth, previous),
+        };
+        let segments = path.segments();
+        let mut node = &mut self.root;
+        for segment in &segments[..depth] {
+            node = slot(node, segment, &path)?;
+        }
+        let segment = &segments[depth];
+        match (previous, node) {
+            (Previous::Value(value), node) => *slot(node, segment, &path)? = value,
+            (Previous::Absent, Value::Object(map)) => {
+                map.remove(segment.as_str());
+            }
+            (Previous::Length(len), Value::Array(items)) => items.truncate(len),
+            // A write changes what lies under its slot, never the kind of the slot's parent.
+            (Previous::Absent | Previous::Length(_), _) => return Err(primitive(&path, segment)),
+        }
+        Ok(())
+    }
+
+    /// Whether the model weighs more than `limit` nodes, strings weighed by length.
+    pub(crate) fn weighs_more_than(&self, limit: usize) -> bool {
+        crate::limits::weighs_more_than(&self.root, limit)
+    }
+}
+
+/// An existing container `walk_writable` passes through, with the slot the path takes in it.
+#[derive(Clone, Copy)]
+enum Parent<'a> {
+    Object(&'a Map<String, Value>, &'a str),
+    List(&'a [Value], usize),
+}
+
+/// How to undo one write: the model's old root, or one slot's old state.
+#[derive(Debug)]
+pub(crate) enum Undo {
+    /// The root the write replaced.
+    Root(Value),
+    /// The slot at `path`'s segment `depth`, under containers that existed before the write.
+    Slot {
+        path: Pointer,
+        depth: usize,
+        previous: Previous,
+    },
+}
+
+/// What a slot held before a write.
+#[derive(Debug)]
+pub(crate) enum Previous {
+    /// A raw value, `null` included.
+    Value(Value),
+    /// No key in its object.
+    Absent,
+    /// Past the end of its list, which had this length.
+    Length(usize),
 }
 
 impl Write {

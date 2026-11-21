@@ -148,3 +148,55 @@ fn write_unchanged_descendant_does_not_change() {
         .unwrap();
     assert_that!(write.changes(&p("/a/c"), &model)).is_false();
 }
+
+#[rstest]
+#[case::replaced_value(json!({"a": 1}), "/a", json!(2))]
+#[case::new_nested_key(json!({"a": {}}), "/a/b/c", json!(1))]
+#[case::raw_null_slot(json!({"a": null}), "/a/b", json!(1))]
+#[case::grown_list(json!({"l": [1]}), "/l/3/x", json!(1))]
+#[case::list_item(json!({"l": [1, 2]}), "/l/0", json!({"x": 1}))]
+#[case::root(json!({"a": 1}), "", json!({"b": 2}))]
+fn undo_after_set_undoable_restores_the_model_exactly(
+    #[case] root: Value,
+    #[case] path: &str,
+    #[case] value: Value,
+) {
+    let original = DataModel::new(root);
+    let mut model = original.clone();
+    let path = Pointer::parse(path).unwrap();
+
+    let undo = model.set_undoable(&path, value).unwrap().unwrap();
+    assert_that!(model).is_not_equal_to(&original);
+    model.undo(undo).unwrap();
+
+    assert_that!(model).is_equal_to(&original);
+}
+
+#[test]
+fn set_undoable_same_value_is_none() {
+    let mut model = sample();
+    assert_that!(
+        model
+            .set_undoable(&p("/user/name"), json!("Alice"))
+            .unwrap()
+    )
+    .is_none();
+}
+
+#[test]
+fn set_undoable_through_primitive_fails_like_set() {
+    let mut model = sample();
+    let error = model
+        .set_undoable(&p("/user/name/first"), json!(1))
+        .unwrap_err();
+    assert_that!(error.category()).is_equal_to(Category::Data);
+    assert_that!(model).is_equal_to(sample());
+}
+
+#[rstest]
+#[case::within(3, false)]
+#[case::past(2, true)]
+fn weighs_more_than_counts_every_node(#[case] limit: usize, #[case] expected: bool) {
+    let model = DataModel::new(json!({"a": [1]}));
+    assert_that!(model.weighs_more_than(limit)).is_equal_to(expected);
+}

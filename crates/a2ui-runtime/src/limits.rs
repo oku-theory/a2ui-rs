@@ -240,6 +240,13 @@ fn weight_up_to(value: &Value, limit: usize) -> usize {
     count
 }
 
+/// Whether `value` and everything under it weigh more than `limit` [`weight`] nodes.
+///
+/// The count stops once past `limit`, so the walk is bounded by it, not by `value`'s size.
+pub(crate) fn weighs_more_than(value: &Value, limit: usize) -> bool {
+    weight_up_to(value, limit) > limit
+}
+
 /// How one catalog entry expands once its local `$ref`s are followed.
 ///
 /// Reached names borrow their keys from `root`, the document `$ref`s resolve in.
