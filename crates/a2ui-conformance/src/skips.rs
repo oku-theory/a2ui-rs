@@ -4,11 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::case::Case;
-
-/// Actions whose behavior does not depend on the declared protocol version.
-const VERSION_NEUTRAL_ACTIONS: [&str; 3] =
-    ["data_model", "resolve_path", "parse_expression_template"];
+use crate::case::{Case, VersionError};
 
 /// Skip entries read from `skips.toml`, each with its reason.
 #[derive(Debug, Default, Deserialize)]
@@ -38,10 +34,29 @@ impl Skips {
         if let Some(reason) = self.actions.get(&case.action) {
             return Some(reason.clone());
         }
-        if is_version_neutral(case) {
+        if case.is_version_neutral() {
             return None;
         }
         self.versions.get(version?).cloned()
+    }
+
+    /// Why `case` is skipped given its version outcome, or `None` when it runs.
+    ///
+    /// A case skipped by name or action needs no version, so an unclassified one is skipped.
+    /// Any other unclassified case, and any read or type error, is an `Err`.
+    pub fn reason_for(
+        &self,
+        case: &Case,
+        version: &Result<Option<String>, VersionError>,
+    ) -> Result<Option<String>, String> {
+        match version {
+            Ok(version) => Ok(self.reason(case, version.as_deref())),
+            Err(VersionError::Unclassified(at)) => self
+                .reason(case, None)
+                .map(Some)
+                .ok_or_else(|| VersionError::Unclassified(at.clone()).to_string()),
+            Err(error) => Err(error.to_string()),
+        }
     }
 
     /// Entries that match no case, as `actions.<name>`, `cases.<name>` or `versions.<version>`.
@@ -63,16 +78,12 @@ impl Skips {
             .keys()
             .filter(|listed| {
                 !cases.iter().any(|(case, version)| {
-                    !is_version_neutral(case) && *version == Some(listed.as_str())
+                    !case.is_version_neutral() && *version == Some(listed.as_str())
                 })
             })
             .map(|version| format!("versions.{version}"));
         actions.chain(named).chain(versions).collect()
     }
-}
-
-fn is_version_neutral(case: &Case) -> bool {
-    VERSION_NEUTRAL_ACTIONS.contains(&case.action.as_str())
 }
 
 #[cfg(test)]

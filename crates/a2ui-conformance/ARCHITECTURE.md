@@ -5,9 +5,15 @@ Runs `vendor/a2ui/conformance/core/*.yaml` against `a2ui-runtime`, one libtest-m
 
 ## Modules
 
-- `case`: `Case` (suite, name, action, body), `parse_suite`, `load_suite`; `effective_version` gives
-  the version (declared, else the `catalogPath` file's, else `0.9` for a catalog; no leading `v`; a
-  read error fails that trial); `at()` is the `suite#name` location.
+- `case`: `Case` (suite, name, action, body), `parse_suite`, `load_suite`; `effective_version`
+  classifies the version, first match wins: top-level or `catalog.protocolVersion`, first
+  message's `version` (`messages`, `payload`, first step), `args.version`, first catalog
+  (`catalogs`, `catalogPaths`, `catalogPath` file or inline `catalog`; none declared = `0.9`), a
+  v0.8 envelope key, suite suffix `_v1_0`; no leading `v`. A version-dependent action left
+  unclassified is `VersionError::Unclassified`, only the version-neutral ones give `None`; a
+  read or type error is `VersionError::Failed`. `Skips::reason_for` skips an unclassified case
+  named in `[cases]`/`[actions]` and fails every other error; `at()` is the `suite#name`
+  location.
 - `skips`: `skips.toml` `[actions]`, `[cases]`, `[versions]` (each with a reason; the
   version-neutral `data_model`, `resolve_path`, `parse_expression_template` ignore `[versions]`).
   An entry matching no case fails `skips_toml_entries_all_match_a_case`.

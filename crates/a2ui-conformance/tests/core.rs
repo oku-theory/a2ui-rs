@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use a2ui_conformance::{Case, Manifest, Skips, Status, handlers, load_suite, upstream_root};
+use a2ui_conformance::{
+    Case, Manifest, Skips, Status, VersionError, handlers, load_suite, upstream_root,
+};
 use libtest_mimic::{Arguments, Failed, Trial};
 
 fn main() {
@@ -24,14 +26,14 @@ fn trials() -> Result<Vec<Trial>, String> {
     )?;
     let manifest = Manifest::from_env()?.map(Arc::new);
     let cases = all_cases(&root)?;
-    let versions: Vec<Result<Option<String>, String>> = cases
+    let versions: Vec<Result<Option<String>, VersionError>> = cases
         .iter()
         .map(|case| case.effective_version(&root))
         .collect();
     let classified: Vec<(&Case, Option<&str>)> = cases
         .iter()
         .zip(&versions)
-        .filter_map(|(case, version)| Some((case, version.as_ref().ok()?.as_deref())))
+        .map(|(case, version)| (case, version.as_ref().ok().and_then(|v| v.as_deref())))
         .collect();
     let unused = skips.unused(&classified);
     let mut trials = vec![Trial::test(
@@ -71,13 +73,13 @@ fn all_cases(root: &std::path::Path) -> Result<Vec<Case>, String> {
 
 fn trial(
     case: Case,
-    version: Result<Option<String>, String>,
+    version: Result<Option<String>, VersionError>,
     skips: &Skips,
     manifest: Option<Arc<Manifest>>,
 ) -> Result<Trial, String> {
     let name = format!("{}::{}", case.suite.trim_end_matches(".yaml"), case.name);
-    let version = match version {
-        Ok(version) => version,
+    let reason = match skips.reason_for(&case, &version) {
+        Ok(reason) => reason,
         Err(message) => {
             return Ok(Trial::test(name, move || {
                 if let Some(manifest) = &manifest {
@@ -87,14 +89,8 @@ fn trial(
             }));
         }
     };
-    if let Some(reason) = skips.reason(&case, version.as_deref()) {
-        if let Some(manifest) = &manifest {
-            manifest.record(&case.suite, &case.name, Status::Skipped, Some(&reason))?;
-        }
-        return Ok(Trial::test(name, move || {
-            Err(Failed::from(format!("skipped: {reason}")))
-        })
-        .with_ignored_flag(true));
+    if let Some(reason) = reason {
+        return skipped(name, &case, &reason, manifest);
     }
     Ok(Trial::test(name, move || {
         let outcome = match handlers::handler(&case.action) {
@@ -111,4 +107,21 @@ fn trial(
         }
         outcome.map_err(Failed::from)
     }))
+}
+
+/// The ignored trial of a skipped case, recorded in the manifest.
+fn skipped(
+    name: String,
+    case: &Case,
+    reason: &str,
+    manifest: Option<Arc<Manifest>>,
+) -> Result<Trial, String> {
+    if let Some(manifest) = &manifest {
+        manifest.record(&case.suite, &case.name, Status::Skipped, Some(reason))?;
+    }
+    let reason = reason.to_owned();
+    Ok(Trial::test(name, move || {
+        Err(Failed::from(format!("skipped: {reason}")))
+    })
+    .with_ignored_flag(true))
 }
