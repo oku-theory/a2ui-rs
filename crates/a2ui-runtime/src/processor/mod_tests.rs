@@ -354,32 +354,6 @@ fn function_messages_are_not_handled_yet(#[case] mut body: Value, #[case] text: 
     assert_that!(ids(&processor)).is_equal_to(vec!["main".to_owned()]);
 }
 
-// MVP: t-1682 (Task 2 checks components and deletes this test).
-#[rstest]
-#[case::create_surface(
-    json!({"createSurface": {"surfaceId": "s1", "catalogId": "c",
-        "components": [{"id": "root", "component": "Text"}]}}),
-    "Action 'createSurface.components' is not handled yet",
-    "s1"
-)]
-#[case::update_components(
-    json!({"updateComponents": {"surfaceId": "main",
-        "components": [{"id": "root", "component": "Text"}]}}),
-    "Action 'updateComponents' is not handled yet",
-    "main"
-)]
-fn components_are_not_handled_yet(#[case] mut body: Value, #[case] text: &str, #[case] id: &str) {
-    body["version"] = json!(V);
-    let mut processor = processor();
-    processor.handle(&create("main")).unwrap();
-
-    let error = processor.handle(&message(body)).unwrap_err();
-
-    let class = (Category::Validation, ErrorCode::ValidationFailed);
-    assert_error(&error, class, text, Some(id), None);
-    assert_that!(ids(&processor)).is_equal_to(vec!["main".to_owned()]);
-}
-
 #[test]
 fn catalogs_reads_back_the_set() {
     let processor = processor();

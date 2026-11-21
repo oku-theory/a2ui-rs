@@ -25,7 +25,11 @@ impl DetailCode {
     }
 }
 
-/// One refused field of a message: its dot path from the message root and why.
+/// One refused field of a message: where it is and why.
+///
+/// A fault in the message's own shape has a dot path from the message root; a schema violation
+/// of one component has a JSON Pointer relative to that component, the error's
+/// [`Error::path`] saying which component.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Detail {
@@ -43,7 +47,12 @@ impl Detail {
         }
     }
 
-    /// The dot path from the message root, such as `createSurface.surfaceId`.
+    /// Where the field is, in one of two forms.
+    ///
+    /// A message-shape fault gives a dot path from the message root, such as
+    /// `createSurface.surfaceId`, prefixed `messages.<i>.` in a batch. A component's schema
+    /// violation gives a JSON Pointer relative to the component, starting with `/`, such as
+    /// `/text`; in a batch, [`Error::message_index`] gives the message.
     pub fn path(&self) -> &str {
         &self.path
     }
@@ -101,13 +110,16 @@ impl Error {
         self.context.get_or_insert_with(Box::default)
     }
 
-    /// Records `index` as the message index and prefixes each detail path with
-    /// `messages.<index>.`, for a message read from a batch.
+    /// Records `index` as the message index and prefixes each dot-path detail with
+    /// `messages.<index>.`, for a message read from a batch; JSON Pointer details stay as they
+    /// are, relative to their component.
     pub(crate) fn at_message(mut self, index: usize) -> Self {
         let context = self.context_mut();
         context.message_index = Some(index);
         for detail in &mut context.details {
-            detail.path = format!("messages.{index}.{}", detail.path);
+            if !detail.path.starts_with('/') {
+                detail.path = format!("messages.{index}.{}", detail.path);
+            }
         }
         self
     }

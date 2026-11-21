@@ -14,7 +14,8 @@
 //! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
 //! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
 //! faults carry a [`Detail`]), and [`MessageProcessor`] (applies messages to each [`Surface`],
-//! checked against a [`CatalogSet`] within [`StateLimits`], returning an [`Outcome`]).
+//! checked against a [`CatalogSet`] under [`ValidationRules`] within [`StateLimits`], returning
+//! an [`Outcome`]).
 
 mod bundle;
 mod catalog;
@@ -50,6 +51,6 @@ pub use message::{
     MessageLimits, RendererMessage, UpdateComponents, UpdateDataModel,
 };
 pub use pointer::{MAX_LIST_INDEX, Pointer};
-pub use processor::{MessageProcessor, Outcome, StateLimits};
+pub use processor::{MessageProcessor, Outcome, StateLimits, ValidationRules};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};
 pub use surface::Surface;

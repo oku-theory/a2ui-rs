@@ -21,8 +21,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
 - `schema`: the embedded v1.0 `common_types.json` and `agent_to_renderer.json` (copied into
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached; `FunctionCall` takes any function but `@index`).
-- `keys`: `CALL_KEY`, `PATH_KEY`. `ident`: UAX #31. `validator`: `jsonschema` 2020-12, offline;
-  build failures are `CatalogError`.
+- `keys`, `ident` (UAX #31). `validator`: `jsonschema` 2020-12, offline (build failures are
+  `CatalogError`); maps a violation to a message, `DetailCode` and JSON Pointer.
 - `catalog`: `Catalog` (checked v1.0 catalog, per-entry validators, `validate_component`,
   `derive`) and `CatalogSet` (by id, duplicates refused); see `src/catalog/ARCHITECTURE.md`.
 - `bundle`, `walk`, `ref_pointer`, `target`, `position`, `check`: `$ref` bundling, walking and
@@ -36,10 +36,12 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   action's branch, components opaque; first violation one `Detail`; `callRendererFunction` faults
   `INVALID_FUNCTION_CALL`), `typed` (by hand), then `check_bindings` (`@call` chains up to 5,
   `@path` parses). `batch`: array or `{"messages": […]}`. `RendererMessage::error`: an `Error`.
-- `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`); components later.
-- `processor`: `MessageProcessor` applies messages; a refused one changes nothing (an oversized
-  write is undone). `StateLimits`: surfaces, components, data model nodes. `handle_batch` stops at
-  the first error and stamps its `message_index`. `Outcome` is empty until t-1688/t-1689.
+- `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`, components as
+  sent in arrival order, replaced whole in place; `unescaped_component` strips one `@` of `@@`).
+- `processor`: `MessageProcessor` applies messages; a refused one changes nothing. `components`:
+  counts, duplicate ids, then per component size, id, catalog (`resolve`), `@@` collisions,
+  `validate_located`; paths `/components/<i>`. `ValidationRules` (strict default), `StateLimits`;
+  `handle_batch` stamps `message_index`. `Outcome` is empty until t-1688/t-1689.
 
 ## Dependencies
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;

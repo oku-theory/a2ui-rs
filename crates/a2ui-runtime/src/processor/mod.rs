@@ -4,7 +4,10 @@
 //! [`StateLimits`], then applies it; a refused message changes nothing. The host turns an error
 //! into a reply with [`RendererMessage::error`](crate::RendererMessage::error).
 
+mod components;
 mod limits;
+mod resolve;
+mod rules;
 
 use std::collections::BTreeMap;
 
@@ -12,10 +15,13 @@ use serde_json::Value;
 
 use crate::catalog::CatalogSet;
 use crate::error::{Error, ProcessFailure};
-use crate::message::{AgentMessage, CreateSurface, MessageLimits, UpdateDataModel};
+use crate::message::{
+    AgentMessage, CreateSurface, MessageLimits, UpdateComponents, UpdateDataModel,
+};
 use crate::surface::Surface;
 
 pub use limits::StateLimits;
+pub use rules::ValidationRules;
 
 /// What handling a message produced; later versions add fields.
 // MVP: t-1688 (outbound messages), t-1689 (ChangeSet)
@@ -33,6 +39,7 @@ pub struct MessageProcessor {
     surfaces: BTreeMap<String, Surface>,
     limits: MessageLimits,
     state_limits: StateLimits,
+    rules: ValidationRules,
 }
 
 impl MessageProcessor {
@@ -43,6 +50,7 @@ impl MessageProcessor {
             surfaces: BTreeMap::new(),
             limits: MessageLimits::default(),
             state_limits: StateLimits::default(),
+            rules: ValidationRules::default(),
         }
     }
 
@@ -59,26 +67,37 @@ impl MessageProcessor {
         }
     }
 
-    /// Applies one message.
+    /// This processor checking components under `rules` unless a call names others.
+    pub fn with_rules(self, rules: ValidationRules) -> Self {
+        Self { rules, ..self }
+    }
+
+    /// Applies one message under this processor's [`ValidationRules`].
     ///
     /// # Errors
     ///
     /// The first check the message fails; a refused message changes nothing. An error from a
     /// message naming a surface carries its [`Error::surface_id`].
     pub fn handle(&mut self, message: &AgentMessage) -> Result<Outcome, Error> {
+        self.handle_with(message, self.rules)
+    }
+
+    /// Applies one message, checking its components under `rules`.
+    ///
+    /// # Errors
+    ///
+    /// As [`MessageProcessor::handle`].
+    pub fn handle_with(
+        &mut self,
+        message: &AgentMessage,
+        rules: ValidationRules,
+    ) -> Result<Outcome, Error> {
         match message {
             AgentMessage::CreateSurface(create) => self
-                .create_surface(create)
+                .create_surface(create, rules)
                 .map_err(|error| error.with_surface(&create.surface_id)),
             AgentMessage::UpdateComponents(update) => self
-                .surface_or_fail(&update.surface_id)
-                .and_then(|_| {
-                    // MVP: t-1682
-                    Err(ProcessFailure::NotYetSupported {
-                        action: "updateComponents",
-                    }
-                    .into())
-                })
+                .update_components(update, rules)
                 .map_err(|error| error.with_surface(&update.surface_id)),
             AgentMessage::UpdateDataModel(update) => self
                 .update_data_model(update)
@@ -113,9 +132,22 @@ impl MessageProcessor {
     /// A validation error when `batch` has neither shape; else the first message's error, with
     /// its [`Error::message_index`]. Earlier messages stay applied; later ones are never read.
     pub fn handle_batch(&mut self, batch: &Value) -> Result<Outcome, Error> {
+        self.handle_batch_with(batch, self.rules)
+    }
+
+    /// Reads and applies a batch as [`MessageProcessor::handle_batch`], under `rules`.
+    ///
+    /// # Errors
+    ///
+    /// As [`MessageProcessor::handle_batch`].
+    pub fn handle_batch_with(
+        &mut self,
+        batch: &Value,
+        rules: ValidationRules,
+    ) -> Result<Outcome, Error> {
         let limits = self.limits;
         for (index, message) in AgentMessage::batch(batch, &limits)?.enumerate() {
-            self.handle(&message?)
+            self.handle_with(&message?, rules)
                 .map_err(|error| error.at_message(index))?;
         }
         Ok(Outcome::default())
@@ -131,15 +163,13 @@ impl MessageProcessor {
         &self.catalogs
     }
 
-    fn surface_or_fail(&self, id: &str) -> Result<&Surface, Error> {
-        self.surfaces
-            .get(id)
-            .ok_or_else(|| ProcessFailure::SurfaceNotFound { id: id.into() }.into())
-    }
-
     /// Checks a `createSurface` (duplicate, surface count, catalog, components, data model size),
     /// then inserts the surface.
-    fn create_surface(&mut self, create: &CreateSurface) -> Result<(), Error> {
+    fn create_surface(
+        &mut self,
+        create: &CreateSurface,
+        rules: ValidationRules,
+    ) -> Result<(), Error> {
         let id = &create.surface_id;
         if self.surfaces.contains_key(id) {
             return Err(ProcessFailure::SurfaceExists { id: id.into() }.into());
@@ -153,19 +183,43 @@ impl MessageProcessor {
         {
             return Err(ProcessFailure::CatalogNotFound { id: catalog.into() }.into());
         }
-        if !create.components.is_empty() {
-            // MVP: t-1682
-            return Err(ProcessFailure::NotYetSupported {
-                action: "createSurface.components",
-            }
-            .into());
-        }
-        let surface = Surface::new(create);
+        let mut surface = Surface::new(create);
+        let staged = components::check(
+            &surface,
+            &create.components,
+            rules,
+            &self.catalogs,
+            &self.state_limits,
+        )?;
+        surface.commit(staged);
         let max_nodes = self.state_limits.max_data_model_nodes();
         if surface.data_model().weighs_more_than(max_nodes) {
             return Err(state_limit("Data model node", max_nodes));
         }
         self.surfaces.insert(id.clone(), surface);
+        Ok(())
+    }
+
+    /// Checks every component of `update`, then stores them all.
+    fn update_components(
+        &mut self,
+        update: &UpdateComponents,
+        rules: ValidationRules,
+    ) -> Result<(), Error> {
+        let surface = self.surfaces.get_mut(&update.surface_id).ok_or_else(|| {
+            ProcessFailure::SurfaceNotFound {
+                id: (&update.surface_id).into(),
+            }
+        })?;
+        let components = &update.components;
+        let staged = components::check(
+            surface,
+            components,
+            rules,
+            &self.catalogs,
+            &self.state_limits,
+        )?;
+        surface.commit(staged);
         Ok(())
     }
 
@@ -201,3 +255,7 @@ fn state_limit(what: &'static str, limit: usize) -> Error {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mod_components_tests.rs"]
+mod components_tests;

@@ -28,6 +28,7 @@ pub use derive::{Derivation, DeriveEntry};
 pub use set::CatalogSet;
 pub use shape::ComponentShape;
 pub use validate::CatalogLookup;
+pub(crate) use validate::{CallCatalogs, Located, Report, bounded, identifier};
 
 /// Who may call a catalog function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

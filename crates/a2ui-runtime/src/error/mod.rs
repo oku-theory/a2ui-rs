@@ -14,7 +14,7 @@ use snafu::{Backtrace, ErrorCompat};
 use crate::detail::Context;
 
 pub(crate) use inner::*;
-pub(crate) use process::ProcessFailure;
+pub(crate) use process::{MAX_VIOLATION_DETAILS, ProcessFailure};
 
 /// The conformance category of an [`Error`], as the upstream suites name it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

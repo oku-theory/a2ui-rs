@@ -5,19 +5,16 @@
 
 use std::sync::LazyLock;
 
-use jsonschema::error::{TypeKind, ValidationError, ValidationErrorKind};
-use jsonschema::paths::LocationSegment;
-use jsonschema::{JsonType, Validator};
+use jsonschema::Validator;
 use serde_json::{Map, Value, json};
 
 use super::envelope::Action;
 use crate::bundle::{local_ref, localize_refs};
-use crate::detail::{Detail, DetailCode};
+use crate::detail::Detail;
 use crate::error::{EmbeddedSchemaSnafu, Error, FunctionCallShapeSnafu, MessageFieldSnafu};
-use crate::pointer::escape_token;
 use crate::quoted::{Quoted, reason};
 use crate::schema::{agent_to_renderer_schema, common_document};
-use crate::validator::{build, rooted};
+use crate::validator::{Fault, FaultKind, build, fault, pointer, rooted};
 
 /// The `agent_to_renderer.json` definitions and the common types, as one schema document.
 type Document = Result<Map<String, Value>, String>;
@@ -99,115 +96,29 @@ pub(crate) fn check(action: Action, message: &Value) -> Result<(), Error> {
     ))
 }
 
-/// What one schema violation says, in the terms of the messages and details built from it.
-struct Fault {
-    /// The instance path's tokens, the action key first; the field's parent for a name below.
-    tokens: Vec<String>,
-    kind: FaultKind,
-}
-
-enum FaultKind {
-    /// A required field is absent.
-    Missing(String),
-    /// A value has the wrong type, named with its article ("a string").
-    Type(Option<&'static str>),
-    /// A field the branch does not allow.
-    Extra(String),
-    /// Any other keyword.
-    Other,
-}
-
-fn fault(error: &ValidationError<'_>) -> Fault {
-    let kind = match error.kind() {
-        ValidationErrorKind::OneOfNotValid { context } | ValidationErrorKind::AnyOf { context } => {
-            // The branch that fails least is the one the author meant; a tie goes to the first.
-            if let Some(first) = context
-                .iter()
-                .filter(|branch| !branch.is_empty())
-                .min_by_key(|branch| branch.len())
-                .and_then(|branch| branch.first())
-            {
-                return fault(first);
-            }
-            FaultKind::Other
-        }
-        ValidationErrorKind::Required { property } => FaultKind::Missing(
-            property
-                .as_str()
-                .map_or_else(|| property.to_string(), str::to_owned),
-        ),
-        ValidationErrorKind::Type { kind } => FaultKind::Type(match kind {
-            TypeKind::Single(single) => Some(article(*single)),
-            _ => None,
-        }),
-        ValidationErrorKind::AdditionalProperties { unexpected } => unexpected
-            .first()
-            .map_or(FaultKind::Other, |name| FaultKind::Extra(name.clone())),
-        _ => FaultKind::Other,
-    };
-    let tokens = error
-        .instance_path()
-        .into_iter()
-        .map(|segment| match segment {
-            LocationSegment::Property(name) => name.into_owned(),
-            LocationSegment::Index(index) => index.to_string(),
-        })
-        .collect();
-    Fault { tokens, kind }
-}
-
-fn article(kind: JsonType) -> &'static str {
-    match kind {
-        JsonType::Null => "null",
-        JsonType::Boolean => "a boolean",
-        JsonType::Integer => "an integer",
-        JsonType::Number => "a number",
-        JsonType::String => "a string",
-        JsonType::Array => "an array",
-        JsonType::Object => "an object",
-    }
-}
-
 /// The error for `fault` in `action`'s message, whose body is `body`.
 fn refusal(action: Action, fault: Fault, body: Option<&Value>) -> Error {
-    let Fault { mut tokens, kind } = fault;
-    let nested = !tokens.is_empty();
+    let nested = !fault.tokens.is_empty();
     let held = if nested {
-        dotted(&tokens)
+        dotted(&fault.tokens)
     } else {
         action.key().to_owned()
     };
     let held = Quoted::new(&held);
-    let (reason, code, below) = match &kind {
-        FaultKind::Missing(name) => (
-            reason![held, " is missing required field '", Quoted::new(name), "'"],
-            DetailCode::MissingField,
-            Some(name),
-        ),
-        FaultKind::Extra(name) if !nested => (
-            reason![
-                "Message has unexpected top-level field '",
-                Quoted::new(name),
-                "'"
-            ],
-            DetailCode::InvalidValue,
-            Some(name),
-        ),
-        FaultKind::Extra(name) => (
-            reason![held, " has unexpected field '", Quoted::new(name), "'"],
-            DetailCode::InvalidValue,
-            Some(name),
-        ),
-        FaultKind::Type(Some(expected)) => (
-            reason![held, " must be ", *expected],
-            DetailCode::TypeMismatch,
-            None,
-        ),
-        FaultKind::Type(None) | FaultKind::Other => {
-            (reason![held, " is invalid"], DetailCode::InvalidValue, None)
+    let reason = match &fault.kind {
+        FaultKind::Missing(name) => {
+            reason![held, " is missing required field '", Quoted::new(name), "'"]
         }
+        FaultKind::Extra(name) if !nested => reason![
+            "Message has unexpected top-level field '",
+            Quoted::new(name),
+            "'"
+        ],
+        FaultKind::Extra(name) => reason![held, " has unexpected field '", Quoted::new(name), "'"],
+        FaultKind::Type(Some(expected)) => reason![held, " must be ", *expected],
+        FaultKind::Type(None) | FaultKind::Other => reason![held, " is invalid"],
     };
-    tokens.extend(below.cloned());
+    let (code, tokens) = fault.located();
     let id = |key: &str| body.and_then(|body| body.get(key)).and_then(Value::as_str);
     let mut error: Error = if action == Action::CallRendererFunction {
         FunctionCallShapeSnafu { reason }.build().into()
@@ -230,14 +141,6 @@ fn refusal(action: Action, fault: Fault, body: Option<&Value>) -> Error {
 
 fn dotted(tokens: &[String]) -> String {
     tokens.join(".")
-}
-
-/// `tokens` as a JSON Pointer, each escaped.
-fn pointer(tokens: &[String]) -> String {
-    tokens
-        .iter()
-        .map(|token| format!("/{}", escape_token(token)))
-        .collect()
 }
 
 #[cfg(test)]

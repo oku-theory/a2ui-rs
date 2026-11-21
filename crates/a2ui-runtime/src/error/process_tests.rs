@@ -34,6 +34,42 @@ use super::*;
     "Surface limit of 64 exceeded",
     (Category::Validation, ErrorCode::ValidationFailed)
 )]
+#[case::duplicate_component(
+    ProcessFailure::DuplicateComponent { id: "c1".into() },
+    "Duplicate component ID 'c1' in one message",
+    (Category::Integrity, ErrorCode::IntegrityError)
+)]
+#[case::no_default_catalog(
+    ProcessFailure::NoDefaultCatalog { surface: "s".into(), what: "component", name: "c1".into() },
+    "Surface 's' has no default catalogId for component 'c1'",
+    (Category::Catalog, ErrorCode::CatalogNotFound)
+)]
+#[case::schema_violations(
+    ProcessFailure::SchemaViolations {
+        id: "b1".into(),
+        kind: "Button".into(),
+        count: 2,
+        first: "\"child\" is a required property at ''".into(),
+    },
+    "Component 'b1' (Button) has 2 schema violations; first: \"child\" is a required property \
+     at ''",
+    (Category::Validation, ErrorCode::ValidationFailed)
+)]
+#[case::schema_violations_past_the_details(
+    ProcessFailure::SchemaViolations {
+        id: "m1".into(),
+        kind: "Many".into(),
+        count: 17,
+        first: "x".into(),
+    },
+    "Component 'm1' (Many) has more than 16 schema violations; first: x",
+    (Category::Validation, ErrorCode::ValidationFailed)
+)]
+#[case::escaped_key_collision(
+    ProcessFailure::EscapedKeyCollision { escaped: "@@path".into(), plain: "@path".into() },
+    "Key '@@path' collides with '@path' after unescaping",
+    (Category::Validation, ErrorCode::ValidationFailed)
+)]
 fn process_failure_display_and_class_match_upstream(
     #[case] failure: ProcessFailure,
     #[case] text: &str,
