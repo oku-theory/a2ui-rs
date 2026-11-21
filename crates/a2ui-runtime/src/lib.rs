@@ -44,7 +44,7 @@ pub use error::{Category, Error, ErrorCode};
 pub use expression::{Expr, MAX_DEPTH, MAX_TEMPLATE_CHARS, MAX_TEMPLATE_PARTS, parse_template};
 pub use message::{
     AgentFunctionResponse, AgentMessage, Batch, CallRendererFunction, CreateSurface, DeleteSurface,
-    MessageLimits, UpdateComponents, UpdateDataModel,
+    MessageLimits, RendererMessage, UpdateComponents, UpdateDataModel,
 };
 pub use pointer::{MAX_LIST_INDEX, Pointer};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};

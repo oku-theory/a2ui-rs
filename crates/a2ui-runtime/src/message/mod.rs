@@ -6,6 +6,7 @@
 
 mod envelope;
 mod limits;
+mod renderer;
 mod schema;
 mod typed;
 mod values;
@@ -17,6 +18,7 @@ use crate::pointer::Pointer;
 use crate::quoted::{Quoted, reason};
 
 pub use limits::MessageLimits;
+pub use renderer::RendererMessage;
 
 /// One message an agent sends a renderer, read from JSON.
 #[derive(Debug, Clone, PartialEq)]
