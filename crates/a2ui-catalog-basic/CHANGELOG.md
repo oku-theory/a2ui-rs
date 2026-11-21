@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-catalog-basic-v0.3.0...a2ui-catalog-basic-v0.4.0) - 2026-11-21
+
+### Added
+
+- *(runtime)* evaluation, function registry and basic functions (t-1709) ([#20](https://github.com/oku-theory/a2ui-rs/pull/20))
+
 ## [0.3.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-catalog-basic-v0.2.0...a2ui-catalog-basic-v0.3.0) - 2026-11-15
 
 ### Added
