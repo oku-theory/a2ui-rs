@@ -5,13 +5,17 @@
 //! runtime keeps no serde dependency. Components stay raw JSON for a catalog to check.
 
 mod envelope;
+mod limits;
 mod schema;
 mod typed;
 
 use serde_json::{Map, Value};
 
-use crate::error::Error;
+use crate::error::{Error, MessageEnvelopeSnafu, MessageJsonSnafu, MessageTooLargeSnafu};
 use crate::pointer::Pointer;
+use crate::quoted::{Quoted, reason};
+
+pub use limits::MessageLimits;
 
 /// One message an agent sends a renderer, read from JSON.
 #[derive(Debug, Clone, PartialEq)]
@@ -100,18 +104,100 @@ pub struct AgentFunctionResponse {
 }
 
 impl AgentMessage {
-    /// Reads one message from JSON: envelope, then schema, then typed fields.
+    /// Reads one message from JSON text: size, then syntax, then [`AgentMessage::from_json`].
+    ///
+    /// # Errors
+    ///
+    /// A validation error when the text passes `limits`; a parse error when it is not JSON;
+    /// otherwise those of [`AgentMessage::from_json`].
+    pub fn parse(text: &str, limits: &MessageLimits) -> Result<Self, Error> {
+        if text.len() > limits.max_bytes() {
+            return Err(too_large(limits));
+        }
+        let value: Value = serde_json::from_str(text).map_err(|e| {
+            MessageJsonSnafu {
+                message: Quoted::new(&e.to_string()),
+            }
+            .build()
+        })?;
+        Self::from_json(&value, limits)
+    }
+
+    /// Reads one message from JSON: size, envelope, then schema, then typed fields.
     ///
     /// # Errors
     ///
     /// A [`Category::Validation`](crate::Category) error naming the first fault; the error's
     /// path, ids and details say where.
-    pub fn from_json(value: &Value) -> Result<Self, Error> {
+    pub fn from_json(value: &Value, limits: &MessageLimits) -> Result<Self, Error> {
+        if limits::encoded_len_exceeds(value, limits.max_bytes()) {
+            return Err(too_large(limits));
+        }
         let (action, body) = envelope::precheck(value)?;
         schema::check(action, value)?;
         typed::read(action, body)
     }
+
+    /// Reads a batch: an array of messages, or an object whose only key is `messages`.
+    ///
+    /// # Errors
+    ///
+    /// A validation error when `value` has neither shape.
+    pub fn batch<'a>(value: &'a Value, limits: &'a MessageLimits) -> Result<Batch<'a>, Error> {
+        let messages = match value {
+            Value::Array(items) => Some(items),
+            Value::Object(entries) if entries.len() == 1 => {
+                entries.get("messages").and_then(Value::as_array)
+            }
+            _ => None,
+        };
+        messages
+            .map(|items| Batch {
+                items: items.iter().enumerate(),
+                limits,
+            })
+            .ok_or_else(|| {
+                MessageEnvelopeSnafu {
+                    reason: reason![
+                        "A batch is an array of messages or an object with only 'messages', \
+                         an array"
+                    ],
+                }
+                .build()
+                .into()
+            })
+    }
 }
+
+fn too_large(limits: &MessageLimits) -> Error {
+    MessageTooLargeSnafu {
+        limit: limits.max_bytes(),
+    }
+    .build()
+    .into()
+}
+
+/// The messages of a batch, each read on its own: an error does not end the batch.
+#[derive(Debug)]
+pub struct Batch<'a> {
+    items: std::iter::Enumerate<std::slice::Iter<'a, Value>>,
+    limits: &'a MessageLimits,
+}
+
+impl Iterator for Batch<'_> {
+    type Item = Result<AgentMessage, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (index, value) = self.items.next()?;
+        Some(AgentMessage::from_json(value, self.limits).map_err(|e| e.at_message(index)))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.items.size_hint()
+    }
+}
+
+impl ExactSizeIterator for Batch<'_> {}
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

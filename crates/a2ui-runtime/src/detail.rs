@@ -85,6 +85,16 @@ impl Error {
         self.context.get_or_insert_with(Box::default)
     }
 
+    /// Prefixes each detail path with `messages.<index>.`, for a message read from a batch.
+    pub(crate) fn at_message(mut self, index: usize) -> Self {
+        if let Some(context) = self.context.as_deref_mut() {
+            for detail in &mut context.details {
+                detail.path = format!("messages.{index}.{}", detail.path);
+            }
+        }
+        self
+    }
+
     pub(crate) fn with_path(mut self, path: String) -> Self {
         self.context_mut().path = Some(path);
         self

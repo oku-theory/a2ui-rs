@@ -1,10 +1,8 @@
 # a2ui-runtime
 
-Renderer-side A2UI v1.0 runtime: protocol state and evaluation, no rendering, no I/O, no async.
-It builds for `wasm32-unknown-unknown`.
+Renderer-side A2UI v1.0 runtime: state and evaluation, no rendering, I/O or async; builds for wasm32.
 
 ## Modules
-
 - `error`: opaque `Error` (Snafu `Inner`, backtrace per variant), `category()`, `code()`, boxed
   context (`detail`: `path`, `surface_id`, `function_call_id`, `Detail` list); stable English.
 - `quoted`: `Quoted` input, escaped and capped; `reason!` joins fixed text and `Quoted` only.
@@ -22,7 +20,7 @@ It builds for `wasm32-unknown-unknown`.
   `schemas/v1_0/` by `vendor/sync.sh`, Apache-2.0 `LICENSE` beside them), returned as is;
   `validate_common_type` (cached; `FunctionCall` takes any function but `@index`).
 - `keys`: `CALL_KEY`, `PATH_KEY`. `ident`: UAX #31 `is_identifier`. `validator`: `jsonschema`
-  2020-12, `regex` engine, offline; build failures are `CatalogError`.
+  2020-12, `regex`, offline; build failures are `CatalogError`.
 - `catalog`: `Catalog::from_json` checks a v1.0 catalog (depth, nodes, id, version, string
   `instructions`, `$ref` rules, UAX #31 names, callers, metadata, entry caps), keeps the entries its
   unions list and the authored document (`to_json`), compiles each entry against a bundle pruned to
@@ -41,10 +39,12 @@ It builds for `wasm32-unknown-unknown`.
   component calls, 256-byte keys, 4 KiB `$ref`s), and `expand`, which follows `$ref`s (each site
   once), charges each reached entry whole, weighs strings and keys (one node per 64 bytes), and
   rejects cycles, depth past 128 and oversized or pattern-heavy entries before compile.
-- `message`: `AgentMessage::from_json` runs `envelope` (object, one action, version "1.0"), `schema`
-  (the action's branch, components opaque; the first violation is one `Detail`; faults in
-  `callRendererFunction` are `INVALID_FUNCTION_CALL`), then `typed` (by hand, no serde).
+- `message`: `AgentMessage::parse`/`from_json` check `MessageLimits` (1 MiB; text by `len`, a value
+  by an escape-free estimate), then `envelope` (object, one action, version "1.0"), `schema` (the
+  action's branch, components opaque; first violation one `Detail`; `callRendererFunction` faults
+  `INVALID_FUNCTION_CALL`), then `typed` (by hand, no serde). `batch` reads an array or
+  `{"messages": [...]}`, one result each, detail paths `messages.<i>.…`.
 
 ## Dependencies
-`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;
-brings `wasm-bindgen` through `getrandom` on wasm32, checked by `just deps`).
+`snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off; brings
+`wasm-bindgen` via `getrandom` on wasm32, checked by `just deps`).

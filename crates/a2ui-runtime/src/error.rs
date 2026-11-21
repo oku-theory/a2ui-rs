@@ -367,6 +367,15 @@ pub(crate) enum Inner {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("A2UI message exceeds the {limit}-byte limit"))]
+    MessageTooLarge { limit: usize, backtrace: Backtrace },
+
+    #[snafu(display("Invalid JSON in A2UI message: {message}"))]
+    MessageJson {
+        message: Quoted,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{reason}"))]
     FunctionCallShape {
         reason: Reason,
@@ -383,6 +392,7 @@ impl Inner {
             | Self::NonNumericSegment { .. }
             | Self::IndexOutOfRange { .. } => (Category::Data, ErrorCode::DataError),
             Self::ExpressionSyntax { .. } => (Category::Parse, ErrorCode::ExpressionError),
+            Self::MessageJson { .. } => (Category::Parse, ErrorCode::ValidationFailed),
             Self::ExpressionLimit { .. } => (Category::Expression, ErrorCode::ExpressionError),
             Self::EmbeddedSchema { .. }
             | Self::SchemaBuild { .. }
@@ -414,6 +424,7 @@ impl Inner {
             | Self::UnknownFunction { .. }
             | Self::AgentOnlyCall { .. }
             | Self::MessageEnvelope { .. }
+            | Self::MessageTooLarge { .. }
             | Self::MessageField { .. } => (Category::Validation, ErrorCode::ValidationFailed),
             Self::FunctionCallShape { .. } => {
                 (Category::Validation, ErrorCode::InvalidFunctionCall)

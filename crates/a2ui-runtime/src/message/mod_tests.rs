@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use speculoos::prelude::*;
 
 use super::*;
-use crate::{Category, DetailCode, ErrorCode};
+use crate::{Category, Detail, DetailCode, ErrorCode};
 
 const V: &str = "1.0";
 
@@ -134,7 +134,7 @@ fn from_json_refuses_malformed_messages(
     #[case] surface: Option<&str>,
     #[case] function_call: Option<&str>,
 ) {
-    let error = AgentMessage::from_json(&message).err();
+    let error = AgentMessage::from_json(&message, &MessageLimits::default()).err();
     let error = error.expect("the message is malformed");
     assert_that!((error.category(), error.code())).is_equal_to(class);
     assert_that!(error.to_string()).contains(fragment);
@@ -227,7 +227,97 @@ fn from_json_refuses_malformed_messages(
     })
 )]
 fn from_json_reads_each_action(#[case] message: Value, #[case] expected: AgentMessage) {
-    assert_that!(AgentMessage::from_json(&message))
+    assert_that!(AgentMessage::from_json(&message, &MessageLimits::default()))
         .is_ok()
         .is_equal_to(expected);
+}
+
+fn limits() -> MessageLimits {
+    MessageLimits::default()
+}
+
+#[test]
+fn parse_text_over_cap_is_refused_before_parsing() {
+    let error = AgentMessage::parse("not json!!!", &MessageLimits::new(10)).err();
+    let error = error.expect("the text is over the cap");
+    assert_that!(error.to_string()).contains("10-byte limit");
+    assert_that!(error.category()).is_equal_to(Category::Validation);
+}
+
+#[test]
+fn parse_invalid_json_is_a_parse_error() {
+    let error = AgentMessage::parse("{", &limits()).err();
+    let error = error.expect("the text is not JSON");
+    assert_that!(error.category()).is_equal_to(Category::Parse);
+    assert_that!(error.code()).is_equal_to(ErrorCode::ValidationFailed);
+    assert_that!(error.to_string()).contains("Invalid JSON in A2UI message");
+}
+
+#[test]
+fn parse_reads_a_valid_message() {
+    let text = r#"{"version": "1.0", "deleteSurface": {"surfaceId": "s1"}}"#;
+    assert_that!(AgentMessage::parse(text, &limits()))
+        .is_ok()
+        .is_equal_to(AgentMessage::DeleteSurface(DeleteSurface {
+            surface_id: "s1".to_owned(),
+        }));
+}
+
+#[test]
+fn from_json_value_over_cap_is_refused() {
+    let message = create(json!({"surfaceId": "x".repeat(200)}));
+    let error = AgentMessage::from_json(&message, &MessageLimits::new(100)).err();
+    let error = error.expect("the value is over the cap");
+    assert_that!(error.to_string()).contains("100-byte limit");
+    assert_that!(error.category()).is_equal_to(Category::Validation);
+}
+
+fn delete(id: &str) -> Value {
+    json!({"version": V, "deleteSurface": {"surfaceId": id}})
+}
+
+#[rstest]
+#[case::array(json!([delete("a"), delete("b")]))]
+#[case::wrapper(json!({"messages": [delete("a"), delete("b")]}))]
+fn batch_reads_both_forms(#[case] value: Value) {
+    let limits = limits();
+    let batch = AgentMessage::batch(&value, &limits).expect("a batch");
+    assert_that!(batch.len()).is_equal_to(2);
+    let all: Vec<_> = batch.collect();
+    assert_that!(all.iter().all(Result::is_ok)).is_true();
+}
+
+#[rstest]
+#[case::extra_key(json!({"messages": [], "x": 1}))]
+#[case::not_array(json!({"messages": {}}))]
+#[case::empty_object(json!({}))]
+#[case::number(json!(42))]
+fn batch_refuses_other_shapes(#[case] value: Value) {
+    let limits = limits();
+    let error = AgentMessage::batch(&value, &limits).err();
+    let error = error.expect("not a batch");
+    assert_that!(error.to_string()).contains("only 'messages'");
+}
+
+#[test]
+fn batch_prefixes_detail_paths_with_the_index() {
+    let value = json!([delete("a"), {"deleteSurface": {"surfaceId": "b"}}]);
+    let limits = limits();
+    let results: Vec<_> = AgentMessage::batch(&value, &limits)
+        .expect("a batch")
+        .collect();
+    let error = results[1].as_ref().expect_err("the second is bad");
+    let paths: Vec<_> = error.details().iter().map(Detail::path).collect();
+    assert_that!(paths).is_equal_to(vec!["messages.1.version"]);
+}
+
+#[test]
+fn batch_yields_items_after_an_error() {
+    let value = json!([delete("a"), 42, delete("c")]);
+    let limits = limits();
+    let flags: Vec<_> = AgentMessage::batch(&value, &limits)
+        .expect("a batch")
+        .map(|r| r.is_ok())
+        .collect();
+    assert_that!(flags).is_equal_to(vec![true, false, true]);
 }
