@@ -235,7 +235,9 @@ impl MessageProcessor {
         Ok(())
     }
 
-    /// Writes the message's value; a scalar or array root is refused, and a write past the node limit is undone and refused.
+    /// Writes the message's value.
+    ///
+    /// A scalar or array root is refused, and a write past the node limit is undone and refused.
     fn update_data_model(&mut self, update: &UpdateDataModel) -> Result<(), Error> {
         let max_nodes = self.state_limits.max_data_model_nodes();
         let model = self

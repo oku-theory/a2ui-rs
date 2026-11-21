@@ -126,9 +126,11 @@ the 12-reviewer plan review).
     Pointer of the node it checks (a `Vec<String>` of tokens, joined with Plan 3a's
     `escape_token` only when an error is raised). Every error carries `path` relative to the
     component (`/text`, `/action/functionCall`, `/text/args/value`, `/id`, `/component`).
-    `validate_component` keeps its signature, its `Display` texts and its behavior: it calls
+    `validate_component` keeps its signature and its `Display` texts. Its behavior changes (see
+    Decision 68): it now checks as strict rules do, refusing undeclared properties, a breaking
+    change for outside callers. It calls
     `validate_located` with `Some(default)`, `Report::First`, `CallCatalogs::IdentifiersOnly`,
-    `allow_unknown: false`; only `Error::path` becomes set (additive). The processor uses
+    `allow_unknown: false`; `Error::path` becomes set (additive). The processor uses
     `Report::All`, `CallCatalogs::Resolve` (Decision 65's errors) and the rules' flag. Under
     `Report::All`: one violation → path at it, one detail; several → path `""`, one detail per
     violation (at most 16, read with `iter_errors().take(17)`), message "Component '<id>'
@@ -252,8 +254,9 @@ the 12-reviewer plan review).
     Value` adds `"inlineCatalogs": [...]`, each `Catalog::to_json()` plus `catalogId` and
     `protocolVersion`, empty `components`/`functions` omitted. `data_model_report(&self) ->
     Option<Value>` gives `{"version": "1.0", "surfaces": {id: root}}` for surfaces that send
-    their data model, `None` when there are none; the root is always an object, since the processor refuses
-    an `updateDataModel` of a scalar or array at the root (`NonObjectRoot`; null resets to `{}`). The upstream
+    their data model, `None` when there are none; the root is always an object, since the processor
+    refuses an `updateDataModel` of a scalar or array at the root (`NonObjectRoot`; null resets to
+    `{}`). The upstream
     report schemas are checked by the conformance cases (Task 7), not by runtime tests (the
     published package ships no `vendor/`).
 75. **Harness catalogs.** A case's catalogs, in order: `catalogPaths` files, `catalogs`

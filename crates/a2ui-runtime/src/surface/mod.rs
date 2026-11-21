@@ -114,7 +114,7 @@ impl Surface {
         self.index.get(id).and_then(|&at| self.components.get(at))
     }
 
-    /// The component whose id is `id`, with one `@` stripped from each key starting `@@`.
+    /// The component `id`, with one `@` stripped from each key starting `@@`.
     ///
     /// Keys at every depth are unescaped; values are untouched.
     pub fn unescaped_component(&self, id: &str) -> Option<Map<String, Value>> {
@@ -151,16 +151,18 @@ impl Surface {
 
     /// The components `commit(staged)` would leave, without storing them.
     pub(crate) fn merged<'a>(&'a self, staged: &'a Staged) -> Merged<'a> {
-        let mut components: Vec<(&str, &Map<String, Value>)> = self
-            .components
+        // `commit` keeps the positions in `index` exactly those of `components`, so sorting
+        // the entries by position pairs each id with its component in arrival order.
+        let mut entries: Vec<(&str, usize)> = self
+            .index
             .iter()
-            .map(|component| ("", component))
+            .map(|(id, &at)| (id.as_str(), at))
             .collect();
-        for (id, &at) in &self.index {
-            if let Some(entry) = components.get_mut(at) {
-                entry.0 = id;
-            }
-        }
+        entries.sort_unstable_by_key(|&(_, at)| at);
+        let mut components: Vec<(&str, &Map<String, Value>)> = entries
+            .into_iter()
+            .map(|(id, at)| (id, &self.components[at]))
+            .collect();
         let mut index: HashMap<&str, usize> = self
             .index
             .iter()

@@ -115,6 +115,25 @@ fn too_deep() -> Value {
     ErrorCode::IntegrityError,
     "is not reachable from 'root'"
 )]
+#[case::self_reference(
+    StateLimits::default(),
+    update(vec![json!({"id": "a", "component": "Card", "child": "a"})]),
+    ErrorCode::RecursionLimitExceeded,
+    "Self-reference"
+)]
+#[case::missing_root(
+    StateLimits::default(),
+    json!({"version": V, "createSurface": {"surfaceId": "s2", "catalogId": "t",
+        "components": [text("a")]}}),
+    ErrorCode::ValidationFailed,
+    "Missing root component 'root'"
+)]
+#[case::undeclared_property(
+    StateLimits::default(),
+    update(vec![json!({"id": "a", "component": "Text", "text": "x", "bogus": 1})]),
+    ErrorCode::ValidationFailed,
+    "bogus"
+)]
 #[case::depth(
     StateLimits::default(),
     too_deep(),

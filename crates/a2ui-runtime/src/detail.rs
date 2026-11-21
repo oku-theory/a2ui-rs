@@ -88,7 +88,13 @@ pub(crate) struct Context {
 }
 
 impl Error {
-    /// The JSON Pointer, relative to the action's body, of the value at fault, if known.
+    /// The JSON Pointer of the value at fault, if known.
+    ///
+    /// Its origin depends on the producer. Message-shape faults, composition and the
+    /// processor's component checks give a pointer relative to the action's body, such as
+    /// `/components/0/children/1`. [`validate_component`](crate::Catalog::validate_component)
+    /// and the located component checks give one relative to the component, such as `/text`.
+    /// [`Detail::path`] gives a dot path from the message root for message-shape faults.
     pub fn path(&self) -> Option<&str> {
         self.context.as_deref()?.path.as_deref()
     }
@@ -103,7 +109,7 @@ impl Error {
         self.context.as_deref()?.function_call_id.as_deref()
     }
 
-    /// The index of the refused message in its batch, for an error from a batch.
+    /// The refused message's index in its batch, for an error from a batch.
     pub fn message_index(&self) -> Option<usize> {
         self.context.as_deref()?.message_index
     }
@@ -121,7 +127,8 @@ impl Error {
 
     /// Records `index` as the message index and prefixes each dot-path detail with
     /// `messages.<index>.`, for a message read from a batch; JSON Pointer details stay as they
-    /// are, relative to their component.
+    /// are, relative to their component (schema violations) or to the action's body
+    /// (composition faults).
     pub(crate) fn at_message(mut self, index: usize) -> Self {
         let context = self.context_mut();
         context.message_index = Some(index);
