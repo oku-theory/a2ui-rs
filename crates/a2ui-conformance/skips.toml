@@ -1,7 +1,5 @@
 # Actions not implemented yet, each with the plan that implements it.
 [actions]
-evaluate_function = "Plan 4: functions, actions and RPC"
-select_catalog = "Plan 4: functions, actions and RPC"
 dispatch_action = "Plan 4: functions, actions and RPC"
 handle_rpc = "Plan 4: functions, actions and RPC"
 route_agent_function = "Plan 4: functions, actions and RPC"
@@ -18,36 +16,40 @@ test_batch_atomic_rollback_on_candidate_topology_cycle = """\
   wins, Task 3's rollback test pins it"""
 test_error_response_create_surface_incompatible_catalog_version = """\
   v0.9 catalogs: its v0.9 basic catalog is not vendored; a2ui-rs implements v1.0 only"""
+test_evaluate_function_v10_catalog_of_other_protocol_version_errors = """\
+  v0.9 catalogs: its v0.9 basic catalog is not vendored; a2ui-rs implements v1.0 only"""
 test_expression_parser_data_type_coercion_matrix = """\
-  formatString evaluation of path bindings: t-1688 (function evaluation)"""
+  formatString evaluation of path bindings: t-1689 (node resolution)"""
 test_expression_parser_escaped_interpolation_sequence = """\
-  formatString evaluation of an escaped interpolation: t-1688 (function evaluation)"""
+  formatString evaluation of an escaped interpolation: t-1689 (node resolution)"""
 test_expression_parser_max_depth_exceeded_error = """\
-  formatString template parsed when evaluated, past its nesting limit: t-1688 (function \
-  evaluation)"""
+  formatString template parsed when evaluated, past its nesting limit: t-1689 (node \
+  resolution)"""
 test_expression_parser_nested_function_call = """\
-  formatString evaluation of a nested formatCurrency call: t-1688 (function evaluation)"""
+  formatString evaluation of a nested formatCurrency call: t-1689 (node resolution)"""
 test_expression_parser_string_interpolation_multiple_bindings = """\
-  formatString evaluation of several bindings: t-1688 (function evaluation)"""
+  formatString evaluation of several bindings: t-1689 (node resolution)"""
 test_expression_parser_syntax_error_unclosed_brace = """\
-  formatString template parsed when evaluated, unclosed brace: t-1688 (function evaluation)"""
+  formatString template parsed when evaluated, unclosed brace: t-1689 (node resolution)"""
 test_function_format_currency_locale_and_symbol = """\
-  formatCurrency evaluation: t-1688 (function evaluation)"""
-test_function_format_date_tr35_tokens = "formatDate evaluation: t-1688 (function evaluation)"
-test_function_logical_and_or_not = "and/or/not evaluation: t-1688 (function evaluation)"
-test_function_pluralize_categories = "pluralize evaluation: t-1688 (function evaluation)"
+  formatCurrency evaluation: t-1689 (node resolution)"""
+test_function_format_date_tr35_tokens = "formatDate evaluation: t-1689 (node resolution)"
+test_function_logical_and_or_not = "and/or/not evaluation: t-1689 (node resolution)"
+test_function_pluralize_categories = "pluralize evaluation: t-1689 (node resolution)"
 test_index_function_in_collection_loop = """\
-  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+  @index evaluation in expanded template items: t-1689 (node resolution)"""
 test_index_function_nested_path = """\
-  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+  @index evaluation in expanded template items: t-1689 (node resolution)"""
 test_index_function_outside_loop_error = """\
-  @index refused outside a template when evaluated: t-1688 (function evaluation)"""
+  @index refused outside a template when evaluated: t-1689 (node resolution)"""
 test_index_function_with_offset = """\
-  @index evaluation in expanded template items: t-1688 (function evaluation)"""
+  @index evaluation in expanded template items: t-1689 (node resolution)"""
 test_multi_catalog_format_string_index_and_catalog_call_without_default = """\
-  formatString, @index and pluralize evaluation in expanded items: t-1688 (function evaluation)"""
+  formatString, @index and pluralize evaluation in expanded items: t-1689 (node resolution)"""
 test_multi_catalog_function_call_catalog_id_override = """\
-  formatDate evaluation in the catalog a call names: t-1688 (function evaluation)"""
+  formatDate evaluation in the catalog a call names: t-1689 (node resolution)"""
+test_multi_catalog_version_mismatch_error = """\
+  v0.9 catalogs: a2ui-rs implements v1.0 only"""
 test_v10_get_renderer_data_model_filters_by_surface_protocol_version = """\
   v0.9 surfaces: a2ui-rs implements v1.0 only"""
 test_validation_result_boolean_fallback = "isValid and validationResult from checks: t-1689"

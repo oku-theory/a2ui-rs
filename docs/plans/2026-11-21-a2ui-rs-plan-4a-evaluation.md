@@ -253,16 +253,23 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     the first error raised. `handlers::functions::select` for `select_catalog`: for each
     component (in key order) or the one `functionCall`, `select_supported`; the last
     selection is compared with `expectSelected`; the first error with `expectError`.
+    Amended in Task 7: `CallContext::new` is crate-private, so a direct call is
+    `Evaluator::evaluate` on `{"@call", "args"}` in a `Scope` with user activation on.
 95. **Versionless replay.** `tests/versionless_functions.rs` (`harness = false`,
     libtest-mimic) runs every `functions.yaml` case with no version and action
     `evaluate_function` through `handlers::functions::run`. `versionless.toml` lists expected
     failures, each with a reason; an unexpected pass or failure fails the run, an unused
     entry fails `versionless_toml_entries_all_match_a_case`. Not part of the manifest.
+    Amended in Task 7: an entry with `wrap = "valid"` must then pass with `expect` rewritten
+    as `{"valid": expect}`, so it pins the v1.0 result instead of accepting any failure.
 96. **Skip moves.** `[actions]` loses `evaluate_function` and `select_catalog`. The sixteen
     `[cases]` naming t-1688 are all `validate` cases expecting resolved components or
     component-time evaluation errors: their reasons become "… : t-1689 (node resolution)".
     `test_multi_catalog_version_mismatch_error` gets a `[cases]` skip ("v0.9 catalogs:
     a2ui-rs implements v1.0 only"). `skips_tests.rs`'s explained list gains `t-1710`.
+    Amended in Task 7: `test_evaluate_function_v10_catalog_of_other_protocol_version_errors`
+    gets a `[cases]` skip ("v0.9 catalogs: its v0.9 basic catalog is not vendored; a2ui-rs
+    implements v1.0 only").
 97. **Spec amendments** (Task 7): §2 `validator` line: "catalog `pattern`s compile with
     `jsonschema`'s linear engine; the `regex` function runs the A2UI dialect on a bounded,
     linear VM (`regex` module); the runtime never runs an unbounded backtracking regex".

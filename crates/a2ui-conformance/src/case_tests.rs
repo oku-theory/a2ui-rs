@@ -103,6 +103,13 @@ fn effective_version_case_without_catalog_is_none() {
 }
 
 #[test]
+fn effective_version_evaluate_function_without_catalog_is_upstream_default() {
+    let case = one("- {name: t, action: evaluate_function, function: required}");
+    assert_that!(case.effective_version(&root()).unwrap())
+        .is_equal_to(Some(UPSTREAM_DEFAULT_VERSION.to_owned()));
+}
+
+#[test]
 fn effective_version_missing_catalog_file_is_error() {
     let case = one("- {name: t, action: round_trip, catalogPath: 'nope.json'}");
     let message = case.effective_version(&root()).unwrap_err().to_string();

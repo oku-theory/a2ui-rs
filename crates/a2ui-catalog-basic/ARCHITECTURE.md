@@ -24,6 +24,6 @@ The A2UI v1.0 basic catalog: 18 components and 14 functions, as published upstre
   `date`: `formatDate`; `time` parses RFC 3339, offset-less or date-only input, our printer
   writes TR35 tokens in the written offset's wall clock, `"ISO"` in UTC; unreadable input, or
   a year outside 0-9999, is `""`.
-  No clock or host time zone is read.
+  No clock or host time zone is read. `a2ui-conformance` runs `functions.yaml` on them.
 
 Depends on: `a2ui-runtime`, `serde_json`, `time` (parsing and macros only).

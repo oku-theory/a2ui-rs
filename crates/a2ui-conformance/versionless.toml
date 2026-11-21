@@ -1,0 +1,30 @@
+# The versionless `evaluate_function` cases of `core/functions.yaml` whose v1.0 result wraps
+# the v0.9 one (tests/versionless_functions.rs). Each listed case must fail as written, then
+# pass with `expect` rewritten as `{key: expect}`; every other versionless case must pass.
+
+[[wrap]]
+key = "valid"
+reason = "v0.9 validators return a bare bool; v1.0 ones return {valid: bool} (Decision 92)"
+cases = [
+    "test_evaluate_function_email_invalid_no_domain",
+    "test_evaluate_function_email_invalid_single_char_tld",
+    "test_evaluate_function_email_valid",
+    "test_evaluate_function_length_array_count_too_short",
+    "test_evaluate_function_length_array_count_valid",
+    "test_evaluate_function_length_string_too_long",
+    "test_evaluate_function_length_string_too_short",
+    "test_evaluate_function_length_string_valid",
+    "test_evaluate_function_numeric_too_large",
+    "test_evaluate_function_numeric_too_small",
+    "test_evaluate_function_numeric_unparseable_string",
+    "test_evaluate_function_numeric_valid_float",
+    "test_evaluate_function_numeric_valid_string",
+    "test_evaluate_function_regex_match",
+    "test_evaluate_function_regex_mismatch",
+    "test_evaluate_function_required_array_empty",
+    "test_evaluate_function_required_array_valid",
+    "test_evaluate_function_required_null",
+    "test_evaluate_function_required_object_empty",
+    "test_evaluate_function_required_string_empty",
+    "test_evaluate_function_required_string_valid",
+]

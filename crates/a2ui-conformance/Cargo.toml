@@ -27,5 +27,9 @@ speculoos.workspace = true
 name = "core"
 harness = false
 
+[[test]]
+name = "versionless_functions"
+harness = false
+
 [lints]
 workspace = true

@@ -121,20 +121,22 @@ fn reason_for_classified_case_follows_reason() {
 }
 
 #[test]
-fn real_skips_run_the_plan_3_actions_and_explain_each_case() {
+fn real_skips_run_the_implemented_actions_and_explain_each_case() {
     let skips = Skips::parse(include_str!("../skips.toml")).unwrap();
-    let plan_3 = [
+    let implemented = [
         "process_messages",
         "validate",
         "get_renderer_capabilities",
         "get_renderer_data_model",
+        "evaluate_function",
+        "select_catalog",
     ];
-    for action in plan_3 {
+    for action in implemented {
         assert_that!(skips.actions.contains_key(action))
             .named(action)
             .is_false();
     }
-    let explained = ["t-1688", "t-1689", "Decision 72", "v0.9"];
+    let explained = ["t-1689", "t-1710", "Decision 72", "v0.9"];
     for (name, reason) in &skips.cases {
         let named = explained.iter().any(|mark| reason.contains(mark));
         assert_that!(named).named(name).is_true();
