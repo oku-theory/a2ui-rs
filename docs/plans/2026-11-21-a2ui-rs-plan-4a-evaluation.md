@@ -214,8 +214,9 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     validators return `{"valid": bool}`. `required`: false for `null`, `""`, `[]`; true
     otherwise (`{}` true). `length`: strings in code points, arrays in items, `null` 0;
     `min`/`max` inclusive, absent ones ignored. `numeric`: `coerce::number`, `None` invalid,
-    `min`/`max` inclusive. `email`: one `@`, non-empty ASCII local part without spaces, domain
-    of dot-separated labels whose last is ≥ 2 letters. `regex`: `DialectRegex`, its errors
+    `min`/`max` inclusive. `email`: one `@`, non-empty printable-ASCII local part (no space),
+    domain of dot-separated labels of `[A-Za-z0-9-]`, none empty or with an edge `-`, the last
+    ≥ 2 letters. `regex`: `DialectRegex`, its errors
     returned. `and`/`or`: `values` array of ≥ 2 else `Error::function(name, "needs at least
     2 values")`, `coerce::boolean`, result Bool. `not`: Bool of `!coerce::boolean(value)`.
     `formatString`: `ctx.interpolate(value)` (non-string value: `coerce::text`).

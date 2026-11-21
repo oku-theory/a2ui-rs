@@ -2,12 +2,20 @@
 //!
 //! [`catalog`] returns the published `catalog.json` ([`CATALOG_JSON`], copied by
 //! `vendor/sync.sh`, Apache-2.0: see `LICENSE-A2UI`), whose id is [`CATALOG_ID`], loaded once and
-//! shared. The renderer-side implementations of its functions arrive with the function runtime
-//! (Plan 4).
+//! shared. [`functions`] binds the renderer-side implementations of its functions in a
+//! `FunctionRegistry`, following the host's [`BasicOptions`] ([`Locale`], [`UrlOpener`]).
+
+mod functions;
+mod locale;
+mod options;
 
 use std::sync::OnceLock;
 
 use a2ui_runtime::{Catalog, Error};
+
+pub use functions::functions;
+pub use locale::{CurrencyFormat, EnUs, Locale, PluralCategory};
+pub use options::{BasicOptions, NoOpener, UrlOpener};
 
 /// The basic catalog's id.
 pub const CATALOG_ID: &str = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json";

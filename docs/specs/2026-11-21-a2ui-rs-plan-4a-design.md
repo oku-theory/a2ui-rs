@@ -113,10 +113,11 @@ static safety check whose rule names the cases expect in the message (`UNSUPPORT
 on `catalog()`. `BasicOptions { locale: Arc<dyn Locale>, url_opener: Arc<dyn UrlOpener> }`,
 `Default` = `EnUs` and a no-op opener. Behaviour pinned by `functions.yaml` (digest kept in the
 plan): validators return `{"valid": bool}`; `length` counts array items and `null` as 0;
-`numeric` parses numeric strings, an unparseable one is invalid; `email` refuses a one-letter
-TLD; `and`/`or` need ≥ 2 values (else `ExpressionError`) and use `coerce::boolean`;
-`pluralize` prefers an explicit `zero`/`one`/`two`, then the locale's plural category, then
-`other`, never substituting `{n}`; `formatNumber`/`formatCurrency` round half away from zero,
+`numeric` parses numeric strings, an unparseable one is invalid; `email` wants a printable-ASCII
+local part and `[A-Za-z0-9-]` labels without an edge `-`, and refuses a one-letter TLD;
+`and`/`or` need ≥ 2 values (else `ExpressionError`) and use `coerce::boolean`; `pluralize`
+prefers an explicit `zero`/`one`/`two`, then the locale's plural category, then `other`, never
+substituting `{n}`; `formatNumber`/`formatCurrency` round half away from zero,
 group by default (`$` prefix for USD; a small symbol table, else the ISO code); `formatDate`
 reads RFC 3339, offset-less and date-only stamps, keeps the written offset's wall clock, refuses
 impossible dates with `""`, supports the TR35 tokens of the catalog's description and `"ISO"`;
