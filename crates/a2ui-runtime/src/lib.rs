@@ -3,23 +3,23 @@
 //! The crate holds surface state and evaluates bindings without rendering,
 //! async runtime or I/O, so any UI framework (and the browser) can embed it.
 //!
-//! Key items: [`Pointer`] (normalized RFC 6901 pointers), [`DataModel`]
-//! (pointer-addressed JSON), [`Write`] (one committed change), [`Error`]
-//! (classified by [`Category`] and [`ErrorCode`]), [`Watchers`] (observers a write notifies),
-//! [`resolve_path`] (scoped relative paths) and [`parse_template`] (`${...}`
-//! expression templates), [`common_types_schema`] and [`agent_to_renderer_schema`] (the
-//! embedded v1.0 schemas), [`validate_common_type`] (a value against one common type) and
-//! [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`], [`FunctionDef`] and
-//! [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the catalogs nested
-//! calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into a
-//! [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
+//! Key items: [`Pointer`] (normalized RFC 6901 pointers), [`DataModel`] (pointer-addressed JSON),
+//! [`Write`] (one committed change), [`Error`] (classified by [`Category`] and [`ErrorCode`]),
+//! [`Watchers`] (observers a write notifies), [`resolve_path`] (scoped relative paths) and
+//! [`parse_template`] (`${...}` expression templates), [`common_types_schema`] and
+//! [`agent_to_renderer_schema`] (the embedded v1.0 schemas), [`validate_common_type`] (a value
+//! against one common type) and [`Catalog`] (a loaded v1.0 catalog, with [`ComponentDef`],
+//! [`FunctionDef`] and [`AllowedCallers`] and [`ComponentShape`]) and [`CatalogLookup`] (finds the
+//! catalogs nested calls run in), derived with [`Catalog::derive`] from [`DeriveEntry`] values into
+//! a [`Derivation`], and [`AgentMessage`] (one message read from JSON, with its six bodies, whose
 //! faults carry a [`Detail`]), [`FunctionRegistry`] (binds implementations to catalog functions,
 //! with [`CallContext`] and the [`coerce`] conversions), [`Evaluator`] (evaluates bindings and
 //! calls in a [`Scope`] into an [`Evaluation`], at most [`MAX_EVALUATION_DEPTH`] deep, with
-//! [`select_catalog`] and [`select_supported`]), and [`MessageProcessor`] (applies
-//! messages to each [`Surface`], checked against a [`CatalogSet`] under [`ValidationRules`]
-//! within [`StateLimits`], returning an [`Outcome`] and reporting the renderer's capabilities and
-//! data models).
+//! [`select_catalog`] and [`select_supported`]), [`DialectRegex`] (the A2UI regex dialect, within
+//! [`MAX_PATTERN_CHARS`], [`MAX_PROGRAM`] and [`MAX_VALUE_CHARS`]), and [`MessageProcessor`]
+//! (applies messages to each [`Surface`], checked against a [`CatalogSet`] under
+//! [`ValidationRules`] within [`StateLimits`], returning an [`Outcome`] and reporting the
+//! renderer's capabilities and data models).
 
 mod bundle;
 mod catalog;
@@ -38,10 +38,6 @@ mod message;
 mod pointer;
 mod processor;
 mod quoted;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by DialectRegex in Task 4 (t-1714)")
-)]
 mod regex;
 mod schema;
 mod subscribe;
@@ -68,5 +64,6 @@ pub use message::{
 };
 pub use pointer::{MAX_LIST_INDEX, Pointer};
 pub use processor::{MessageProcessor, Outcome, StateLimits, ValidationRules};
+pub use regex::{DialectRegex, MAX_PATTERN_CHARS, MAX_PROGRAM, MAX_VALUE_CHARS};
 pub use schema::{agent_to_renderer_schema, common_types_schema, validate_common_type};
 pub use surface::Surface;

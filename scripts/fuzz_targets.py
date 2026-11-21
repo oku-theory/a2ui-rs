@@ -12,6 +12,8 @@ the catalog; validate_component a component, then a default catalog id; parse_th
 component, [a default catalog id,] then the catalog. template_parse gets each string holding
 `${`, pointer_parse each `@path` value and each string starting with `/`. message_parse takes
 one message as JSON text: each message of the basic catalog's examples and one per action.
+regex_match takes a pattern, then a value: the protocol's regex examples and patterns a
+backtracking engine takes exponential time on.
 """
 
 import glob
@@ -32,6 +34,8 @@ TARGETS = {
     "pointer_parse": (4096, 1),
     # Past the 1 MiB default message cap, so the cap itself is reached.
     "message_parse": (1100000, 2),
+    # A 256-code-point pattern and a value past the 4096-code-point cap, in 4-byte code points.
+    "regex_match": (20480, 1),
 }
 BASIC = "vendor/a2ui/catalogs/basic/v1/catalog.json"
 # An id no catalog has, so a nested call's catalog is not found.
@@ -171,6 +175,21 @@ def action_messages():
             for body in bodies]
 
 
+def regex_pairs():
+    """Pattern and value pairs: the dialect's examples, then adversarial shapes at the caps."""
+    long = "a" * 4095 + "!"
+    pairs = [
+        ("^[0-9]+$", "12345"), ("^abc$", "abc\n"), ("^\\d+$", "\u0661\u0662"),
+        ("\\bcaf\\b", "caf\u00e9"), ("^.$", "\U0001F600"), ("^\\u{1F600}+$", "\U0001F600"),
+        ("(?:ab+)?c", "abbc"), ("^[a-z]+@[a-z]+\\.com$", "ada@example.com"),
+        ("^(?=.*\\d).{8,}$", "secret42"), ("^(?!a)[^\\s]{1,3}?$", "b c"),
+        ("a{1,1000}b", "a" * 4096), ("(?:(?:a|a)?)*", long), ("^(?:(?:a|a)|b)*$", long),
+        ("(?:x(?:a|a))*", "xa" * 2047 + "!!"), ("^a+(?:b?a*)$", long),
+        ("a?" * 127 + "b$", "a" * 4097), ("(a{1,1000}){1,1000}", "a"),
+    ]
+    return [pattern.encode() + b"\0" + value.encode() for pattern, value in pairs]
+
+
 def catalogs():
     """The vendored catalogs' texts: the published ones, then the conformance suite's."""
     names = files("vendor/a2ui/catalogs/*/v1/catalog.json")
@@ -194,6 +213,8 @@ def seeds(target):
         return pairs + [found[0] + b"\0" + UNKNOWN_ID + b"\0" + basic]
     if target == "message_parse":
         return example_messages() + action_messages()
+    if target == "regex_match":
+        return regex_pairs()
     names = files("vendor/a2ui/catalogs/basic/v1/examples/*.json")
     names += files("vendor/a2ui/conformance/test_data/catalogs/*.json")
     names += files("vendor/a2ui/specification/v1_0/test/cases/*.json")

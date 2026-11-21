@@ -184,11 +184,17 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
        greedy/lazy, `Jmp`, `Assert(kind)`, `Look { negated, start, end }`, `Match`).
        Counted repeats expand inline; a program over 4 096 instructions →
        `PATTERN_TOO_COMPLEX` (the design's call 1).
-    5. `vm`: values are `Vec<char>`; more than 4 096 code points → `is_match` false. Search
-       semantics: try each start position, sharing one memo `Vec<u64>` bitset of
-       (instruction, position) failures across starts; a state already known to fail is
-       skipped. Lookahead sub-programs run with their own memo per call, bounded by the same
-       argument. Explicit stack, no recursion.
+    5. `vm`: values are `Vec<char>`; more than 4 096 code points → `is_match` false. A backward
+       pass over positions len..0 (t-1714) keeps two program-sized `Vec<bool>` flag arrays:
+       which instructions reach their `Match` from this position and from the next. A consuming
+       instruction is live when its code point fits and its successor was live one position on;
+       any other when a successor is live here (precomputed reverse edges). Lookahead bodies are
+       one level deeper and settled first at each position, so a negative lookahead reads a
+       finished answer. Search semantics: true at the first position where instruction 0 is
+       live. Each state is settled once: time ≤ program × (len + 1) states plus ≤ 2 edge checks
+       each, memory O(program), no recursion. `search` always returns a `usize` step count
+       (`is_match` drops it), checked ≤ 3 × program × (len + 1) in tests, counting every
+       instruction visit and edge check.
 91. **Basic options.** In `a2ui-catalog-basic`: `pub trait Locale: Send + Sync + Debug`
     (`plural(&self, n: f64) -> PluralCategory`, `decimal_separator(&self) -> char`,
     `group_separator(&self) -> char`, `currency(&self, code: &str) -> CurrencyFormat`,
@@ -256,7 +262,7 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     a2ui-rs implements v1.0 only"). `skips_tests.rs`'s explained list gains `t-1710`.
 97. **Spec amendments** (Task 7): §2 `validator` line: "catalog `pattern`s compile with
     `jsonschema`'s linear engine; the `regex` function runs the A2UI dialect on a bounded,
-    memoized VM (`regex` module); the runtime never runs an unbounded backtracking regex".
+    linear VM (`regex` module); the runtime never runs an unbounded backtracking regex".
     §2 `dynamic` becomes `evaluate` (`Scope`, `Evaluator`, `Evaluation`), `Fn(&Args, &mut
     CallContext)`. Dependency list: `nom` in the runtime, `time` in `a2ui-catalog-basic`.
 
@@ -465,8 +471,9 @@ Expected: PASS, gates green; lock diff adds only `nom` (and `memchr` if not pres
 matches one code point; `\u{1F600}`), plus lazy vs greedy, lookahead positive/negative,
 alternation order, `{0}`. `value_4096_code_points_matches`,
 `value_4097_code_points_is_false`. rstest `vm_step_count_stays_within_bound` (Review Focus 2:
-`a{1,1000}b` and `^(?=.*\d).{8,}$` over 4 096-char values; a test-only step counter ≤ program
-× 4 097). `compile_tests.rs`: `counted_repeat_expands`,
+`a{1,1000}b` and `^(?=.*\d).{8,}$` over 4 096-char values; the always-on `usize` step
+counter, every edge check counted, ≤ 3 × program × (len + 1)). `compile_tests.rs`:
+`counted_repeat_expands`,
 `program_over_4096_is_pattern_too_complex` (`(a{1,1000}){1,1000}`).
 
 - [ ] **Step 2: Run them to verify they fail**

@@ -82,3 +82,10 @@ path = "fuzz_targets/message_parse.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "regex_match"
+path = "fuzz_targets/regex_match.rs"
+test = false
+doc = false
+bench = false

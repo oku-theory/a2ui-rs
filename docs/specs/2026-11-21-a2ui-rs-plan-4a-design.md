@@ -57,8 +57,9 @@ static safety check whose rule names the cases expect in the message (`UNSUPPORT
 `regex`/`regex-syntax` refuse lookaround, so the dialect needs its own parser either way.
 
 1. **Chosen**: parse with `nom` into a dialect AST, check safety on the AST, compile to a small
-   instruction list run by a backtracking VM memoized on (instruction, position): each state is
-   visited once, so a match costs at most pattern × value steps (≤ 256 × 4 097). Covers the whole
+   instruction list run by a VM that settles each (instruction, position) state once, in a
+   backward pass over positions (t-1714), so a match costs at most program × (value + 1) states
+   (≤ 4 096 × 4 097), with no backtracking and no recursion. Covers the whole
    dialect, no further dependency. Spec §2 `validator` line is amended: catalog `pattern`s keep
    `jsonschema`'s linear engine; the `regex` function uses this bounded VM.
 2. Translate the AST to the `regex` crate and refuse lookahead: diverges from the protocol.
@@ -136,11 +137,13 @@ other scheme with `ExpressionError`, then calls the opener and returns `null`.
 
 ## Calls made after the builder check (Claude's, open to correction)
 
-1. **Counted quantifiers.** Compiled by inline expansion, so the (instruction, position) memo
-   stays exact. The compiled program is capped at 4 096 instructions; a pattern over the cap
+1. **Counted quantifiers.** Compiled by inline expansion, so (instruction, position) states need
+   no counter. The compiled program is capped at 4 096 instructions; a pattern over the cap
    (e.g. `(a{1,1000}){1,1000}`, legal per protocol l.1364) is refused with `EXPRESSION_ERROR`,
    message starting `PATTERN_TOO_COMPLEX`. This is a local limit beyond the protocol's rules,
-   documented as such. Memory stays ≤ 4 096 × 4 097 memo bits (2 MiB), visited once each.
+   documented as such. The backward pass keeps two program-sized `Vec<bool>` flag arrays (this
+   position and the next) and reverse edges: memory O(program), time ≤ 4 096 × 4 097 states plus
+   ≤ 2 edge checks each, so ≤ 3 × program × (value + 1) counted steps.
 2. **Versionless `functions.yaml` cases.** The conformance run keeps skipping them as v0.9.
    A separate replay test in `a2ui-conformance` (not part of the suite report) runs every
    versionless `evaluate_function` case against v1.0 with an explicit expected-failure list

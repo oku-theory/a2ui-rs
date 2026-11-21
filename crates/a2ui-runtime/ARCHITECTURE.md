@@ -20,7 +20,7 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
 - `schema`: embedded v1.0 `common_types`, `agent_to_renderer`; `validate_common_type` (cached).
 - `function`: `FunctionRegistry`, `CallContext` (`interpolate`); `coerce`: boolean, number, text.
 - `evaluate`: `Evaluator` in a `Scope` (a failure: `null` + one error; depth 100); `select_catalog`.
-- `regex`: nom `parse` (256 code points; groups on a heap stack) to `ast::Node`; `safety::check`.
+- `regex`: `DialectRegex`: nom `parse` (heap stack), `safety`, `compile` (≤ 4096), backward `vm`.
 - `keys`, `ident` (UAX #31). `validator`: `jsonschema` 2020-12, offline (build failures are
   `CatalogError`); maps a violation to a message, `DetailCode` and JSON Pointer. `catalog`:
   `Catalog` and `CatalogSet` (by id, duplicates refused); see `src/catalog/ARCHITECTURE.md`.
@@ -37,13 +37,13 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
 - `surface`: `Surface` (id, catalog id, `sendDataModel`, metadata, `DataModel`, components in
   arrival order, replaced in place; `unescaped_component`); `merged`: the view `commit` leaves.
 - `processor`: `MessageProcessor` applies messages; a refused one changes nothing. `components`:
-  counts, duplicate ids, then per component size, id, catalog (`resolve`), `@@` collisions,
-  `validate_located` (at `/components/<i>`). `children`: edges via catalog child slots. Before
-  commit, on the merged view: `topology` (self-reference, dangling, Kahn cycle, missing root,
-  unreachable, depth past 50), `composition` (`allowedParents`/`allowedChildren` of reachable edges
-  with an end in the message or newly reached; `root` under `Surface`). `ValidationRules` (strict
-  default), `StateLimits`; `handle_batch` stamps `message_index`; a non-object data root is refused;
-  `Outcome` empty; `evaluate`. `reports`: `capabilities`, `data_model_report`.
+  counts, duplicate ids, per component size, id, catalog (`resolve`), `@@` collisions,
+  `validate_located` (`/components/<i>`); `children`: edges via catalog child slots. Pre-commit
+  (merged view): `topology` (self-reference, dangling, Kahn cycle, missing root, unreachable, depth
+  > 50), `composition` (`allowedParents`/`allowedChildren` of reachable edges with an end in the
+  message or newly reached; `root` under `Surface`). `ValidationRules` (strict default),
+  `StateLimits`; `handle_batch` stamps `message_index`; non-object data root refused; `Outcome`
+  empty; `evaluate`. `reports`: `capabilities`, `data_model_report`.
 
 ## Dependencies
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `nom` (`alloc` only), `jsonschema`

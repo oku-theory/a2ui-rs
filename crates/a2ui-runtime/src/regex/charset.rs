@@ -71,6 +71,7 @@ impl CharSet {
     }
 
     /// The ranges of this set, sorted and disjoint.
+    #[cfg(test)]
     pub(crate) fn ranges(&self) -> &[(char, char)] {
         &self.ranges
     }
