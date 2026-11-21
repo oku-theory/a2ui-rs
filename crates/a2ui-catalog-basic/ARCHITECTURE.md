@@ -10,13 +10,20 @@ The A2UI v1.0 basic catalog: 18 components and 14 functions, as published upstre
   only success is kept, so a load error is owned and fresh on each call.
 
 - `src/options.rs`: `BasicOptions` (`Locale`, `UrlOpener`; default `EnUs`, `NoOpener`).
-- `src/locale.rs`: `Locale` (plural category, separators, currency, default decimals, AM/PM),
-  `PluralCategory`, `CurrencyFormat`, `EnUs` (CLDR English).
+- `src/locale.rs`: `Locale` (plural category, separators, currency, default decimals, month
+  and weekday names typed with `time`, AM/PM), `PluralCategory`, `CurrencyFormat`, `EnUs`.
+  `lib.rs` re-exports `time::{Month, Weekday}` for hosts implementing `Locale`.
 - `src/functions/`: `functions(registry, options)` binds each implementation on `catalog()`;
   an absent argument reads as `null`. `validators`: `required`, `length` (code points, array
   items), `numeric`, `email`, `regex` (`DialectRegex`, its errors returned), each
   `{"valid": bool}`. `logic`: `and`/`or` (at least 2 `values`), `not`, via `coerce::boolean`.
   `text`: `formatString` (`CallContext::interpolate`), `openUrl` (`http`, `https`, `mailto`,
-  `tel` only, then the opener; returns `null`). Plan 4a Task 6 adds the formatting functions.
+  `tel` only, then the opener; returns `null`). `number`: `formatNumber`, `formatCurrency`
+  (the shortest decimal of the `f64` rounded half away from zero, decimals clamped to 0-20).
+  `plural`: `pluralize` (explicit `zero`/`one`/`two`, then the locale category, then `other`).
+  `date`: `formatDate`; `time` parses RFC 3339, offset-less or date-only input, our printer
+  writes TR35 tokens in the written offset's wall clock, `"ISO"` in UTC; unreadable input, or
+  a year outside 0-9999, is `""`.
+  No clock or host time zone is read.
 
-Depends on: `a2ui-runtime`, `serde_json`.
+Depends on: `a2ui-runtime`, `serde_json`, `time` (parsing and macros only).

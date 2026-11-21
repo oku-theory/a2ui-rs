@@ -120,7 +120,8 @@ prefers an explicit `zero`/`one`/`two`, then the locale's plural category, then 
 substituting `{n}`; `formatNumber`/`formatCurrency` round half away from zero,
 group by default (`$` prefix for USD; a small symbol table, else the ISO code); `formatDate`
 reads RFC 3339, offset-less and date-only stamps, keeps the written offset's wall clock, refuses
-impossible dates with `""`, supports the TR35 tokens of the catalog's description and `"ISO"`;
+impossible dates and years outside 0-9999 with `""`, supports the TR35 tokens of the catalog's
+description (`y`/`yyy`/`yyyy` the full year, `E`/`EE`/`EEE` the short weekday) and `"ISO"`;
 `regex` uses `DialectRegex`; `openUrl` allows `http`, `https`, `mailto`, `tel` and refuses any
 other scheme with `ExpressionError`, then calls the opener and returns `null`.
 

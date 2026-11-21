@@ -16,6 +16,8 @@ use a2ui_runtime::{Catalog, Error};
 pub use functions::functions;
 pub use locale::{CurrencyFormat, EnUs, Locale, PluralCategory};
 pub use options::{BasicOptions, NoOpener, UrlOpener};
+/// The `time` month and weekday types that [`Locale`] names, so hosts need not import `time`.
+pub use time::{Month, Weekday};
 
 /// The basic catalog's id.
 pub const CATALOG_ID: &str = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json";

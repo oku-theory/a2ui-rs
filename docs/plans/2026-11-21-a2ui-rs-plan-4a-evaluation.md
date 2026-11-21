@@ -238,9 +238,11 @@ Numbering continues Plan 3b (last: 79). These are this plan's rulings (2026-11-2
     format)`: input RFC 3339 (`time::format_description::well_known::Rfc3339`), or
     `YYYY-MM-DDTHH:mm:ss[.fff]` without offset (read as written), or `YYYY-MM-DD` (midnight);
     the wall clock of the written offset is kept; unparseable or impossible → `""`. `format
-    == "ISO"` → `YYYY-MM-DDTHH:mm:ss.sssZ` after converting to UTC. Tokens, longest match
-    first: `yyyy yy MMMM MMM MM M dd d EEEE E HH H hh h mm ss a`; `'…'` quotes literal text,
-    `''` a quote; any other letter is copied.
+    == "ISO"` → `YYYY-MM-DDTHH:mm:ss.sssZ` after converting to UTC; a year outside 0-9999,
+    read or converted, → `""`. Tokens, longest match first, as TR35 reads them: `yyyy`, `yyy`
+    and `y` the full year, `yy` two digits; `MMMM MMM MM M dd d`; `EEEE` the full weekday,
+    `EEE`, `EE` and `E` the short one; `HH H hh h mm ss a`; `'…'` quotes literal text, `''` a
+    quote; any other letter is copied.
 94. **Harness.** `handlers::functions::run` for `evaluate_function`: without `surface`, look
     up `(basic CATALOG_ID, function)` in a registry built by `a2ui_catalog_basic::functions`
     with `BasicOptions::default()` and call it with raw `args` (no policy, no schema);

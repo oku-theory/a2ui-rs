@@ -1,6 +1,8 @@
-//! The locale data the formatting functions read: plurals, separators, currencies.
+//! The locale data the formatting functions read: plurals, separators, currencies, dates.
 
 use std::fmt::Debug;
+
+use time::{Month, Weekday};
 
 /// A CLDR plural category, as `pluralize` names them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,6 +48,12 @@ pub trait Locale: Send + Sync + Debug {
 
     /// The fraction digits shown when a call gives none, for `currency` if any.
     fn default_decimals(&self, currency: Option<&str>) -> u8;
+
+    /// The name of `month`: in full when `long` (`MMMM`), else abbreviated (`MMM`).
+    fn month(&self, month: Month, long: bool) -> &str;
+
+    /// The name of `day`: in full when `long` (`EEEE`), else abbreviated (`E`).
+    fn weekday(&self, day: Weekday, long: bool) -> &str;
 
     /// The marker of a 12-hour time: before noon, or after when `pm`.
     fn am_pm(&self, pm: bool) -> &str;
@@ -94,6 +102,39 @@ impl Locale for EnUs {
             None | Some("JPY") => 0,
             Some(_) => 2,
         }
+    }
+
+    /// `January` or `Jan`.
+    fn month(&self, month: Month, long: bool) -> &str {
+        let (full, short) = match month {
+            Month::January => ("January", "Jan"),
+            Month::February => ("February", "Feb"),
+            Month::March => ("March", "Mar"),
+            Month::April => ("April", "Apr"),
+            Month::May => ("May", "May"),
+            Month::June => ("June", "Jun"),
+            Month::July => ("July", "Jul"),
+            Month::August => ("August", "Aug"),
+            Month::September => ("September", "Sep"),
+            Month::October => ("October", "Oct"),
+            Month::November => ("November", "Nov"),
+            Month::December => ("December", "Dec"),
+        };
+        if long { full } else { short }
+    }
+
+    /// `Monday` or `Mon`.
+    fn weekday(&self, day: Weekday, long: bool) -> &str {
+        let (full, short) = match day {
+            Weekday::Monday => ("Monday", "Mon"),
+            Weekday::Tuesday => ("Tuesday", "Tue"),
+            Weekday::Wednesday => ("Wednesday", "Wed"),
+            Weekday::Thursday => ("Thursday", "Thu"),
+            Weekday::Friday => ("Friday", "Fri"),
+            Weekday::Saturday => ("Saturday", "Sat"),
+            Weekday::Sunday => ("Sunday", "Sun"),
+        };
+        if long { full } else { short }
     }
 
     fn am_pm(&self, pm: bool) -> &str {
