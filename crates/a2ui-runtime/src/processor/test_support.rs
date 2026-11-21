@@ -13,7 +13,7 @@ fn common(name: &str) -> Value {
 }
 
 /// Catalog `t`: `Text`, `Column` and `List` (a `ChildList`), `Card` (a `Child`), `Stack` (an
-/// array of `ComponentId`) and `Tabs` (a `Child` in each tab).
+/// array of `ComponentId`), `Tabs` (a `Child` in each tab) and `Header` (only under a `Card`).
 pub(crate) fn slot_catalogs() -> CatalogSet {
     let tabs = json!({"type": "array", "items": {"type": "object",
         "properties": {"title": {"type": "string"}, "child": common("Child")}}});
@@ -27,7 +27,8 @@ pub(crate) fn slot_catalogs() -> CatalogSet {
             "Card": {"type": "object", "properties": {"child": common("Child")}},
             "Stack": {"type": "object", "properties": {
                 "slots": {"type": "array", "items": common("ComponentId")}}},
-            "Tabs": {"type": "object", "properties": {"tabs": tabs}}
+            "Tabs": {"type": "object", "properties": {"tabs": tabs}},
+            "Header": {"type": "object", "allowedParents": ["Card"]}
         }
     }))
     .unwrap();

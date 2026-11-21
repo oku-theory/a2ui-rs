@@ -110,6 +110,41 @@ use super::*;
     "Key '@@path' collides with '@path' after unescaping",
     (Category::Validation, ErrorCode::ValidationFailed)
 )]
+#[case::unallowed_parent(
+    ProcessFailure::UnallowedParent {
+        child: "h".into(),
+        child_type: "Header".into(),
+        parent: "root".into(),
+        parent_type: "Row".into(),
+        allowed: Allowed::new(&["Column".to_owned(), "Box".to_owned()]),
+    },
+    "Component 'h' (Header) cannot be placed under parent 'root' (Row). Allowed parents: \
+     ['Column', 'Box'].",
+    (Category::Validation, ErrorCode::UnallowedParent)
+)]
+#[case::unallowed_child(
+    ProcessFailure::UnallowedChild {
+        parent: "root".into(),
+        parent_type: "Box".into(),
+        child: "v1".into(),
+        child_type: "Video".into(),
+        allowed: Allowed::new(&["Text".to_owned()]),
+    },
+    "Container 'root' (Box) cannot contain child 'v1' (Video). Allowed children: ['Text'].",
+    (Category::Validation, ErrorCode::UnallowedChild)
+)]
+#[case::unallowed_past_the_names(
+    ProcessFailure::UnallowedChild {
+        parent: "p".into(),
+        parent_type: "Box".into(),
+        child: "c".into(),
+        child_type: "Video".into(),
+        allowed: Allowed::new(&(0..9).map(|n| format!("T{n}")).collect::<Vec<_>>()),
+    },
+    "Container 'p' (Box) cannot contain child 'c' (Video). Allowed children: ['T0', 'T1', \
+     'T2', 'T3', 'T4', 'T5', 'T6', 'T7', …].",
+    (Category::Validation, ErrorCode::UnallowedChild)
+)]
 fn process_failure_display_and_class_match_upstream(
     #[case] failure: ProcessFailure,
     #[case] text: &str,

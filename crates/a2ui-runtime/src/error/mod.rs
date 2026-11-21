@@ -14,7 +14,7 @@ use snafu::{Backtrace, ErrorCompat};
 use crate::detail::Context;
 
 pub(crate) use inner::*;
-pub(crate) use process::{MAX_VIOLATION_DETAILS, ProcessFailure};
+pub(crate) use process::{Allowed, MAX_VIOLATION_DETAILS, ProcessFailure};
 
 /// The conformance category of an [`Error`], as the upstream suites name it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -78,6 +78,10 @@ pub enum ErrorCode {
     IntegrityError,
     /// A message naming a catalog the renderer has not loaded.
     CatalogNotFound,
+    /// A component placed under a parent type its `allowedParents` does not list.
+    UnallowedParent,
+    /// A container holding a child type its `allowedChildren` does not list.
+    UnallowedChild,
 }
 
 impl ErrorCode {
@@ -92,6 +96,8 @@ impl ErrorCode {
             Self::RecursionLimitExceeded => "RECURSION_LIMIT_EXCEEDED",
             Self::IntegrityError => "INTEGRITY_ERROR",
             Self::CatalogNotFound => "CATALOG_NOT_FOUND",
+            Self::UnallowedParent => "UNALLOWED_PARENT",
+            Self::UnallowedChild => "UNALLOWED_CHILD",
         }
     }
 }

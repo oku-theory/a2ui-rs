@@ -153,3 +153,33 @@ fn catalog_not_found_writes_only_surface_id() {
         },
     }));
 }
+
+#[test]
+fn unallowed_parent_writes_the_validation_shape() {
+    let catalog = crate::Catalog::from_json(
+        &json!({"catalogId": "custom", "protocolVersion": "1.0", "components": {
+            "ColumnHeader": {"type": "object", "allowedParents": ["Column"]}}}),
+        None,
+        None,
+    )
+    .unwrap();
+    let mut catalogs = crate::CatalogSet::new();
+    catalogs.insert(catalog).unwrap();
+    let mut processor = crate::MessageProcessor::new(catalogs);
+    let create = json!({"version": "1.0", "createSurface": {"surfaceId": "s1",
+        "catalogId": "custom", "components": [{"id": "root", "component": "ColumnHeader"}]}});
+    let message = AgentMessage::from_json(&create, &MessageLimits::default()).unwrap();
+
+    let error = processor.handle(&message).unwrap_err();
+
+    assert_that!(RendererMessage::error(&error).to_json()).is_equal_to(json!({
+        "version": "1.0",
+        "error": {
+            "code": "UNALLOWED_PARENT",
+            "message": "Component 'root' (ColumnHeader) cannot be placed under parent 'Surface' \
+                        (Surface). Allowed parents: ['Column'].",
+            "surfaceId": "s1",
+            "path": "/components/0",
+        },
+    }));
+}

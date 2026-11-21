@@ -121,6 +121,12 @@ fn too_deep() -> Value {
     ErrorCode::RecursionLimitExceeded,
     "Global recursion limit exceeded"
 )]
+#[case::composition(
+    StateLimits::default(),
+    update(vec![json!({"id": "a", "component": "Header"})]),
+    ErrorCode::UnallowedParent,
+    "cannot be placed under parent 'root' (Column). Allowed parents: ['Card']."
+)]
 #[case::state_limit(
     StateLimits::default().with_max_components_per_surface(2),
     update(vec![column("root", &["a", "o"]), text("o")]),

@@ -70,6 +70,8 @@ fn error_debug_large_field_is_capped() {
 #[case::recursion(ErrorCode::RecursionLimitExceeded, "RECURSION_LIMIT_EXCEEDED")]
 #[case::integrity(ErrorCode::IntegrityError, "INTEGRITY_ERROR")]
 #[case::catalog_not_found(ErrorCode::CatalogNotFound, "CATALOG_NOT_FOUND")]
+#[case::unallowed_parent(ErrorCode::UnallowedParent, "UNALLOWED_PARENT")]
+#[case::unallowed_child(ErrorCode::UnallowedChild, "UNALLOWED_CHILD")]
 fn error_code_as_str_spells_upstream_code(#[case] code: ErrorCode, #[case] expected: &str) {
     assert_that!(code.as_str()).is_equal_to(expected);
 }

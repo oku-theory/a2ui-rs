@@ -6,6 +6,7 @@
 
 pub(crate) mod children;
 mod components;
+mod composition;
 mod limits;
 mod resolve;
 mod rules;
@@ -195,7 +196,9 @@ impl MessageProcessor {
             &self.catalogs,
             &self.state_limits,
         )?;
-        topology::check(&surface.merged(&staged), &self.catalogs, rules)?;
+        let view = surface.merged(&staged);
+        topology::check(&view, &self.catalogs, rules)?;
+        composition::check(&view, &staged, &self.catalogs)?;
         surface.commit(staged);
         let max_nodes = self.state_limits.max_data_model_nodes();
         if surface.data_model().weighs_more_than(max_nodes) {
@@ -224,7 +227,9 @@ impl MessageProcessor {
             &self.catalogs,
             &self.state_limits,
         )?;
-        topology::check(&surface.merged(&staged), &self.catalogs, rules)?;
+        let view = surface.merged(&staged);
+        topology::check(&view, &self.catalogs, rules)?;
+        composition::check(&view, &staged, &self.catalogs)?;
         surface.commit(staged);
         Ok(())
     }

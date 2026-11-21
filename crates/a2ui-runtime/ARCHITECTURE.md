@@ -7,9 +7,8 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   boxed in one variant), `category()`, `code()`, boxed context (`detail`: `path`, ids,
   `message_index`, `Detail` list, each stamped with the surface id); stable English.
 - `quoted`: `Quoted` input, escaped, capped; `reason!` joins fixed text and `Quoted` only.
-- `pointer`: the one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`, absolute,
-  empty segments dropped, `__proto__`/`constructor`/`prototype` refused; list indices are
-  canonical digits up to `MAX_LIST_INDEX` (10 000).
+- `pointer`: the one RFC 6901 token codec (`escape_token`, `unescape_token`); `Pointer`: absolute,
+  no empty segment, no `__proto__`/`constructor`/`prototype`, canonical indices up to 10 000.
 - `data`: `DataModel`, one JSON document per surface; stored `null` reads as absent and `set` of
   `null` deletes. `set` creates missing containers, validating the whole path first; each change
   returns a `Write` (path, previous value) whose `changes(watched)` compares values;
@@ -40,10 +39,11 @@ Renderer-side A2UI v1.0 runtime: state and evaluation; no rendering, I/O or asyn
   arrival order, replaced in place; `unescaped_component`); `merged`: the view `commit` leaves.
 - `processor`: `MessageProcessor` applies messages; a refused one changes nothing. `components`:
   counts, duplicate ids, then per component size, id, catalog (`resolve`), `@@` collisions,
-  `validate_located`; paths `/components/<i>`. `children`: edges read through catalog child
-  slots. `topology` (on the merged view, before commit): self-reference, dangling, cycle (Kahn),
-  missing root, unreachable, depth past 50. `ValidationRules` (strict default), `StateLimits`;
-  `handle_batch` stamps `message_index`. `Outcome` is empty until t-1688/t-1689.
+  `validate_located` (at `/components/<i>`). `children`: edges via catalog child slots. Before
+  commit, on the merged view: `topology` (self-reference, dangling, Kahn cycle, missing root,
+  unreachable, depth past 50), `composition` (`allowedParents`/`allowedChildren` of reachable
+  edges with an end in the message or newly reached; `root` under `Surface`). `ValidationRules`
+  (strict by default), `StateLimits`; `handle_batch` stamps `message_index`; `Outcome` empty.
 
 ## Dependencies
 `snafu`, `serde_json`, `unicode-ident`, `percent-encoding`, `jsonschema` (default features off;

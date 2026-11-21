@@ -22,7 +22,9 @@ impl RendererMessage {
         body.insert("code".to_owned(), json!(code.as_str()));
         body.insert("message".to_owned(), json!(error.to_string()));
         match code {
-            ErrorCode::ValidationFailed => {
+            ErrorCode::ValidationFailed
+            | ErrorCode::UnallowedParent
+            | ErrorCode::UnallowedChild => {
                 body.insert(
                     "surfaceId".to_owned(),
                     json!(error.surface_id().unwrap_or("")),

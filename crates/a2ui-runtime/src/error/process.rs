@@ -53,6 +53,61 @@ pub(crate) enum ProcessFailure {
     Unreachable { id: Quoted },
     /// A component more than `MAX_MESSAGE_DEPTH` levels below `root`.
     ComponentDepth { id: Quoted, depth: usize },
+    /// A component under a parent type its `allowedParents` does not list.
+    UnallowedParent {
+        child: Quoted,
+        child_type: Quoted,
+        parent: Quoted,
+        parent_type: Quoted,
+        allowed: Allowed,
+    },
+    /// A container holding a child type its `allowedChildren` does not list.
+    UnallowedChild {
+        parent: Quoted,
+        parent_type: Quoted,
+        child: Quoted,
+        child_type: Quoted,
+        allowed: Allowed,
+    },
+}
+
+/// How many type names of an `allowedParents` or `allowedChildren` list an error shows.
+const MAX_ALLOWED_NAMES: usize = 8;
+
+/// The type names a composition error lists, cut short past `MAX_ALLOWED_NAMES`.
+#[derive(Debug)]
+pub(crate) struct Allowed {
+    names: Vec<Quoted>,
+    more: bool,
+}
+
+impl Allowed {
+    /// The first `MAX_ALLOWED_NAMES` of `names`, noting whether more were left out.
+    pub(crate) fn new(names: &[String]) -> Self {
+        Self {
+            names: names
+                .iter()
+                .take(MAX_ALLOWED_NAMES)
+                .map(Quoted::from)
+                .collect(),
+            more: names.len() > MAX_ALLOWED_NAMES,
+        }
+    }
+}
+
+impl fmt::Display for Allowed {
+    /// Upstream's Python list spelling, such as `['Text', 'Button']`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[")?;
+        for (at, name) in self.names.iter().enumerate() {
+            let comma = if at == 0 { "" } else { ", " };
+            write!(f, "{comma}'{name}'")?;
+        }
+        if self.more {
+            f.write_str(", …")?;
+        }
+        f.write_str("]")
+    }
 }
 
 /// How many schema violations of one component an error lists as details.
@@ -74,7 +129,9 @@ impl ProcessFailure {
             | Self::StateLimit { .. }
             | Self::SchemaViolations { .. }
             | Self::EscapedKeyCollision { .. }
-            | Self::MissingRoot => Category::Validation,
+            | Self::MissingRoot
+            | Self::UnallowedParent { .. }
+            | Self::UnallowedChild { .. } => Category::Validation,
             Self::SelfReference { .. }
             | Self::CircularReference { .. }
             | Self::ComponentDepth { .. } => Category::Recursion,
@@ -98,6 +155,8 @@ impl ProcessFailure {
             | Self::SchemaViolations { .. }
             | Self::EscapedKeyCollision { .. }
             | Self::MissingRoot => ErrorCode::ValidationFailed,
+            Self::UnallowedParent { .. } => ErrorCode::UnallowedParent,
+            Self::UnallowedChild { .. } => ErrorCode::UnallowedChild,
             Self::SelfReference { .. }
             | Self::CircularReference { .. }
             | Self::ComponentDepth { .. } => ErrorCode::RecursionLimitExceeded,
@@ -179,6 +238,28 @@ impl fmt::Display for ProcessFailure {
             Self::ComponentDepth { id, depth } => write!(
                 f,
                 "Global recursion limit exceeded: component '{id}' is {depth} levels below 'root'"
+            ),
+            Self::UnallowedParent {
+                child,
+                child_type,
+                parent,
+                parent_type,
+                allowed,
+            } => write!(
+                f,
+                "Component '{child}' ({child_type}) cannot be placed under parent '{parent}' \
+                 ({parent_type}). Allowed parents: {allowed}."
+            ),
+            Self::UnallowedChild {
+                parent,
+                parent_type,
+                child,
+                child_type,
+                allowed,
+            } => write!(
+                f,
+                "Container '{parent}' ({parent_type}) cannot contain child '{child}' \
+                 ({child_type}). Allowed children: {allowed}."
             ),
         }
     }

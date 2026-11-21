@@ -16,7 +16,7 @@ use crate::quoted::Quoted;
 use crate::surface::Merged;
 
 /// The id every surface's tree starts from.
-const ROOT: &str = "root";
+pub(super) const ROOT: &str = "root";
 
 /// How many ids of a cycle its error lists.
 const MAX_CYCLE_IDS: usize = 8;

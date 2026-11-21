@@ -7,6 +7,8 @@ use super::*;
 #[case::missing(DetailCode::MissingField, "missing_field")]
 #[case::mismatch(DetailCode::TypeMismatch, "type_mismatch")]
 #[case::invalid(DetailCode::InvalidValue, "invalid_value")]
+#[case::unallowed_parent(DetailCode::UnallowedParent, "UNALLOWED_PARENT")]
+#[case::unallowed_child(DetailCode::UnallowedChild, "UNALLOWED_CHILD")]
 fn detail_code_as_str_spells_the_suite_code(#[case] code: DetailCode, #[case] expected: &str) {
     assert_that!(code.as_str()).is_equal_to(expected);
 }

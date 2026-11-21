@@ -12,15 +12,23 @@ pub enum DetailCode {
     TypeMismatch,
     /// A field has the right type but a value or name the protocol refuses.
     InvalidValue,
+    /// A component placed under a parent type its `allowedParents` does not list.
+    UnallowedParent,
+    /// A container holding a child type its `allowedChildren` does not list.
+    UnallowedChild,
 }
 
 impl DetailCode {
     /// The code as the conformance suites spell it, such as `"missing_field"`.
+    ///
+    /// Composition codes keep the protocol's error code spelling, such as `"UNALLOWED_PARENT"`.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingField => "missing_field",
             Self::TypeMismatch => "type_mismatch",
             Self::InvalidValue => "invalid_value",
+            Self::UnallowedParent => "UNALLOWED_PARENT",
+            Self::UnallowedChild => "UNALLOWED_CHILD",
         }
     }
 }
@@ -29,7 +37,7 @@ impl DetailCode {
 ///
 /// A fault in the message's own shape has a dot path from the message root; a schema violation
 /// of one component has a JSON Pointer relative to that component, the error's
-/// [`Error::path`] saying which component.
+/// [`Error::path`] saying which component; a composition fault has the error's JSON Pointer.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Detail {
@@ -50,9 +58,10 @@ impl Detail {
     /// Where the field is, in one of two forms.
     ///
     /// A message-shape fault gives a dot path from the message root, such as
-    /// `createSurface.surfaceId`, prefixed `messages.<i>.` in a batch. A component's schema
-    /// violation gives a JSON Pointer relative to the component, starting with `/`, such as
-    /// `/text`; in a batch, [`Error::message_index`] gives the message.
+    /// `createSurface.surfaceId`, prefixed `messages.<i>.` in a batch. Other faults give a JSON
+    /// Pointer, starting with `/`: relative to the component for a schema violation, such as
+    /// `/text`, and relative to the action's body for a composition fault, such as
+    /// `/components/0/children/1`; in a batch, [`Error::message_index`] gives the message.
     pub fn path(&self) -> &str {
         &self.path
     }

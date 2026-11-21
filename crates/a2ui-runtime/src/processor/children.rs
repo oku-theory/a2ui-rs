@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 use super::resolve::component_catalog;
 use crate::catalog::{CatalogSet, ChildSlot, SlotKind, SlotStep};
 use crate::error::Error;
+use crate::pointer::escape_token;
 use crate::surface::Merged;
 
 /// The key of a list template naming its child.
@@ -44,6 +45,20 @@ impl ChildRef<'_> {
             }
         }
         field
+    }
+
+    /// The JSON Pointer to the child id within the component, such as `/tabs/1/child`.
+    pub(crate) fn pointer(&self) -> String {
+        let mut pointer = String::new();
+        for token in &self.position {
+            pointer.push('/');
+            match token {
+                Token::Key(key) => pointer.push_str(&escape_token(key)),
+                // Writing to a `String` cannot fail.
+                Token::Index(index) => _ = write!(pointer, "{index}"),
+            }
+        }
+        pointer
     }
 }
 

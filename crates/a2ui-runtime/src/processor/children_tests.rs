@@ -73,3 +73,18 @@ fn field_formats_list_single_and_nested_positions() {
         edge("d", "f", "slots[1]"),
     ]);
 }
+
+#[test]
+fn child_pointer_escapes_each_token() {
+    let component = json!({"a/b": {"c~d": ["x"]}});
+    let slot = ChildSlot {
+        steps: vec![
+            SlotStep::Key("a/b".to_owned()),
+            SlotStep::Key("c~d".to_owned()),
+        ],
+        kind: SlotKind::List,
+    };
+    let children = slot_children(component.as_object().unwrap(), std::slice::from_ref(&slot));
+    let pointers: Vec<String> = children.iter().map(ChildRef::pointer).collect();
+    assert_that!(pointers).is_equal_to(vec!["/a~1b/c~0d/0".to_owned()]);
+}
