@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-runtime-v0.3.0...a2ui-runtime-v0.4.0) - 2026-11-25
+
+### Added
+
+- *(runtime)* evaluation, function registry and basic functions (t-1709) ([#20](https://github.com/oku-theory/a2ui-rs/pull/20))
+- *(runtime)* [**breaking**] read A2UI messages and process surfaces (t-1544)
+
+### Other
+
+- *(runtime)* package a2ui-runtime from an include allowlist (t-1651)
+
 ## [0.3.0](https://github.com/oku-theory/a2ui-rs/compare/a2ui-runtime-v0.2.0...a2ui-runtime-v0.3.0) - 2026-11-15
 
 ### Added
