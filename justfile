@@ -2,7 +2,7 @@
 # weekly to the newest nightly 14 days old or more; it reads the next two lines exactly as written,
 # which scripts/nightly_pin_test.py checks (plan 2b, Decision 41).
 # renovate: datasource=rust-version versioning=rust-release-channel
-nightly := "nightly-2026-10-31"
+nightly := "nightly-2026-11-14"
 
 # Formatting, lints, dependency rules, pinned and audited actions, and the wasm build.
 check:
